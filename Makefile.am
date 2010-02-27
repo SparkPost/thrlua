@@ -5,6 +5,7 @@ smoddir = $(prefix)/share/lua/@PACKAGE_VERMAJORMINOR@
 
 lib_LTLIBRARIES = librclua.la
 bin_PROGRAMS = rclua rcluac
+cmod_LTLIBRARIES = pcre.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -32,6 +33,11 @@ rclua_CPPFLAGS = @RL_CFLAGS@
 # lua compiler
 rcluac_SOURCES = src/luac.c src/print.c
 rcluac_LDADD = -lrclua 
+
+# pcre
+pcre_la_SOURCES = modules/pcre.c
+pcre_la_LDFLAGS = -module @PCRE_LIBS@
+pcre_la_CPPFLAGS = -Isrc @PCRE_CFLAGS@
 
 EXTRA_DIST = COPYING HISTORY INSTALL README
 

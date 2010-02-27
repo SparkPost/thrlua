@@ -20,7 +20,10 @@ AC_ARG_ENABLE(coverage,
   ]
 )
 
-EXTRA_RPM_DEPS=""
+PCRE_LIBS=`pcre-config --libs`
+PCRE_CFLAGS=`pcre-config --cflags`
+AC_SUBST(PCRE_LIBS)
+AC_SUBST(PCRE_CFLAGS)
 
 AC_ARG_WITH(readline,
 [  --with-readline    link rclua against libreadline
@@ -32,7 +35,6 @@ AC_ARG_WITH(readline,
 	AC_CHECK_LIB(readline, readline,[
 		AC_SUBST(RL_LDFLAGS, "-lreadline")
 		AC_SUBST(RL_CFLAGS, "-DLUA_USE_READLINE")
-		EXTRA_RPM_DEPS="readline"
 		]
 	)
 	LDFLAGS="$LDFLAGS_SAVE"
@@ -47,14 +49,10 @@ if test "$use_readline" != "1" ; then
 		AC_CHECKING(for libedit in $d)
 		AC_TRY_LINK_FUNC(readline,[
 			AC_MSG_RESULT(yes)
-			AC_PATH_PROG(RPM, rpm)
 			got_libedit=1
 			AC_SUBST(RL_LDFLAGS, "-L$d -ledit -R$d")
 			libeditinc=`dirname $d`/include
 			AC_SUBST(RL_CFLAGS, "-DLUA_USE_READLINE -I$libeditinc")
-			if test -x "$RPM" ; then
-				EXTRA_RPM_DEPS="$EXTRA_RPMS_DEPS `rpm -qf --queryformat '%{NAME} ' $d/libedit*.so.*`"
-			fi
 			],[
 			AC_MSG_RESULT(no)
 			]
@@ -66,7 +64,6 @@ if test "$use_readline" != "1" ; then
 	done
 fi
 
-AC_SUBST(EXTRA_RPM_DEPS)
 AC_CONFIG_HEADERS([rcluaconfig.h])
 AC_CONFIG_FILES([Makefile etc/rclua.pc])
 AC_OUTPUT
