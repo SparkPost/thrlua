@@ -59,6 +59,6 @@ fi
 
 AC_SUBST(EXTRA_RPM_DEPS)
 AC_CONFIG_HEADERS([rcluaconfig.h])
-AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile etc/rclua.pc rclua.spec etc/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile etc/rclua.pc etc/Makefile])
 AC_OUTPUT
 
