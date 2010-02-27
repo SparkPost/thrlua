@@ -1,0 +1,32 @@
+#!/opt/msys/3rdParty/bin/perl
+# Copyright (c) 2008 Message Systems, Inc.
+# Runs unit tests
+# vim:ts=2:sw=2:et:
+use strict;
+use File::Find;
+use lib 'test';
+use test::mystrap;
+BEGIN {
+  $ENV{HARNESS_STRAP_CLASS} = "test::mystrap";
+}
+use Test::Harness;
+use Test::Harness::Util qw(all_in);
+$Test::Harness::verbose = 1;
+use Data::Dumper;
+
+$ENV{RCLUA_PATH} = "./etc/?.lua";
+$ENV{RCLUA_EXECUTABLE} ||= "./src/rclua";
+$ENV{THIS_ENV_VAR_IS_SET_FOR_THE_ENV_TEST} = "w00t";
+
+my @tests;
+@ARGV = "t" unless @ARGV;
+foreach (@ARGV) {
+  find(sub {
+    if (m/\.lua$/ and -f $_) {
+      push @tests, $File::Find::name;
+    }
+  }, $_);
+}
+runtests(@tests);
+
+

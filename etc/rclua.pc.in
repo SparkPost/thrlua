@@ -1,0 +1,22 @@
+# rclua.pc -- pkg-config data for Lua
+
+INSTALL_BIN= @prefix@/bin
+INSTALL_INC= @prefix@/include
+INSTALL_LIB= @prefix@/lib
+INSTALL_MAN= @prefix@/man/man1
+INSTALL_LMOD= @prefix@/share/lua/@PACKAGE_VERMAJORMINOR@
+INSTALL_CMOD= @prefix@/lib/lua/@PACKAGE_VERMAJORMINOR@
+
+# canonical vars
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: Lua
+Description: An Extensible Extension Language
+Version: @VERSION@
+Requires: 
+Libs: -L${libdir} -lrclua
+Cflags: -I${includedir}/rclua
+
