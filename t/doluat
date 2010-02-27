@@ -1,0 +1,92 @@
+#!/usr/bin/env perl
+# Copyright (c) 2009 Message Systems, Inc.
+# Runs 'luat' tests
+# vim:ts=2:sw=2:et:
+use strict;
+use Test::More;
+use IO::File;
+use IPC::Open3;
+
+# Runs a .luat test file.
+# A luat file is a lua source file that contains embedded information
+# about the expected outcome.
+# The embedded information is enclosed by a lua long comment like this
+# at the start of a line:
+# --[==[luat:stdout
+# and terminates with --]==] at the start of the terminating line.
+# Content enclosed in this block is the expected output from the command;
+# if the output doesn't match expectations, this test fails and diags a diff
+
+plan tests => 2;
+
+my $fh = IO::File->new($ARGV[0]);
+my $all;
+{
+  local $/ = undef;
+  $all = <$fh>;
+}
+undef $fh;
+
+my $stdout;
+my $stderr;
+
+sub get_section {
+  my ($name) = @_;
+
+  if ($all =~ m/\n--\[==\[luat:$name\n(.*)\n--\]==\]\n/s) {
+    return $1 . "\n";
+  }
+  return undef;
+}
+
+$stdout = get_section('stdout');
+$stderr = get_section('stderr');
+
+my ($pid, $out, $err);
+$pid = open3(0, $out, $err, $ENV{LUA_EXECUTABLE} || './lua', $ARGV[0]);
+waitpid $pid, 0;
+{
+  local $/ = undef;
+  $out = <$out>;
+  $err = <$err>;
+}
+
+sub show_diff {
+  my ($a, $b) = @_;
+  my @A = split qr/\n/, $a;
+  my @B = split qr/\n/, $b;
+  my $i = 1;
+
+  while (@A > 0) {
+    $a = shift @A;
+    $b = shift @B;
+
+    if ($a ne $b) {
+      diag "line $i";
+      diag "- $a";
+      diag "+ $b";
+    }
+
+    $i++;
+  }
+  while (@B > 0) {
+    $b = shift @B;
+    diag "line $i";
+    diag "-";
+    diag "+ $b";
+    $i++;
+  }
+}
+
+if ($out ne $stdout) {
+  show_diff($stdout, $out);
+  fail 'stdout did not match expectations';
+} else {
+  pass 'stdout';
+}
+if ($err ne $stderr) {
+  show_diff($stderr, $err);
+  fail 'stderr did not match expectations';
+} else {
+  pass 'stderr';
+}

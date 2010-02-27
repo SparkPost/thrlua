@@ -24,3 +24,6 @@ rcluaconfig.h*
 *.a
 .deps
 .dirstamp
+*.lcovinfo
+*.gcno
+*.gcda

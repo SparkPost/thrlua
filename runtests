@@ -1,32 +1,56 @@
-#!/opt/msys/3rdParty/bin/perl
-# Copyright (c) 2008 Message Systems, Inc.
+#!/usr/bin/perl -w
+# Copyright (c) 2008-2010 Message Systems, Inc.
 # Runs unit tests
 # vim:ts=2:sw=2:et:
 use strict;
 use File::Find;
-use lib 'test';
-use test::mystrap;
+use Data::Dumper;
+use Getopt::Long;
+use lib 't';
+use t::strap;
 BEGIN {
-  $ENV{HARNESS_STRAP_CLASS} = "test::mystrap";
+  $ENV{HARNESS_STRAP_CLASS} = "t::strap";
 }
 use Test::Harness;
-use Test::Harness::Util qw(all_in);
-$Test::Harness::verbose = 1;
-use Data::Dumper;
+
+my $use_installed = 0;
+my $quiet = 0;
+
+GetOptions(
+  "compare" => \$use_installed,
+  "quiet" => \$quiet
+);
+
+# in order to run sensibly on different versions of perl, we use the old
+# way of poking the strap (so that we can run lua bits intelligently).
+# we have to save the callback that was set on the default strap and
+# attach that to the new strap for test output to show up
+my $strap_callback = $Test::Harness::Strap->{callback};
+$Test::Harness::Strap = t::strap->new;
+$Test::Harness::Strap->{callback} = $strap_callback;
+$Test::Harness::verbose = !$quiet;
+$ENV{'TEST_VERBOSE'} = 1 if !$quiet;
+$ENV{'HARNESS_VERBOSE'} = 1 if !$quiet;
 
 $ENV{RCLUA_PATH} = "./etc/?.lua";
-$ENV{RCLUA_EXECUTABLE} ||= "./src/rclua";
+if ($use_installed) {
+  $ENV{LUA_EXECUTABLE} ||= "/opt/msys/3rdParty/bin/rclua";
+} else {
+  $ENV{LUA_EXECUTABLE} ||= "./rclua";
+}
 $ENV{THIS_ENV_VAR_IS_SET_FOR_THE_ENV_TEST} = "w00t";
 
 my @tests;
 @ARGV = "t" unless @ARGV;
 foreach (@ARGV) {
   find(sub {
-    if (m/\.lua$/ and -f $_) {
+    next if $_ eq '.hg';
+    next if $_ eq '.svn';
+    next if $_ eq 'CVS';
+    if (m/\.(lua|t|luat)$/ and -f $_) {
       push @tests, $File::Find::name;
     }
   }, $_);
 }
 runtests(@tests);
-
 

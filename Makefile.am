@@ -39,7 +39,16 @@ smod_HEADERS = etc/strict.lua etc/tap.lua
 
 dist_man_MANS = doc/rclua.1 doc/rcluac.1
 
-.PHONY: test
+.PHONY: test lcov
 
 test:
 	./runtests
+
+lcov:
+	-find . -name \*.gcda -o -name \*.da -o -name \*.bbg\? -o -name \*.lcovinfo | xargs rm -f
+	-LUA_LCOV=./coverage/lcov ./runtests
+	-rm -rf lcovhtml
+	mkdir -p lcovhtml
+	-find . -name \*.gcov | xargs rm -f
+	PATH="./coverage:$$PATH" genhtml --output-directory lcovhtml --prefix `cd .. ; pwd` --show-details --title "Lua Code Coverage" $$(find . -name \*.lcovinfo)
+

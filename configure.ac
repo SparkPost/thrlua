@@ -11,6 +11,15 @@ AC_DEFINE_UNQUOTED(LUA_ROOT, "$prefix/", [Installation prefix])
 AC_DEFINE(LUA_VERMAJORMINOR, "5.1", [First two version number octets])
 AC_SUBST(PACKAGE_VERMAJORMINOR, 5.1)
 
+# with coverage enabled, "make lcov" to generate a report in lcovhtml
+AC_ARG_ENABLE(coverage,
+  [ --enable-coverage   instrument for code coverage  ],
+  [
+    CFLAGS="$CFLAGS -fprofile-arcs -ftest-coverage -O0 -g"
+    LIBS="$LIBS -lgcov"
+  ]
+)
+
 EXTRA_RPM_DEPS=""
 
 AC_ARG_WITH(readline,
