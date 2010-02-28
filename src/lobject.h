@@ -10,11 +10,36 @@
 
 
 #include <stdarg.h>
-
-
+#include <pthread.h>
 #include "llimits.h"
 #include "lua.h"
 
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+typedef uint32_t scpt_atomic_t;
+
+static inline scpt_atomic_t scpt_atomic_inc(volatile scpt_atomic_t *mem)
+{
+  scpt_atomic_t prev;
+  __asm__ volatile ("lock; xaddl %0, %1"
+    : "=r" (prev)
+    : "m" (*(mem)),
+    "0" (1));
+  return prev + 1;
+}
+
+static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
+{
+  scpt_atomic_t prev;
+  __asm__ volatile ("lock; xaddl %0, %1"
+    : "=r" (prev)
+    : "m" (*(mem)),
+    "0" (-1));
+  return prev - 1;
+}
+
+#else
+# error no atomic inc/dec defined for this system
+#endif
 
 /* tags for values visible from Lua */
 #define LAST_TAG	LUA_TTHREAD
@@ -40,7 +65,11 @@ typedef union GCObject GCObject;
 ** Common Header for all collectable objects (in macro form, to be
 ** included in other objects)
 */
-#define CommonHeader	GCObject *next; lu_byte tt; lu_byte marked
+#define CommonHeader	\
+  GCObject *next; \
+  scpt_atomic_t ref; \
+  lu_byte tt; \
+  lu_byte marked
 
 
 /*

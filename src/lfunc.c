@@ -21,7 +21,7 @@
 
 
 Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = cast(Closure *, luaM_malloc(L, sizeCclosure(nelems)));
+  Closure *c = luaM_newobjv(L, LUA_TFUNCTION, sizeCclosure(nelems));
   luaC_link(L, obj2gco(c), LUA_TFUNCTION);
   c->c.isC = 1;
   c->c.env = e;
@@ -31,7 +31,7 @@ Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
 
 
 Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = cast(Closure *, luaM_malloc(L, sizeLclosure(nelems)));
+  Closure *c = luaM_newobjv(L, LUA_TFUNCTION, sizeLclosure(nelems));
   luaC_link(L, obj2gco(c), LUA_TFUNCTION);
   c->l.isC = 0;
   c->l.env = e;
@@ -42,7 +42,7 @@ Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
 
 
 UpVal *luaF_newupval (lua_State *L) {
-  UpVal *uv = luaM_new(L, UpVal);
+  UpVal *uv = luaM_newobj(L, LUA_TUPVAL);
   luaC_link(L, obj2gco(uv), LUA_TUPVAL);
   uv->v = &uv->u.value;
   setnilvalue(uv->v);
@@ -64,8 +64,7 @@ UpVal *luaF_findupval (lua_State *L, StkId level) {
     }
     pp = &p->next;
   }
-  uv = luaM_new(L, UpVal);  /* not found: create a new one */
-  uv->tt = LUA_TUPVAL;
+  uv = luaM_newobj(L, LUA_TUPVAL);  /* not found: create a new one */
   uv->marked = luaC_white(g);
   uv->v = level;  /* current value lives in the stack */
   uv->next = *pp;  /* chain it in the proper position */
@@ -113,7 +112,7 @@ void luaF_close (lua_State *L, StkId level) {
 
 
 Proto *luaF_newproto (lua_State *L) {
-  Proto *f = luaM_new(L, Proto);
+  Proto *f = luaM_newobj(L, LUA_TPROTO);
   luaC_link(L, obj2gco(f), LUA_TPROTO);
   f->k = NULL;
   f->sizek = 0;

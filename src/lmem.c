@@ -84,3 +84,45 @@ void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
   return block;
 }
 
+#include <stdio.h>
+void *luaM_newobj(lua_State *L, lu_byte tt)
+{
+  GCObject *o;
+  switch (tt) {
+#define NEWIMPL(a, b) \
+    case a: \
+      o = luaM_malloc(L, sizeof(b)); \
+      memset(o, 0, sizeof(b)); \
+      o->gch.tt = a; \
+      return o
+    NEWIMPL(LUA_TUPVAL, UpVal);
+    NEWIMPL(LUA_TPROTO, Proto);
+    NEWIMPL(LUA_TTABLE, Table);
+    default:
+      printf("unhandled tt=%d\n", tt);
+      luaD_throw(L, LUA_ERRMEM);
+      return NULL;
+  }
+}
+
+void *luaM_newobjv(lua_State *L, lu_byte tt, size_t size)
+{
+  GCObject *o;
+  switch (tt) {
+#undef NEWIMPL
+#define NEWIMPL(a, b) \
+    case a: \
+      o = luaM_malloc(L, size); \
+      memset(o, 0, size); \
+      o->gch.tt = a; \
+      return o
+    NEWIMPL(LUA_TFUNCTION, Closure);
+    NEWIMPL(LUA_TTHREAD, lua_State);
+    default:
+      printf("unhandled tt=%d\n", tt);
+      luaD_throw(L, LUA_ERRMEM);
+      return NULL;
+  }
+}
+/* vim:ts=2:sw=2:et:
+ */
