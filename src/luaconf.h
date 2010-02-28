@@ -419,6 +419,7 @@
 ** longs.) Probably you do not need to change this.
 */
 #include <stdint.h>
+#include <inttypes.h>
 #define LUAI_UINT32	uint32_t
 #define LUAI_INT32	int32_t
 #define LUAI_MAXINT32	INT32_MAX
@@ -553,43 +554,17 @@
 ** in C is extremely slow, so any alternative is worth trying.
 */
 
-/* On a Pentium, resort to a trick */
-#if defined(LUA_NUMBER_DOUBLE) && !defined(LUA_ANSI) && !defined(__SSE2__) && \
-    (defined(__i386) || defined (_M_IX86) || defined(__i386__))
-
-/* On a Microsoft compiler, use assembler */
-#if defined(_MSC_VER)
-
-#define lua_number2int(i,d)   { __asm fld d   __asm fistp i }
-#define lua_number2integer(i,n)		lua_number2int(i, n)
-
-/* the next trick should work on any Pentium, but sometimes clashes
-   with a DirectX idiosyncrasy */
-#else
-
-union luai_Cast { double l_d; long l_l; };
-#define lua_number2int(i,d) \
-  { volatile union luai_Cast u; u.l_d = (d) + 6755399441055744.0; (i) = u.l_l; }
-#define lua_number2integer(i,n)		lua_number2int(i, n)
-
-#endif
-
-
-/* this option always works, but may be slow */
-#else
 #define lua_number2int(i,d)	((i)=(int)(d))
 #define lua_number2integer(i,d)	((i)=(lua_Integer)(d))
 
-#endif
-
 #if defined(LUA_BITWISE_OPERATORS)
 #define luai_numintdiv(a,b)	(floor((a)/(b)))
-#define luai_logor(r, a, b)	{ lua_Integer ai,bi; lua_number2int(ai,a); lua_number2int(bi,b); r = ai|bi; }
-#define luai_logand(r, a,b)	{ lua_Integer ai,bi; lua_number2int(ai,a); lua_number2int(bi,b); r = ai&bi; }
-#define luai_logxor(r, a,b)	{ lua_Integer ai,bi; lua_number2int(ai,a); lua_number2int(bi,b); r = ai^bi; }
-#define luai_lognot(r,a)	{ lua_Integer ai; lua_number2int(ai,a); r = ~ai; }
-#define luai_loglshft(r, a,b)	{ lua_Integer ai,bi; lua_number2int(ai,a); lua_number2int(bi,b); r = ai<<bi; }
-#define luai_logrshft(r, a,b)	{ lua_Integer ai,bi; lua_number2int(ai,a); lua_number2int(bi,b); r = ai>>bi; }
+#define luai_logor(r, a, b)	{ lua_Integer ai,bi; lua_number2integer(ai,a); lua_number2integer(bi,b); r = ai|bi; }
+#define luai_logand(r, a,b)	{ lua_Integer ai,bi; lua_number2integer(ai,a); lua_number2integer(bi,b); r = ai&bi; }
+#define luai_logxor(r, a,b)	{ lua_Integer ai,bi; lua_number2integer(ai,a); lua_number2integer(bi,b); r = ai^bi; }
+#define luai_lognot(r,a)	{ lua_Integer ai; lua_number2integer(ai,a); r = ~ai; }
+#define luai_loglshft(r, a,b)	{ lua_Integer ai,bi; lua_number2integer(ai,a); lua_number2integer(bi,b); r = ai<<bi; }
+#define luai_logrshft(r, a,b)	{ lua_Integer ai,bi; lua_number2integer(ai,a); lua_number2integer(bi,b); r = ai>>bi; }
 #endif
 
 /* }================================================================== */
@@ -724,18 +699,8 @@ union luai_Cast { double l_d; long l_l; };
 ** CHANGE them if your system supports long long or does not support long.
 */
 
-#if defined(LUA_USELONGLONG)
-
-#define LUA_INTFRMLEN		"ll"
-#define LUA_INTFRM_T		long long
-
-#else
-
-#define LUA_INTFRMLEN		"l"
-#define LUA_INTFRM_T		long
-
-#endif
-
+#define LUA_INTFRMLEN	PRIi64
+#define LUA_INTFRM_T    int64_t
 
 
 /* =================================================================== */

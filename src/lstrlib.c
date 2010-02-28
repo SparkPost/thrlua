@@ -743,15 +743,35 @@ static const char *scanformat (lua_State *L, const char *strfrmt, char *form) {
   return p;
 }
 
-
-static void addintlen (char *form) {
+static void addintlen(char *form) {
   size_t l = strlen(form);
   char spec = form[l - 1];
-  strcpy(form + l - 1, LUA_INTFRMLEN);
-  form[l + sizeof(LUA_INTFRMLEN) - 2] = spec;
-  form[l + sizeof(LUA_INTFRMLEN) - 1] = '\0';
-}
 
+  switch (spec) {
+    case 'o':
+      strcpy(form + l - 1, PRIo64);
+      form[l + sizeof(PRIo64) - 2] = '\0';
+      break;
+    case 'u':
+      strcpy(form + l - 1, PRIu64);
+      form[l + sizeof(PRIu64) - 2] = '\0';
+      break;
+    case 'x':
+      strcpy(form + l - 1, PRIx64);
+      form[l + sizeof(PRIx64) - 2] = '\0';
+      break;
+    case 'X':
+      strcpy(form + l - 1, PRIX64);
+      form[l + sizeof(PRIX64) - 2] = '\0';
+      break;
+    case 'd':
+    case 'i':
+    default:
+      strcpy(form + l - 1, LUA_INTFRMLEN);
+      form[l + sizeof(LUA_INTFRMLEN) - 2] = '\0';
+      break;
+  }
+}
 
 static int str_format (lua_State *L) {
   int arg = 1;
@@ -777,12 +797,12 @@ static int str_format (lua_State *L) {
         }
         case 'd':  case 'i': {
           addintlen(form);
-          sprintf(buff, form, (LUA_INTFRM_T)luaL_checknumber(L, arg));
+          sprintf(buff, form, (int64_t)luaL_checknumber(L, arg));
           break;
         }
         case 'o':  case 'u':  case 'x':  case 'X': {
           addintlen(form);
-          sprintf(buff, form, (unsigned LUA_INTFRM_T)luaL_checknumber(L, arg));
+          sprintf(buff, form, (uint64_t)luaL_checknumber(L, arg));
           break;
         }
         case 'e':  case 'E': case 'f':
