@@ -8,7 +8,6 @@
 #define lstate_h
 
 #include "lua.h"
-
 #include "lobject.h"
 #include "ltm.h"
 #include "lzio.h"
@@ -61,14 +60,37 @@ typedef struct CallInfo {
 #define f_isLua(ci)	(!ci_func(ci)->c.isC)
 #define isLua(ci)	(ttisfunction((ci)->func) && f_isLua(ci))
 
+/** State used for each OS thread */
+typedef struct os_State {
+  /* kept in a list for collection purposes */
+  struct os_State *next, *prev;
+  pthread_mutex_t handshake;
+
+  GCObject *olist, *olist_tail;
+  unsigned alloc_color:1;
+  unsigned trace:1;
+  unsigned snoop:1;
+
+  /* temporary buffer for string concatentation */
+  Mbuffer buff;
+} os_State;
+
+extern pthread_key_t luai_tls_key;
+LUAI_FUNC os_State *luaM_init_pt(void);
+static inline os_State *getpt(void)
+{
+  os_State *pt = pthread_getspecific(luai_tls_key);
+  if (pt == NULL) {
+    return luaM_init_pt();
+  }
+  return pt;
+}
 
 /*
 ** `global state', shared by all threads of this state
 */
 typedef struct global_State {
   stringtable strt;  /* hash table for strings */
-  lua_Alloc frealloc;  /* function to reallocate memory */
-  void *ud;         /* auxiliary data to `frealloc' */
   lu_byte currentwhite;
   lu_byte gcstate;  /* state of garbage collector */
   int sweepstrgc;  /* position of sweep in `strt' */
@@ -78,7 +100,6 @@ typedef struct global_State {
   GCObject *grayagain;  /* list of objects to be traversed atomically */
   GCObject *weak;  /* list of weak tables (to be cleared) */
   GCObject *tmudata;  /* last element of list of userdata to be GC */
-  Mbuffer buff;  /* temporary buffer for string concatentation */
   lu_mem GCthreshold;
   lu_mem totalbytes;  /* number of bytes currently allocated */
   lu_mem estimate;  /* an estimate of number of bytes actually in use */
@@ -167,3 +188,5 @@ LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
 
 #endif
 
+/* vim:ts=2:sw=2:et:
+ */

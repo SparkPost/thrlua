@@ -11,6 +11,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include <pthread.h>
 
 
 #include "luaconf.h"
@@ -102,6 +103,7 @@ typedef LUA_NUMBER lua_Number;
 /* type for integer functions */
 typedef LUA_INTEGER lua_Integer;
 
+LUA_API void lua_initialize(void);
 
 
 /*
@@ -358,27 +360,6 @@ struct lua_Debug {
   int i_ci;  /* active function */
 };
 
-/*
-@@ LUAI_EXTRASPACE allows you to add user-specific data in a lua_State
-@* (the data goes just *before* the lua_State pointer).
-** CHANGE (define) this if you really need that. This value must be
-** a multiple of the maximum alignment required for your machine.
-*/
-extern int LUAI_EXTRASPACE;
-
-/*
-@@ luai_userstate* allow user-specific actions on threads.
-** CHANGE them if you defined LUAI_EXTRASPACE and need to do something
-** extra when a thread is created/deleted/resumed/yielded.
-*/
-extern void (*luai_userstateopen)(lua_State *L);
-extern void (*luai_userstateclose)(lua_State *L);
-extern void (*luai_userstatethread)(lua_State *L, lua_State *L1);
-extern void (*luai_userstatefree)(lua_State *L);
-extern void (*luai_userstateresume)(lua_State *L, int nargs);
-extern void (*luai_userstateyield)(lua_State *L, int nargs);
-
-
 /* }====================================================================== */
 
 
@@ -408,3 +389,6 @@ extern void (*luai_userstateyield)(lua_State *L, int nargs);
 
 
 #endif
+
+/* vim:ts=2:sw=2:et:
+ */

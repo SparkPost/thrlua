@@ -289,13 +289,15 @@ void luaV_concat (lua_State *L, int total, int last) {
       size_t tl = tsvalue(top-1)->len;
       char *buffer;
       int i;
+      os_State *pt = getpt();
+
       /* collect total length */
       for (n = 1; n < total && tostring(L, top-n-1); n++) {
         size_t l = tsvalue(top-n-1)->len;
         if (l >= MAX_SIZET - tl) luaG_runerror(L, "string length overflow");
         tl += l;
       }
-      buffer = luaZ_openspace(L, &G(L)->buff, tl);
+      buffer = luaZ_openspace(L, &pt->buff, tl);
       tl = 0;
       for (i=n; i>0; i--) {  /* concat all strings */
         size_t l = tsvalue(top-i)->len;
@@ -303,6 +305,12 @@ void luaV_concat (lua_State *L, int total, int last) {
         tl += l;
       }
       setsvalue2s(L, top-n, luaS_newlstr(L, buffer, tl));
+      /* check size of buffer */
+      if (luaZ_sizebuffer(&pt->buff) > LUA_MINBUFFER*2) {
+        /* buffer is too big */
+        size_t newsize = luaZ_sizebuffer(&pt->buff) / 2;
+        luaZ_resizebuffer(L, &pt->buff, newsize);
+      }
     }
     total -= n-1;  /* got `n' strings to create 1 new */
     last -= n-1;

@@ -10,7 +10,6 @@
 
 
 #include <stdarg.h>
-#include <pthread.h>
 #include "llimits.h"
 #include "lua.h"
 
@@ -53,6 +52,7 @@ static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
 #define LUA_TPROTO	(LAST_TAG+1)
 #define LUA_TUPVAL	(LAST_TAG+2)
 #define LUA_TDEADKEY	(LAST_TAG+3)
+#define LUA_TGLOBAL (LAST_TAG+4)
 
 
 /*
@@ -408,3 +408,5 @@ LUAI_FUNC void luaO_chunkid (char *out, const char *source, size_t len);
 
 #endif
 
+/* vim:ts=2:sw=2:et:
+ */

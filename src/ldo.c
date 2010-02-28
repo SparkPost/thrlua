@@ -421,9 +421,6 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
       return resume_error(L, "cannot resume non-suspended coroutine");
   if (L->nCcalls >= LUAI_MAXCCALLS)
     return resume_error(L, "C stack overflow");
-  if (luai_userstateresume) {
-    luai_userstateresume(L, nargs);
-  }
   lua_assert(L->errfunc == 0);
   L->baseCcalls = ++L->nCcalls;
   status = luaD_rawrunprotected(L, resume, L->top - nargs);
@@ -443,9 +440,6 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
 
 
 LUA_API int lua_yield (lua_State *L, int nresults) {
-  if (luai_userstateyield) {
-    luai_userstateyield(L, nresults);
-  }
   lua_lock(L);
   if (L->nCcalls > L->baseCcalls)
     luaG_runerror(L, "attempt to yield across metamethod/C-call boundary");

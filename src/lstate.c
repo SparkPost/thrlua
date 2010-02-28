@@ -23,19 +23,6 @@
 #include "ltable.h"
 #include "ltm.h"
 
-int LUAI_EXTRASPACE = 0;
-void (*luai_userstateopen)(lua_State *L) = 0;
-void (*luai_userstateclose)(lua_State *L) = 0;
-void (*luai_userstatethread)(lua_State *L, lua_State *L1) = 0;
-void (*luai_userstatefree)(lua_State *L) = 0;
-void (*luai_userstateresume)(lua_State *L, int nargs) = 0;
-void (*luai_userstateyield)(lua_State *L, int nargs) = 0;
-
-#define state_size(x)	(sizeof(x) + LUAI_EXTRASPACE)
-#define fromstate(l)	(cast(lu_byte *, (l)) - LUAI_EXTRASPACE)
-#define tostate(l)   (cast(lua_State *, cast(lu_byte *, l) + LUAI_EXTRASPACE))
-
-
 /*
 ** Main thread combines a thread state and the global state
 */
@@ -116,15 +103,14 @@ static void close_state (lua_State *L) {
   lua_assert(g->rootgc == obj2gco(L));
   lua_assert(g->strt.nuse == 0);
   luaM_freearray(L, G(L)->strt.hash, G(L)->strt.size, TString *);
-  luaZ_freebuffer(L, &g->buff);
   freestack(L, L);
   lua_assert(g->totalbytes == sizeof(LG));
-  (*g->frealloc)(g->ud, fromstate(L), state_size(LG), 0);
+  luaM_freemem(NULL, L, sizeof(*L));
 }
 
 
 lua_State *luaE_newthread (lua_State *L) {
-  lua_State *L1 = tostate(luaM_newobjv(L, LUA_TTHREAD, state_size(lua_State)));
+  lua_State *L1 = luaM_newobj(L, LUA_TTHREAD);
   luaC_link(L, obj2gco(L1), LUA_TTHREAD);
   preinit_state(L1, G(L));
   stack_init(L1, L);  /* init stack */
@@ -141,30 +127,27 @@ lua_State *luaE_newthread (lua_State *L) {
 void luaE_freethread (lua_State *L, lua_State *L1) {
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval == NULL);
-  if (luai_userstatefree) {
-    luai_userstatefree(L1);
-  }
   freestack(L, L1);
-  luaM_freemem(L, fromstate(L1), state_size(lua_State));
+  luaM_freemem(L, L1, sizeof(lua_State));
 }
 
 
-LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
+LUA_API lua_State *lua_newstate (lua_Alloc funused, void *unused) {
   int i;
   lua_State *L;
   global_State *g;
-  void *l = (*f)(ud, NULL, 0, state_size(LG));
-  if (l == NULL) return NULL;
-  L = tostate(l);
-  g = &((LG *)L)->g;
+ 
+  lua_initialize();
+  g = luaM_newobj(NULL, LUA_TGLOBAL);
+  L = luaM_newobj(NULL, LUA_TTHREAD);
+
+  if (L == NULL) return NULL;
   L->next = NULL;
   L->tt = LUA_TTHREAD;
   g->currentwhite = bit2mask(WHITE0BIT, FIXEDBIT);
   L->marked = luaC_white(g);
   set2bits(L->marked, FIXEDBIT, SFIXEDBIT);
   preinit_state(L, g);
-  g->frealloc = f;
-  g->ud = ud;
   g->mainthread = L;
   g->uvhead.u.l.prev = &g->uvhead;
   g->uvhead.u.l.next = &g->uvhead;
@@ -173,7 +156,6 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
   g->strt.nuse = 0;
   g->strt.hash = NULL;
   setnilvalue(registry(L));
-  luaZ_initbuffer(L, &g->buff);
   g->panic = NULL;
   g->gcstate = GCSpause;
   g->rootgc = obj2gco(L);
@@ -192,8 +174,6 @@ LUA_API lua_State *lua_newstate (lua_Alloc f, void *ud) {
     /* memory allocation error: free partial state */
     close_state(L);
     L = NULL;
-  } else if (luai_userstateopen) {
-    luai_userstateopen(L);
   }
   return L;
 }
@@ -217,9 +197,6 @@ LUA_API void lua_close (lua_State *L) {
     L->nCcalls = L->baseCcalls = 0;
   } while (luaD_rawrunprotected(L, callallgcTM, NULL) != 0);
   lua_assert(G(L)->tmudata == NULL);
-  if (luai_userstateclose) {
-    luai_userstateclose(L);
-  }
   close_state(L);
 }
 

@@ -6,6 +6,8 @@
 
 
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define lmem_c
 #define LUA_CORE
@@ -17,8 +19,6 @@
 #include "lmem.h"
 #include "lobject.h"
 #include "lstate.h"
-
-
 
 /*
 ** About the realloc function:
@@ -37,6 +37,22 @@
 ** frealloc returns NULL if it cannot create or reallocate the area
 ** (any reallocation to an equal or smaller size cannot fail!)
 */
+
+static void *default_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+{
+  (void)ud;
+  (void)osize;
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+  return realloc(ptr, nsize);
+}
+
+/** function to reallocate memory */
+static lua_Alloc frealloc = default_alloc;
+/** auxiliary data to `frealloc' */
+static void *fud = NULL;
 
 
 
@@ -74,13 +90,15 @@ void *luaM_toobig (lua_State *L) {
 ** generic allocation routine.
 */
 void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
-  global_State *g = G(L);
   lua_assert((osize == 0) == (block == NULL));
-  block = (*g->frealloc)(g->ud, block, osize, nsize);
+  block = (*frealloc)(fud, block, osize, nsize);
   if (block == NULL && nsize > 0)
     luaD_throw(L, LUA_ERRMEM);
   lua_assert((nsize == 0) == (block == NULL));
-  g->totalbytes = (g->totalbytes - osize) + nsize;
+  if (L) {
+    global_State *g = G(L);
+    g->totalbytes = (g->totalbytes - osize) + nsize;
+  }
   return block;
 }
 
@@ -98,6 +116,8 @@ void *luaM_newobj(lua_State *L, lu_byte tt)
     NEWIMPL(LUA_TUPVAL, UpVal);
     NEWIMPL(LUA_TPROTO, Proto);
     NEWIMPL(LUA_TTABLE, Table);
+    NEWIMPL(LUA_TGLOBAL, global_State);
+    NEWIMPL(LUA_TTHREAD, lua_State);
     default:
       printf("unhandled tt=%d\n", tt);
       luaD_throw(L, LUA_ERRMEM);
@@ -117,12 +137,61 @@ void *luaM_newobjv(lua_State *L, lu_byte tt, size_t size)
       o->gch.tt = a; \
       return o
     NEWIMPL(LUA_TFUNCTION, Closure);
-    NEWIMPL(LUA_TTHREAD, lua_State);
     default:
       printf("unhandled tt=%d\n", tt);
       luaD_throw(L, LUA_ERRMEM);
       return NULL;
   }
 }
+
+pthread_key_t luai_tls_key;
+static pthread_once_t once_control = PTHREAD_ONCE_INIT;
+
+static void tls_dtor(void *ptr)
+{
+  os_State *pt = ptr;
+  luaZ_freebuffer(NULL, &pt->buff);
+}
+
+static void do_init(void)
+{
+  pthread_key_create(&luai_tls_key, tls_dtor);
+}
+
+void lua_initialize(void)
+{
+  pthread_once(&once_control, do_init);
+}
+
+os_State *luaM_init_pt(void)
+{
+  os_State *pt;
+
+  pt = calloc(1, sizeof(*pt));
+  pthread_mutex_init(&pt->handshake, NULL);
+
+  pthread_setspecific(luai_tls_key, pt);
+  luaZ_initbuffer(NULL, &pt->buff);
+
+  return pt;
+}
+
+LUA_API lua_Alloc lua_getallocf (lua_State *L, void **ud)
+{
+  return frealloc;
+}
+
+LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud)
+{
+  if (L) {
+    /* no-op */
+  } else {
+    frealloc = f;
+    fud = ud;
+  }
+}
+
+
+
 /* vim:ts=2:sw=2:et:
  */
