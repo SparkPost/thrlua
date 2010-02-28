@@ -2,7 +2,7 @@
 require("tap");
 require("pcre");
 
-plan(68);
+plan(75);
 
 matches, e = pcre.match("hello there", "^(\\S+)\\s+(\\S+)$");
 
@@ -154,3 +154,16 @@ is(res[1], "the", "the");
 is(res[2], "quick", "quick");
 is(res[3], "fox", "fox");
 
+res, err, code = pcre.match("empty pattern", "");
+is(res, nil, 'empty pattern returns nil');
+is(err, 'an empty pattern was provided');
+is(code, 0);
+
+res, err, code = pcre.match("bogus pattern", "asd(");
+is(res, nil, 'bogus pattern returns nil');
+is(err, 'missing )', 'got reason from pcre');
+is(code, 4, 'offset is 4');
+
+is(pcre.replace("hello there", "l(o)", "hey \\\\1 \\1"),
+  'helhey \\1 o there',
+  "quoted backref");

@@ -268,6 +268,7 @@ static int perform_regex(lua_State *thr, int mode)
 
                 if (walk > replacement && walk[-1] == '\\') {
                   /* quoted; not a backref */
+                  luaL_addchar(&retbuf, walk[0]);
                   walk++;
                   continue;
                 }

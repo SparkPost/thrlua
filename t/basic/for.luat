@@ -1,0 +1,55 @@
+-- vim:ts=2:sw=2:et:ft=lua:
+
+i = "not visible to for loop";
+
+print("basic up");
+for i = 1, 10 do
+  print(i);
+end
+print("validate scoping", i);
+print("basic with step");
+for i = 1, 10, 2 do
+  print(i);
+end
+print("validate scoping", i);
+
+res, err = pcall(function()
+  for i = 0, 0, false do
+    print("should not see me");
+  end
+end)
+print("error checking", res, err);
+
+t = { 3, 2, 1 };
+print("ipairs test");
+i = 1
+for k, v in ipairs(t) do
+  print(k, v);
+end
+
+--[==[luat:stdout
+basic up
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+validate scoping	not visible to for loop
+basic with step
+1
+3
+5
+7
+9
+validate scoping	not visible to for loop
+error checking	false	t/basic/for.luat:17: 'for' step must be a number
+ipairs test
+1	3
+2	2
+3	1
+--]==]

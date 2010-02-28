@@ -22,10 +22,14 @@ function _G.diag(...)
 end
 
 function _G.ok(expr, label)
+  if label == nil then
+    label = ""
+  end
   if expr then
     print(string.format("ok %d - %s", cur_test, label))
   else
     print(string.format("not ok %d - %s", cur_test, label))
+    diag(debug.traceback(2));
   end
   cur_test = cur_test + 1
   return expr
@@ -68,9 +72,9 @@ function _G.cmp_ok(got, rel, val, label)
     pass = not string.match(A, B)
   end
   if not ok(pass, label) then
-    diag("    " .. tostring(got))
-    diag("    " .. rel)
-    diag("    " .. tostring(val))
+    diag(" got        " .. tostring(got))
+    diag("            " .. rel)
+    diag(" expected   " .. tostring(val))
   end
   return pass
 end
