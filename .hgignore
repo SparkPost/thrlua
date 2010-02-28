@@ -27,3 +27,4 @@ rcluaconfig.h*
 *.lcovinfo
 *.gcno
 *.gcda
+lcovhtml

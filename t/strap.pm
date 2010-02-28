@@ -24,7 +24,7 @@ sub _command_line {
     my $testname = $file;
     $testname =~ s/[^a-zA-Z0-9_]/_/g;
 
-    $cmd = "$lcov -q --zerocounters --directory .; $cmd ; $lcov --capture --directory . --output-file $infoname --test-name $testname";
+    $cmd = "$lcov -q --zerocounters --directory .; $cmd ; $lcov --capture --base-directory . --directory . --output-file $infoname --test-name $testname";
   }
   return $cmd;
 }
