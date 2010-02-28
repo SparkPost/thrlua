@@ -14,14 +14,8 @@
 
 #include "lua.h"
 
-
-typedef LUAI_UINT32 lu_int32;
-
 typedef LUAI_UMEM lu_mem;
-
 typedef LUAI_MEM l_mem;
-
-
 
 /* chars used as small naturals (so that `char' is reserved for characters) */
 typedef unsigned char lu_byte;
@@ -39,7 +33,7 @@ typedef unsigned char lu_byte;
 ** this is for hashing only; there is no problem if the integer
 ** cannot hold the whole pointer value
 */
-#define IntPoint(p)  ((unsigned int)(lu_mem)(p))
+#define IntPoint(p)  ((uint32_t)(intptr_t)(p))
 
 
 
@@ -85,7 +79,7 @@ typedef LUAI_UACNUMBER l_uacNumber;
 ** type for virtual-machine instructions
 ** must be an unsigned with (at least) 4 bytes (see details in lopcodes.h)
 */
-typedef lu_int32 Instruction;
+typedef uint32_t Instruction;
 
 
 

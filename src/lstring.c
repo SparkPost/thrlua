@@ -66,7 +66,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   ts->tsv.next = tb->hash[h];  /* chain new entry */
   tb->hash[h] = obj2gco(ts);
   tb->nuse++;
-  if (tb->nuse > cast(lu_int32, tb->size) && tb->size <= MAX_INT/2)
+  if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2)
     luaS_resize(L, tb->size*2);  /* too crowded */
   return ts;
 }
