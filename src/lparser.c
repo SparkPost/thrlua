@@ -782,6 +782,7 @@ static UnOpr getunopr (int op) {
     case '#': return OPR_LEN;
 #if defined(LUA_BITWISE_OPERATORS)
     case '~': return OPR_BNOT;
+    case '!': return OPR_NOT;
 #endif
     default: return OPR_NOUNOPR;
   }

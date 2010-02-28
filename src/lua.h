@@ -16,6 +16,11 @@
 
 #include "luaconf.h"
 
+#if __GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ >= 5
+# define LUA_NORETURN __attribute__((__noreturn__))
+#else
+# define LUA_NORETURN /* nothing */
+#endif
 
 #define LUA_VERSION	"rcLua 5.1"
 #define LUA_RELEASE	"rcLua 5.1.4"

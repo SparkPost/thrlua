@@ -328,15 +328,15 @@ static void read_string (LexState *ls, int del, SemInfo *seminfo) {
             c = 0;
             next(ls); /* skip over 'u' */
 
-            for (i = 0; i < 6 && isxdigit(ls->current); i++) {
+            for (i = 0; i < 8 && isxdigit(ls->current); i++) {
               c = (c << 4) | (
                 ls->current <= '9' ? 
                 ls->current - '0' : tolower(ls->current) - 'a' + 10);
               next(ls);
             }
-            if (i != 4 && i != 6) {
+            if (i != 4 && i != 6 && i != 8) {
               luaX_lexerror(ls,
-                "expected either 4 or 6 hex digits for unicode escape",
+                "expected either 4, 6 or 8 hex digits for unicode escape",
                 TK_STRING);
             }
 

@@ -1,6 +1,6 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('tap');
-plan(31);
+plan(38);
 
 a = {1, 2, 3};
 mt = {};
@@ -56,10 +56,7 @@ function mt.__len(a)
   error("this should never be invoked");
 end
 function mt.__eq(a, b)
-  if type(b) == 'table' then
-    return 5 == a;
-  end
-  return 3 == b; 
+  return false;
 end
 function mt.__lt(a, b)
   if type(b) == 'table' then
@@ -88,7 +85,6 @@ function mt.__call(tbl, ...)
   return 'call:' .. table.concat({...}, ',');
 end
 
-
 setmetatable(a, mt);
 
 is(1 + 1, 2);
@@ -112,6 +108,9 @@ is(a % 2, 1);
 is(a % 10, 3);
 is(2 % a, 1);
 is(10 % a, 5);
+
+is(rawget(a, 1), 1);
+ok(rawequal(1, 1));
 
 is(3 ^ 2, 9);
 is(a ^ 2, 9);
@@ -138,4 +137,27 @@ a.bar = 21;
 is(a.bar, 42);
 
 is(a(1, 2, 3), 'call:1,2,3');
+
+function mt.__tostring(tbl)
+  return nil;
+end
+res, err = pcall(function()
+  print(a)
+end)
+like(err, "must return a string to 'print'");
+
+function mt.__tostring(tbl)
+  return "a";
+end
+
+is(tostring(a), 'a', 'tostring works as intended');
+
+is(getmetatable(a), mt);
+mt.__metatable = 'foo';
+is(getmetatable(a), 'foo');
+res, err = pcall(function()
+  setmetatable(a, {});
+end);
+like(err, 'cannot change a protected metatable');
+
 
