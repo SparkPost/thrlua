@@ -61,7 +61,7 @@ static lua_CFunction ll_sym (lua_State *L, void *lib, const char *sym);
 #include <dlfcn.h>
 
 static void ll_unloadlib (void *lib) {
-  dlclose(lib);
+  //dlclose(lib);
 }
 
 
