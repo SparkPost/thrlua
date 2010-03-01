@@ -66,12 +66,13 @@ function _G.cmp_ok(got, rel, val, label)
   local A = got
   local B = val
 
-  -- floating pointer number type...
+  -- normalize floating point number values to avoid
+  -- fuzzy comparison issues
   if type(A) == "number" then
-    A = tostring(A)
+    A = tonumber(tostring(A))
   end
   if type(B) == "number" then
-    B = tostring(B)
+    B = tonumber(tostring(B))
   end
 
   if rel == ">" then
@@ -135,13 +136,15 @@ function _G.is_deeply(a, b, label)
   for _, k in pairs(diff) do
     if not once[k] then
       once[k] = true
-      if a[k] ~= nil and b[k] == nil then
-        diag('key ' .. k .. ' is present in A but not in B');
-      elseif a[k] == nil and b[k] ~= nil then
-        diag('key ' .. k .. ' is present in B but not in A');
+      if b[k] == nil then
+        diag('expected no value for [' .. k .. ']');
       else
-        diag('expected A[' .. k .. '] = ' .. tostring(a[k]));
-        diag('but got  B[' .. k .. '] = ' .. tostring(b[k]));
+        diag('expected [' .. k .. '] = ' .. tostring(b[k]));
+      end
+      if a[k] == nil then
+        diag('but got no value for [' .. k .. ']');
+      else
+        diag('but got  [' .. k .. '] = ' .. tostring(a[k]));
       end
     end
   end

@@ -1,21 +1,11 @@
 require("tap");
-plan(8);
+plan(4);
 
 
 -- trace calls
 
 local level=0
 local events = {}
-local expected = {
-  "0 t/trace-calls.lua:60  sethook [C]",
-  "0 t/trace-calls.lua:61  three <55:t/trace-calls.lua>",
-  "1 t/trace-calls.lua:56  two <51:t/trace-calls.lua>",
-  "2 t/trace-calls.lua:52  one <48:t/trace-calls.lua>",
-  "3 t/trace-calls.lua:52  one <48:t/trace-calls.lua>",
-  "2 t/trace-calls.lua:56  two <51:t/trace-calls.lua>",
-  "1 t/trace-calls.lua:61  three <55:t/trace-calls.lua>",
-  "0 t/trace-calls.lua:62  sethook [C]"
-}
 
 local function hook(event)
  local t=debug.getinfo(3)
@@ -58,11 +48,27 @@ end
 
 level=0
 debug.sethook(hook,"cr")
+fn, mask, count = debug.gethook()
 three()
 debug.sethook()
 
-for i = 1, table.maxn(events) do
-  is(events[i], expected[i], i)
-end
+is(fn, hook);
+is(mask, 'cr');
+is(count, 0);
+
+local expected = {
+  "0 t/trace-calls.lua:50  sethook [C]",
+  "0 t/trace-calls.lua:51  gethook [C]",
+  "1 t/trace-calls.lua:51  gethook [C]",
+  "0 t/trace-calls.lua:52  three <45:t/trace-calls.lua>",
+  "1 t/trace-calls.lua:46  two <41:t/trace-calls.lua>",
+  "2 t/trace-calls.lua:42  one <38:t/trace-calls.lua>",
+  "3 t/trace-calls.lua:42  one <38:t/trace-calls.lua>",
+  "2 t/trace-calls.lua:46  two <41:t/trace-calls.lua>",
+  "1 t/trace-calls.lua:52  three <45:t/trace-calls.lua>",
+  "0 t/trace-calls.lua:53  sethook [C]"
+}
+
+is_deeply(events, expected);
 
 
