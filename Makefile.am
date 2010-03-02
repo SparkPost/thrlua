@@ -56,5 +56,5 @@ lcov:
 	-rm -rf lcovhtml
 	mkdir -p lcovhtml
 	-find . -name \*.gcov | xargs rm -f
-	PATH="./coverage:$$PATH" genhtml --output-directory lcovhtml --prefix `cd .. ; pwd` --show-details --title "Lua Code Coverage" $$(find . -name \*.lcovinfo)
+	PATH="./coverage:$$PATH" genhtml --output-directory lcovhtml --prefix `cd .. ; pwd` --show-details --title "Lua Code Coverage " $$(find . -name \*.lcovinfo)
 

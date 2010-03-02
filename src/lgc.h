@@ -7,10 +7,6 @@
 #ifndef lgc_h
 #define lgc_h
 
-
-#include "lobject.h"
-
-
 /*
 ** Possible states of the Garbage Collector
 */

@@ -4,24 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stddef.h>
-
 #define lstate_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lfunc.h"
-#include "lgc.h"
-#include "llex.h"
-#include "lmem.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "ltm.h"
+#include "thrlua.h"
 
 /*
 ** Main thread combines a thread state and the global state

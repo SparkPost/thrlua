@@ -8,11 +8,6 @@
 #ifndef lobject_h
 #define lobject_h
 
-
-#include <stdarg.h>
-#include "llimits.h"
-#include "lua.h"
-
 #if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
 typedef uint32_t scpt_atomic_t;
 
@@ -368,6 +363,7 @@ typedef struct Table {
   CommonHeader;
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */ 
   lu_byte lsizenode;  /* log2 of size of `node' array */
+  pthread_rwlock_t lock;
   struct Table *metatable;
   TValue *array;  /* array part */
   Node *node;

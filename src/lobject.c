@@ -4,25 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-#include <ctype.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lobject_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldo.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "lvm.h"
-
-
+#include "thrlua.h"
 
 const TValue luaO_nilobject_ = {{NULL}, LUA_TNIL};
 

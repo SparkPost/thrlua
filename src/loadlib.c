@@ -8,19 +8,10 @@
 ** implementation for Windows, and a stub for other systems.
 */
 
-
-#include <stdlib.h>
-#include <string.h>
-
-
 #define loadlib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
+#include "thrlua.h"
 
 /* prefix for open functions in C libraries */
 #define LUA_POF		"luaopen_"

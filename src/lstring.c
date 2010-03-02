@@ -4,20 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <string.h>
-
 #define lstring_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
-#include "lstring.h"
-
-
+#include "thrlua.h"
 
 void luaS_resize (lua_State *L, int newsize) {
   GCObject **newhash;

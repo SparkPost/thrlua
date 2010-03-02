@@ -4,20 +4,9 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lua_c
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
-
+#include "thrlua.h"
 
 static lua_State *globalL = NULL;
 

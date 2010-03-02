@@ -4,20 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define ldblib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
-
+#include "thrlua.h"
 
 static int db_getregistry (lua_State *L) {
   lua_pushvalue(L, LUA_REGISTRYINDEX);

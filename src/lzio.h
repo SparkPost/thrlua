@@ -8,11 +8,6 @@
 #ifndef lzio_h
 #define lzio_h
 
-#include "lua.h"
-
-#include "lmem.h"
-
-
 #define EOZ	(-1)			/* end of stream */
 
 typedef struct Zio ZIO;

@@ -4,21 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-#include <string.h>
-
 #define lundump_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lfunc.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstring.h"
-#include "lundump.h"
-#include "lzio.h"
+#include "thrlua.h"
 
 typedef struct {
  lua_State* L;

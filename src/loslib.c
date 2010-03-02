@@ -5,20 +5,11 @@
 */
 
 
-#include <errno.h>
-#include <locale.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
 
 #define loslib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
+#include "thrlua.h"
 
 static int os_pushresult (lua_State *L, int i, const char *filename) {
   int en = errno;  /* calls to Lua API may change this value */

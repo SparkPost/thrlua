@@ -10,8 +10,19 @@
 #define lconfig_h
 
 #include "rcluaconfig.h"
-#include <limits.h>
+#include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <limits.h>
+#include <pthread.h>
+#include <assert.h>
+#include <math.h>
+#include <string.h>
+#include <ctype.h>
+#include <errno.h>
+#include <stdlib.h>
+
+
 
 
 /*

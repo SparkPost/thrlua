@@ -4,21 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lmem_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
+#include "thrlua.h"
 
 /*
 ** About the realloc function:

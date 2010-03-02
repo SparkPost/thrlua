@@ -7,10 +7,6 @@
 #ifndef llex_h
 #define llex_h
 
-#include "lobject.h"
-#include "lzio.h"
-
-
 #define FIRST_RESERVED	257
 
 /* maximum length of a reserved word */

@@ -7,10 +7,6 @@
 #ifndef lfunc_h
 #define lfunc_h
 
-
-#include "lobject.h"
-
-
 #define sizeCclosure(n)	(cast(int, sizeof(CClosure)) + \
                          cast(int, sizeof(TValue)*((n)-1)))
 

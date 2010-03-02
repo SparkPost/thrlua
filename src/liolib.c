@@ -5,20 +5,10 @@
 */
 
 
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define liolib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
-
+#include "thrlua.h"
 
 #define IO_INPUT	1
 #define IO_OUTPUT	2

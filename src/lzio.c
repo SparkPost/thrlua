@@ -4,19 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <string.h>
-
 #define lzio_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "llimits.h"
-#include "lmem.h"
-#include "lstate.h"
-#include "lzio.h"
-
+#include "thrlua.h"
 
 int luaZ_fill (ZIO *z) {
   size_t size;

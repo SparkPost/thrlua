@@ -7,12 +7,6 @@
 #ifndef lstring_h
 #define lstring_h
 
-
-#include "lgc.h"
-#include "lobject.h"
-#include "lstate.h"
-
-
 #define sizestring(s)	(sizeof(union TString)+((s)->len+1)*sizeof(char))
 
 #define sizeudata(u)	(sizeof(union Udata)+(u)->len)

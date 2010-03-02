@@ -4,24 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-#include <string.h>
-
 #define lgc_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lfunc.h"
-#include "lgc.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "ltm.h"
-
+#include "thrlua.h"
 
 #define GCSTEPSIZE	1024u
 #define GCSWEEPMAX	40

@@ -4,31 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stdarg.h>
-#include <stddef.h>
-#include <string.h>
-
-
 #define ldebug_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lapi.h"
-#include "lcode.h"
-#include "ldebug.h"
-#include "ldo.h"
-#include "lfunc.h"
-#include "lobject.h"
-#include "lopcodes.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "ltm.h"
-#include "lvm.h"
-
-
+#include "thrlua.h"
 
 static const char *getfuncname (lua_State *L, CallInfo *ci, const char **name);
 

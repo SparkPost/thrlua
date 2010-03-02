@@ -7,10 +7,6 @@
 #ifndef ldebug_h
 #define ldebug_h
 
-
-#include "lstate.h"
-
-
 #define pcRel(pc, p)	(cast(int, (pc) - (p)->code) - 1)
 
 #define getline(f,pc)	(((f)->lineinfo) ? (f)->lineinfo[pc] : 0)

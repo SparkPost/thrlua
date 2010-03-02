@@ -4,29 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lvm_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lfunc.h"
-#include "lgc.h"
-#include "lobject.h"
-#include "lopcodes.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "ltm.h"
-#include "lvm.h"
-
-
+#include "thrlua.h"
 
 /* limit for table tag-method chains (to avoid loops) */
 #define MAXTAGLOOP	100

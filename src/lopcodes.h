@@ -7,9 +7,6 @@
 #ifndef lopcodes_h
 #define lopcodes_h
 
-#include "llimits.h"
-
-
 /*===========================================================================
   We assume that instructions are unsigned numbers.
   All instructions have an opcode in the first 6 bits.

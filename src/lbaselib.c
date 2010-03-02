@@ -4,23 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lbaselib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
-
-
+#include "thrlua.h"
 
 /*
 ** If your system does not support `stdout', you can just remove this function.

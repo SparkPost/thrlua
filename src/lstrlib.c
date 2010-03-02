@@ -4,21 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <ctype.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define lstrlib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
+#include "thrlua.h"
 
 /* macro to `unsign' a character */
 #define uchar(c)        ((unsigned char)(c))

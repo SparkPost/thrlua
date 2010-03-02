@@ -4,20 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <string.h>
-
 #define ltm_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lobject.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "ltm.h"
-
+#include "thrlua.h"
 
 
 const char *const luaT_typenames[] = {

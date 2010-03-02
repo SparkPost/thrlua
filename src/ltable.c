@@ -18,22 +18,10 @@
 ** Hence even when the load factor reaches 100%, performance remains good.
 */
 
-#include <math.h>
-#include <string.h>
-
 #define ltable_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldebug.h"
-#include "ldo.h"
-#include "lgc.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
-#include "ltable.h"
-
+#include "thrlua.h"
 
 /*
 ** max size of array part is 2^MAXBITS

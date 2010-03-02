@@ -4,16 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-#include <stddef.h>
-
 #define ldump_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lobject.h"
-#include "lstate.h"
-#include "lundump.h"
+#include "thrlua.h"
 
 typedef struct {
  lua_State* L;

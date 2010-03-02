@@ -4,21 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stddef.h>
-
 #define lfunc_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lfunc.h"
-#include "lgc.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lstate.h"
-
-
+#include "thrlua.h"
 
 Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
   Closure *c = luaM_newobjv(L, LUA_TFUNCTION, sizeCclosure(nelems));

@@ -7,13 +7,6 @@
 #ifndef llimits_h
 #define llimits_h
 
-
-#include <limits.h>
-#include <stddef.h>
-
-
-#include "lua.h"
-
 typedef LUAI_UMEM lu_mem;
 typedef LUAI_MEM l_mem;
 

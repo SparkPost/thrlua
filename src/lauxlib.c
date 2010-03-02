@@ -4,15 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <ctype.h>
-#include <errno.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-
 /* This file uses only the official API of Lua.
 ** Any function declared here could be written as an application function.
 */
@@ -20,10 +11,7 @@
 #define lauxlib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-
+#include "thrlua.h"
 
 #define FREELIST_REF	0	/* free list of references */
 

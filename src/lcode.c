@@ -4,25 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stdlib.h>
-
 #define lcode_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "lcode.h"
-#include "ldebug.h"
-#include "ldo.h"
-#include "lgc.h"
-#include "llex.h"
-#include "lmem.h"
-#include "lobject.h"
-#include "lopcodes.h"
-#include "lparser.h"
-#include "ltable.h"
-
+#include "thrlua.h"
 
 #define hasjumps(e)	((e)->t != (e)->f)
 

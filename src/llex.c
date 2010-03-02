@@ -4,26 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <ctype.h>
-#include <locale.h>
-#include <string.h>
-
 #define llex_c
 #define LUA_CORE
 
-#include "lua.h"
-
-#include "ldo.h"
-#include "llex.h"
-#include "lobject.h"
-#include "lparser.h"
-#include "lstate.h"
-#include "lstring.h"
-#include "ltable.h"
-#include "lzio.h"
-
-
+#include "thrlua.h"
 
 #define next(ls) (ls->current = zgetc(ls->z))
 

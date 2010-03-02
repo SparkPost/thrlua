@@ -7,12 +7,6 @@
 #ifndef lcode_h
 #define lcode_h
 
-#include "llex.h"
-#include "lobject.h"
-#include "lopcodes.h"
-#include "lparser.h"
-
-
 /*
 ** Marks the end of a patch list. It is an invalid value both as an absolute
 ** address, and as a list link (would link an element to itself).

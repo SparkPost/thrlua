@@ -7,12 +7,6 @@
 #ifndef ldo_h
 #define ldo_h
 
-
-#include "lobject.h"
-#include "lstate.h"
-#include "lzio.h"
-
-
 #define luaD_checkstack(L,n)	\
   if ((char *)L->stack_last - (char *)L->top <= (n)*(int)sizeof(TValue)) \
     luaD_growstack(L, n); \

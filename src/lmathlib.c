@@ -4,18 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-
-#include <stdlib.h>
-#include <math.h>
-
 #define lmathlib_c
 #define LUA_LIB
 
-#include "lua.h"
-
-#include "lauxlib.h"
-#include "lualib.h"
-
+#include "thrlua.h"
 
 #undef PI
 #define PI (3.14159265358979323846)

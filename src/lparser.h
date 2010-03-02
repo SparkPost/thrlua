@@ -7,11 +7,6 @@
 #ifndef lparser_h
 #define lparser_h
 
-#include "llimits.h"
-#include "lobject.h"
-#include "lzio.h"
-
-
 /*
 ** Expression descriptor
 */

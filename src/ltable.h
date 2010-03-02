@@ -7,9 +7,6 @@
 #ifndef ltable_h
 #define ltable_h
 
-#include "lobject.h"
-
-
 #define gnode(t,i)	(&(t)->node[i])
 #define gkey(n)		(&(n)->i_key.nk)
 #define gval(n)		(&(n)->i_val)
@@ -29,6 +26,14 @@ LUAI_FUNC void luaH_resizearray (lua_State *L, Table *t, int nasize);
 LUAI_FUNC void luaH_free (lua_State *L, Table *t);
 LUAI_FUNC int luaH_next (lua_State *L, Table *t, StkId key);
 LUAI_FUNC int luaH_getn (Table *t);
+
+/* block until a write lock is obtained */
+LUAI_FUNC void luaH_wrlock(Table *t);
+/* block until a read lock is obtained */
+LUAI_FUNC void luaH_rdlock(Table *t);
+/* release a lock */
+LUAI_FUNC void luaH_unlock(Table *t);
+
 
 
 #if defined(LUA_DEBUG)

@@ -4,16 +4,10 @@
 ** See Copyright Notice in lua.h
 */
 
-#include <ctype.h>
-#include <stdio.h>
-
 #define luac_c
 #define LUA_CORE
 
-#include "ldebug.h"
-#include "lobject.h"
-#include "lopcodes.h"
-#include "lundump.h"
+#include "thrlua.h"
 
 #define PrintFunction	luaU_print
 

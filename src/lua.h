@@ -11,9 +11,6 @@
 
 #include <stdarg.h>
 #include <stddef.h>
-#include <pthread.h>
-
-
 #include "luaconf.h"
 
 #if __GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ >= 5
@@ -25,7 +22,7 @@
 #define LUA_VERSION	"rcLua 5.1"
 #define LUA_RELEASE	"rcLua 5.1.4"
 #define LUA_VERSION_NUM	501
-#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008 Message Systems, Inc"
+#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2010 Message Systems, Inc"
 #define LUA_AUTHORS 	"R. Ierusalimschy, L. H. de Figueiredo & W. Celes"
 
 
