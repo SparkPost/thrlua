@@ -1,5 +1,5 @@
 -- vim:ts=2:sw=2:et:ft=lua:
-require("tap");
+require("Test.More");
 require("pcre");
 
 plan(75);

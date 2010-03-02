@@ -1,5 +1,5 @@
 -- vim:ts=2:sw=2:et:ft=lua:
-require('tap');
+require('Test.More');
 plan(38);
 
 a = {1, 2, 3};

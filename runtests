@@ -32,7 +32,7 @@ $Test::Harness::verbose = !$quiet;
 $ENV{'TEST_VERBOSE'} = 1 if !$quiet;
 $ENV{'HARNESS_VERBOSE'} = 1 if !$quiet;
 
-$ENV{RCLUA_PATH} = "./etc/?.lua";
+$ENV{RCLUA_PATH} = "./?.lua;./etc/?.lua";
 $ENV{RCLUA_CPATH} = ".libs/?.so";
 if ($use_installed) {
   $ENV{LUA_EXECUTABLE} ||= "/opt/msys/3rdParty/bin/rclua";

@@ -1,4 +1,4 @@
-require("tap")
+require("Test.More")
 plan(168)
 
 -- the sieve of of Eratosthenes programmed with coroutines

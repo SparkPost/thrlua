@@ -1,5 +1,5 @@
 -- vim:ts=2:sw=2:et:
-require('tap');
+require('Test.More');
 plan(49);
 
 is(math.abs(-1), 1);

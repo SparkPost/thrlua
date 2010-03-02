@@ -1,4 +1,4 @@
-require("tap");
+require("Test.More");
 plan(18);
 hex=function (i) return "0x"..string.format("%X", i) end
 is(hex(0x54|0x55), "0x55", "0x54 | 0x55")

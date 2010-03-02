@@ -1,4 +1,4 @@
-require("tap");
+require("Test.More");
 plan(10);
 is(":" .. 10, ":10", "decimal");
 is(":" .. 010, ":8", "octal");

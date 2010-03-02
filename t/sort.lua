@@ -1,4 +1,4 @@
-require("tap");
+require("Test.More");
 plan(3);
 
 -- implementations of a sort function

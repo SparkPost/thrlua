@@ -1,4 +1,4 @@
-require("tap");
+require("Test.More");
 plan(36);
 
 is("\x00", "\000", "NUL byte");

@@ -1,4 +1,4 @@
-require 'tap'
+require 'Test.More'
 
 plan(4);
 

@@ -1,11 +1,6 @@
 -- vim:ts=2:sw=2:et:
-require('tap');
-plan(44);
-
-s = string.dump(is_deeply);
-local d = loadstring(s);
-
-d({1,2,3}, {1, 2, 3}, 'testing dumped and loaded is_deeply');
+require('Test.More');
+plan(43);
 
 is(string.char(65, 32, 66), 'A B');
 

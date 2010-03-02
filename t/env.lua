@@ -1,4 +1,4 @@
-require("tap");
+require("Test.More");
 plan(1);
 
 -- read environment variables as if they were global variables
