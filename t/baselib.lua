@@ -1,6 +1,14 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('Test.More');
-plan(41);
+plan(42);
+
+function dumpme()
+  ok(true, 'loaded via dump');
+end
+
+s = string.dump(dumpme);
+d = loadstring(s);
+d();
 
 is(tonumber('0'), 0);
 is(tonumber('10'), 10);
