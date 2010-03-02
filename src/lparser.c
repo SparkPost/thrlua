@@ -824,10 +824,11 @@ static const struct {
   lu_byte right; /* right priority */
 } priority[] = {  /* ORDER OPR */
    {6, 6}, {6, 6}, {7, 7}, {7, 7}, {7, 7},  /* `+' `-' `/' `%' */
+   {10, 9}, /* power ; right associative */
 #if defined(LUA_BITWISE_OPERATORS)
    {6, 6}, {6, 6}, {6, 6}, {7, 7}, {7, 7}, {7, 7}, /* `|' `&' `!' `<<' `>>' `\' */
 #endif
-   {10, 9}, {5, 4},                 /* power and concat (right associative) */
+   {5, 4},                 /* concat (right associative) */
    {3, 3}, {3, 3},                  /* equality and inequality */
    {3, 3}, {3, 3}, {3, 3}, {3, 3},  /* order */
    {2, 2}, {1, 1}                   /* logical (and/or) */
