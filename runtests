@@ -35,6 +35,13 @@ $ENV{'TEST_VERBOSE'} = 1 if !$quiet;
 $ENV{'HARNESS_VERBOSE'} = 1 if !$quiet;
 $ENV{'USE_VALGRIND'} = 1 if $valgrind;
 
+use Config;
+$ENV{RCLUA_INIT} = <<LUA;
+platform = {
+  osname=[[$Config{osname}]],
+}
+LUA
+
 $ENV{RCLUA_PATH} = "./?.lua;./etc/?.lua";
 $ENV{RCLUA_CPATH} = ".libs/?.so";
 if ($use_installed) {

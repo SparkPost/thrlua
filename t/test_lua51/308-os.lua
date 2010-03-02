@@ -111,11 +111,9 @@ like(os.time({
     isdst = 0,
 }), '^946%d+$', "function time")
 
-if platform and platform.intsize == 8 then
-    todo("pb on 64bit platforms")
-    -- os.time returns nil when C mktime returns < 0
-    -- this test needs a out of range value on any platform
-end
+todo("this next test may pass on 64bit platforms")
+-- os.time returns nil when C mktime returns < 0
+-- this test needs a out of range value on any platform
 is(os.time({
     sec = 0,
     min = 0,

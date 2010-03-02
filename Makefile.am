@@ -3,7 +3,7 @@ hdrdir = $(includedir)/rclua
 cmoddir = $(prefix)/lib/lua/@PACKAGE_VERMAJORMINOR@
 smoddir = $(prefix)/share/lua/@PACKAGE_VERMAJORMINOR@
 
-lib_LTLIBRARIES = librclua.la
+lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
 cmod_LTLIBRARIES = pcre.la
 
@@ -15,8 +15,8 @@ noinst_HEADERS = src/lapi.h src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-librclua_la_LDFLAGS = -lpthread -ldl -lm 
-librclua_la_SOURCES = \
+libthrlua_la_LDFLAGS = -lpthread -ldl -lm
+libthrlua_la_SOURCES = \
 	src/lapi.c src/lcode.c src/ldebug.c src/ldo.c src/ldump.c src/lfunc.c \
 	src/lgc.c src/llex.c src/lmem.c src/lobject.c src/lopcodes.c \
 	src/lparser.c src/lstate.c src/lstring.c src/ltable.c src/ltm.c  \
@@ -26,13 +26,13 @@ librclua_la_SOURCES = \
 
 # lua executable
 rclua_SOURCES = src/lua.c
-rclua_LDADD = -lrclua
+rclua_LDADD = -lthrlua
 rclua_LDFLAGS = @RL_LDFLAGS@
 rclua_CPPFLAGS = @RL_CFLAGS@
 
 # lua compiler
 rcluac_SOURCES = src/luac.c src/print.c
-rcluac_LDADD = -lrclua 
+rcluac_LDADD = -lthrlua
 
 # pcre
 pcre_la_SOURCES = modules/pcre.c
