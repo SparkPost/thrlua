@@ -15,9 +15,11 @@ use Test::Harness;
 
 my $use_installed = 0;
 my $quiet = 0;
+my $valgrind = 0;
 
 GetOptions(
   "compare" => \$use_installed,
+  "valgrind|g" => \$valgrind,
   "quiet" => \$quiet
 );
 
@@ -31,13 +33,16 @@ $Test::Harness::Strap->{callback} = $strap_callback;
 $Test::Harness::verbose = !$quiet;
 $ENV{'TEST_VERBOSE'} = 1 if !$quiet;
 $ENV{'HARNESS_VERBOSE'} = 1 if !$quiet;
+$ENV{'USE_VALGRIND'} = 1 if $valgrind;
 
 $ENV{RCLUA_PATH} = "./?.lua;./etc/?.lua";
 $ENV{RCLUA_CPATH} = ".libs/?.so";
 if ($use_installed) {
   $ENV{LUA_EXECUTABLE} ||= "/opt/msys/3rdParty/bin/rclua";
 } else {
-  $ENV{LUA_EXECUTABLE} ||= "./rclua";
+  $ENV{DYLD_LIBRARY_PATH} = ".libs";
+  $ENV{LD_LIBRARY_PATH} = ".libs";
+  $ENV{LUA_EXECUTABLE} ||= ".libs/rclua";
 }
 $ENV{THIS_ENV_VAR_IS_SET_FOR_THE_ENV_TEST} = "w00t";
 

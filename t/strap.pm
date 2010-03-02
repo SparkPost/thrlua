@@ -12,6 +12,9 @@ sub _command_line {
 
   if ($file =~ m/\.lua$/) {
     $cmd = $ENV{LUA_EXECUTABLE} . " $file";
+    if ($ENV{USE_VALGRIND}) {
+      $cmd = "valgrind --tool=memcheck --leak-check=full --track-origins=yes --show-reachable=yes $cmd";
+    }
   } elsif ($file =~ m/\.luat$/) {
     $cmd = $^X . " t/doluat $file";
   } else {
