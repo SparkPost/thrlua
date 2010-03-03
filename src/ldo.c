@@ -194,10 +194,12 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
     lua_assert(p->is_vararg & VARARG_HASARG);
     luaC_checkGC(L);
     htab = luaH_new(L, nvar, 1);  /* create `arg' table */
+    luaH_wrlock(L, htab);
     for (i=0; i<nvar; i++)  /* put extra arguments into `arg' table */
       setobj2n(L, luaH_setnum(L, htab, i+1), L->top - nvar + i);
     /* store counter in field `n' */
     setnvalue(luaH_setstr(L, htab, luaS_newliteral(L, "n")), cast_num(nvar));
+    luaH_unlock(L, htab);
   }
 #endif
   /* move fixed parameters to final position */
@@ -489,4 +491,5 @@ int luaD_protectedparser (lua_State *L, ZIO *z, const char *name) {
   return status;
 }
 
-
+/* vim:ts=2:sw=2:et:
+ */

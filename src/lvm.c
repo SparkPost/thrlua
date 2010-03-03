@@ -92,13 +92,18 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     const TValue *tm;
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
-      const TValue *res = luaH_get(h, key); /* do a primitive get */
+      const TValue *res;
+
+      luaH_rdlock(L, h);
+      res = luaH_get(h, key); /* do a primitive get */
       if (!ttisnil(res) ||  /* result is no nil? */
           (tm = fasttm(L, h->metatable, TM_INDEX)) == NULL) { /* or no TM? */
         setobj2s(L, val, res);
+        luaH_unlock(L, h);
         return;
       }
       /* else will try the tag method */
+      luaH_unlock(L, h);
     }
     else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_INDEX)))
       luaG_typeerror(L, t, "index");
@@ -120,14 +125,19 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     const TValue *tm;
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
-      TValue *oldval = luaH_set(L, h, key); /* do a primitive set */
+      TValue *oldval;
+
+      luaH_wrlock(L, h);
+      oldval = luaH_set(L, h, key); /* do a primitive set */
       if (!ttisnil(oldval) ||  /* result is no nil? */
           (tm = fasttm(L, h->metatable, TM_NEWINDEX)) == NULL) { /* or no TM? */
         setobj2t(L, oldval, val);
         luaC_barriert(L, h, val);
+        luaH_unlock(L, h);
         return;
       }
       /* else will try the tag method */
+      luaH_unlock(L, h);
     }
     else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_NEWINDEX)))
       luaG_typeerror(L, t, "index");
@@ -586,7 +596,10 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         const TValue *rb = RB(i);
         switch (ttype(rb)) {
           case LUA_TTABLE: {
-            setnvalue(ra, cast_num(luaH_getn(hvalue(rb))));
+            Table *t = hvalue(rb);
+            luaH_rdlock(L, t);
+            setnvalue(ra, cast_num(luaH_getn(t)));
+            luaH_unlock(L, t);
             break;
           }
           case LUA_TSTRING: {
@@ -778,6 +791,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         runtime_check(L, ttistable(ra));
         h = hvalue(ra);
         last = ((c-1)*LFIELDS_PER_FLUSH) + n;
+        luaH_wrlock(L, h);
         if (last > h->sizearray)  /* needs more space? */
           luaH_resizearray(L, h, last);  /* pre-alloc it at once */
         for (; n > 0; n--) {
@@ -785,6 +799,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           setobj2t(L, luaH_setnum(L, h, last--), val);
           luaC_barriert(L, h, val);
         }
+        luaH_unlock(L, h);
         continue;
       }
       case OP_CLOSE: {
@@ -836,3 +851,5 @@ void luaV_execute (lua_State *L, int nexeccalls) {
   }
 }
 
+/* vim:ts=2:sw=2:et:
+ */

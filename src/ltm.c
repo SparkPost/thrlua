@@ -40,6 +40,7 @@ void luaT_init (lua_State *L) {
 ** function to be used with macro "fasttm": optimized for absence of
 ** tag methods
 */
+/* assumption: that the table is appropriately locked! */
 const TValue *luaT_gettm (Table *events, TMS event, TString *ename) {
   const TValue *tm = luaH_getstr(events, ename);
   lua_assert(event <= TM_EQ);
@@ -51,6 +52,7 @@ const TValue *luaT_gettm (Table *events, TMS event, TString *ename) {
 }
 
 
+/* assumption: that the table is appropriately locked! */
 const TValue *luaT_gettmbyobj (lua_State *L, const TValue *o, TMS event) {
   Table *mt;
   switch (ttype(o)) {

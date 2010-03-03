@@ -10,7 +10,7 @@ cmod_LTLIBRARIES = pcre.la
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
 
-noinst_HEADERS = src/lapi.h src/lcode.h src/ldebug.h src/ldo.h \
+noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lfunc.h src/lgc.h src/llex.h src/llimits.h src/lmem.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
