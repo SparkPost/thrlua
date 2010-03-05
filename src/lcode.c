@@ -217,13 +217,13 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
   Proto *f = fs->f;
   int oldsize = f->sizek;
 
-  luaH_wrlock(L, fs->h);
+  luaH_wrlock(G(L), fs->h);
   idx = luaH_set(L, fs->h, k);
   if (ttisnumber(idx)) {
     int n;
     lua_assert(luaO_rawequalObj(&fs->f->k[cast_int(nvalue(idx))], v));
     n = cast_int(nvalue(idx));
-    luaH_unlock(L, fs->h);
+    luaH_unlock(G(L), fs->h);
     return n;
   }
   else {  /* constant not found; create a new entry */
@@ -233,7 +233,7 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
     while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
     setobj(L, &f->k[fs->nk], v);
     luaC_barrier(L, f, v);
-    luaH_unlock(L, fs->h);
+    luaH_unlock(G(L), fs->h);
     return fs->nk++;
   }
 }

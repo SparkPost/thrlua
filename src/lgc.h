@@ -102,5 +102,15 @@ LUAI_FUNC void luaC_linkupval (lua_State *L, UpVal *uv);
 LUAI_FUNC void luaC_barrierf (lua_State *L, GCObject *o, GCObject *v);
 LUAI_FUNC void luaC_barrierback (lua_State *L, Table *t);
 
+/** the write barrier is used for assignments made to properties of
+ * heap objects, not stack items */
+LUAI_FUNC void luaC_writebarrier(global_State *g, GCObject *object,
+  GCObject **lvalue, GCObject *rvalue);
+
+LUAI_FUNC void *luaC_newobj(lua_State *L, lu_byte tt);
+LUAI_FUNC void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size);
+LUAI_FUNC global_State *luaC_newglobal(lua_Alloc alloc, void *ud);
 
 #endif
+/* vim:ts=2:sw=2:et:
+ */

@@ -53,7 +53,6 @@ static void f_luaopen (lua_State *L, void *ud) {
   stack_init(L, L);  /* init stack */
   sethvalue(L, gt(L), luaH_new(L, 0, 2));  /* table of globals */
   sethvalue(L, registry(L), luaH_new(L, 0, 2));  /* registry */
-  luaS_resize(L, MINSTRTABSIZE);  /* initial size of string table */
   luaT_init(L);
   luaX_init(L);
   luaS_fix(luaS_newliteral(L, MEMERRMSG));
@@ -87,8 +86,6 @@ static void close_state (lua_State *L) {
   luaF_close(L, L->stack);  /* close all upvalues for this thread */
   luaC_freeall(L);  /* collect all objects */
   lua_assert(g->rootgc == obj2gco(L));
-  lua_assert(g->strt.nuse == 0);
-  luaM_freearray(L, G(L)->strt.hash, G(L)->strt.size, TString *);
   freestack(L, L);
   lua_assert(g->totalbytes == sizeof(LG));
   luaM_freemem(NULL, L, sizeof(*L));
@@ -96,7 +93,7 @@ static void close_state (lua_State *L) {
 
 
 lua_State *luaE_newthread (lua_State *L) {
-  lua_State *L1 = luaM_newobj(L, LUA_TTHREAD);
+  lua_State *L1 = luaC_newobj(L, LUA_TTHREAD);
   luaC_link(L, obj2gco(L1), LUA_TTHREAD);
   preinit_state(L1, G(L));
   stack_init(L1, L);  /* init stack */
@@ -118,16 +115,19 @@ void luaE_freethread (lua_State *L, lua_State *L1) {
 }
 
 
-LUA_API lua_State *lua_newstate (lua_Alloc funused, void *unused) {
+LUA_API lua_State *lua_newstate (lua_Alloc falloc, void *fud) {
   int i;
   lua_State *L;
   global_State *g;
  
-  lua_initialize();
-  g = luaM_newobj(NULL, LUA_TGLOBAL);
-  L = luaM_newobj(NULL, LUA_TTHREAD);
+  g = luaC_newglobal(falloc, fud);
+  if (!g) {
+	return NULL;
+  }
 
+  L = luaC_newobj(NULL, LUA_TTHREAD);
   if (L == NULL) return NULL;
+  scpt_atomic_inc(&L->ref);
   L->next = NULL;
   L->tt = LUA_TTHREAD;
   g->currentwhite = bit2mask(WHITE0BIT, FIXEDBIT);
@@ -138,9 +138,6 @@ LUA_API lua_State *lua_newstate (lua_Alloc funused, void *unused) {
   g->uvhead.u.l.prev = &g->uvhead;
   g->uvhead.u.l.next = &g->uvhead;
   g->GCthreshold = 0;  /* mark it as unfinished state */
-  g->strt.size = 0;
-  g->strt.nuse = 0;
-  g->strt.hash = NULL;
   setnilvalue(registry(L));
   g->panic = NULL;
   g->gcstate = GCSpause;

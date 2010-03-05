@@ -26,11 +26,19 @@ struct lua_longjmp;  /* defined in ldo.c */
 #define BASIC_STACK_SIZE        (2*LUA_MINSTACK)
 
 
+/** the string table holds weak references to string objects
+ * to avoid creating many copies of the same string object over and over */
+
+struct stringtable_node {
+  TString *str;
+  struct stringtable_node *next;
+};
 
 typedef struct stringtable {
-  GCObject **hash;
+  pthread_mutex_t lock;
+  struct stringtable_node **hash;
   uint32_t nuse;  /* number of elements */
-  int size;
+  uint32_t size;
 } stringtable;
 
 
@@ -53,37 +61,79 @@ typedef struct CallInfo {
 #define f_isLua(ci)	(!ci_func(ci)->c.isC)
 #define isLua(ci)	(ttisfunction((ci)->func) && f_isLua(ci))
 
+/* some helpers to maintain and operate on object stacks.
+ * These are used to maintain the marking stack, the weak table
+ * stack and the root stack.
+ * We cache memory for these to avoid churn and fragmentation */
+struct gc_stack {
+  GCObject **obj;
+  unsigned int alloc, items;
+};
+
+/* The gc log buffer differs from the gc_stack in that we can't
+ * realloc the buffer.  Since we can't predict the total amount
+ * of space we'll need for the log buffer, we allocate a minimum
+ * of 128 entries (or more if we're logging a larger object).
+ * If when we log a new item there is not enough room, we'll
+ * allocate a new buffer and chain it together.  The chain is
+ * reclaimed at the end of a collection cycle */
+struct gc_log_buffer {
+  struct gc_log_buffer *next;
+  unsigned int items;
+  unsigned int alloc;
+  GCObject *obj[1];
+};
+
 /** State used for each OS thread */
-typedef struct os_State {
+typedef struct thr_State {
   /* kept in a list for collection purposes */
-  struct os_State *next, *prev;
+  struct thr_State *next, *prev;
   pthread_mutex_t handshake;
 
   GCObject *olist, *olist_tail;
-  unsigned alloc_color:1;
-  unsigned trace:1;
-  unsigned snoop:1;
+  /* thread no longer active; this struct can be disposed
+   * by the next collection run */
+  unsigned int vacant;
+  unsigned int trace;
+  unsigned int snoop;
+  unsigned int alloc_color;
 
-  /* temporary buffer for string concatentation */
+  /** temporary buffer for string concatentation */
   Mbuffer buff;
-} os_State;
+  /** string table for thread-local string interning */
+  stringtable strt;
 
-extern pthread_key_t luai_tls_key;
-LUAI_FUNC os_State *luaM_init_pt(void);
-static inline os_State *getpt(void)
-{
-  os_State *pt = pthread_getspecific(luai_tls_key);
-  if (pt == NULL) {
-    return luaM_init_pt();
-  }
-  return pt;
-}
+  struct gc_stack snoop_buf;
+  struct gc_log_buffer *log_buf;
+
+  struct global_State *g;
+
+} thr_State;
 
 /*
 ** `global state', shared by all threads of this state
 */
-typedef struct global_State {
-  stringtable strt;  /* hash table for strings */
+struct global_State {
+  CommonHeader;
+
+  pthread_key_t tls_key;
+  pthread_cond_t gc_cond;
+  pthread_t collector_thread;
+  pthread_mutex_t collector_lock;
+  GCObject *the_heap;
+  GCObject *to_finalize;
+  struct gc_stack
+    root_set,
+    weak_set,
+    mark_set;
+  thr_State *all_threads;
+  lu_byte black;
+  lu_byte white;
+  lua_Alloc alloc;
+  void *allocdata;
+  int exiting;
+
+
   lu_byte currentwhite;
   lu_byte gcstate;  /* state of garbage collector */
   int sweepstrgc;  /* position of sweep in `strt' */
@@ -105,7 +155,18 @@ typedef struct global_State {
   UpVal uvhead;  /* head of double-linked list of all open upvalues */
   struct Table *mt[NUM_TAGS];  /* metatables for basic types */
   TString *tmname[TM_N];  /* array with tag-method names */
-} global_State;
+};
+
+LUAI_FUNC thr_State *luaC_init_pt(global_State *g);
+static inline thr_State *getpt(global_State *g)
+{
+  thr_State *pt = pthread_getspecific(g->tls_key);
+  if (pt == NULL) {
+    return luaC_init_pt(g);
+  }
+  return pt;
+}
+
 
 
 /*

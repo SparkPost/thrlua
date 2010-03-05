@@ -342,9 +342,9 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
     case LUA_TUSERDATA: return uvalue(o)->len;
     case LUA_TTABLE: {
       size_t n;
-      luaH_rdlock(L, hvalue(o));
+      luaH_rdlock(G(L), hvalue(o));
       n = luaH_getn(hvalue(o));
-      luaH_unlock(L, hvalue(o));
+      luaH_unlock(G(L), hvalue(o));
       return n;
     }
     case LUA_TNUMBER: {
@@ -542,9 +542,9 @@ LUA_API void lua_rawget (lua_State *L, int idx) {
   lua_lock(L);
   t = index2adr(L, idx);
   api_check(L, ttistable(t));
-  luaH_rdlock(L, hvalue(t));
+  luaH_rdlock(G(L), hvalue(t));
   setobj2s(L, L->top - 1, luaH_get(hvalue(t), L->top - 1));
-  luaH_unlock(L, hvalue(t));
+  luaH_unlock(G(L), hvalue(t));
   lua_unlock(L);
 }
 
@@ -554,9 +554,9 @@ LUA_API void lua_rawgeti (lua_State *L, int idx, int n) {
   lua_lock(L);
   o = index2adr(L, idx);
   api_check(L, ttistable(o));
-  luaH_rdlock(L, hvalue(o));
+  luaH_rdlock(G(L), hvalue(o));
   setobj2s(L, L->top, luaH_getnum(hvalue(o), n));
-  luaH_unlock(L, hvalue(o));
+  luaH_unlock(G(L), hvalue(o));
   api_incr_top(L);
   lua_unlock(L);
 }
@@ -661,10 +661,10 @@ LUA_API void lua_rawset (lua_State *L, int idx) {
   api_checknelems(L, 2);
   t = index2adr(L, idx);
   api_check(L, ttistable(t));
-  luaH_wrlock(L, hvalue(t));
+  luaH_wrlock(G(L), hvalue(t));
   setobj2t(L, luaH_set(L, hvalue(t), L->top-2), L->top-1);
   luaC_barriert(L, hvalue(t), L->top-1);
-  luaH_unlock(L, hvalue(t));
+  luaH_unlock(G(L), hvalue(t));
   L->top -= 2;
   lua_unlock(L);
 }
@@ -676,10 +676,10 @@ LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
   api_checknelems(L, 1);
   o = index2adr(L, idx);
   api_check(L, ttistable(o));
-  luaH_wrlock(L, hvalue(o));
+  luaH_wrlock(G(L), hvalue(o));
   setobj2t(L, luaH_setnum(L, hvalue(o), n), L->top-1);
   luaC_barriert(L, hvalue(o), L->top-1);
-  luaH_unlock(L, hvalue(o));
+  luaH_unlock(G(L), hvalue(o));
   L->top--;
   lua_unlock(L);
 }
@@ -967,9 +967,9 @@ LUA_API int lua_next (lua_State *L, int idx) {
   lua_lock(L);
   t = index2adr(L, idx);
   api_check(L, ttistable(t));
-  luaH_rdlock(L, hvalue(t));
+  luaH_rdlock(G(L), hvalue(t));
   more = luaH_next(L, hvalue(t), L->top - 1);
-  luaH_unlock(L, hvalue(t));
+  luaH_unlock(G(L), hvalue(t));
   if (more) {
     api_incr_top(L);
   }

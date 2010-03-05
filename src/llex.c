@@ -107,13 +107,13 @@ TString *luaX_newstring (LexState *ls, const char *str, size_t l) {
   TString *ts = luaS_newlstr(L, str, l);
   TValue *o;
 
-  luaH_wrlock(L, ls->fs->h);
+  luaH_wrlock(G(L), ls->fs->h);
   o = luaH_setstr(L, ls->fs->h, ts);  /* entry for `str' */
   if (ttisnil(o)) {
     setbvalue(o, 1);  /* make sure `str' will not be collected */
     luaC_checkGC(L);
   }
-  luaH_unlock(L, ls->fs->h);
+  luaH_unlock(G(L), ls->fs->h);
   return ts;
 }
 

@@ -22,6 +22,9 @@
 #include "lauxlib.h"
 #include "lualib.h"
 
+struct global_State;
+typedef struct global_State global_State;
+
 #include "llimits.h"
 #include "lobject.h"
 #include "ltable.h"

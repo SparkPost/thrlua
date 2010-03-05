@@ -62,6 +62,7 @@ typedef union GCObject GCObject;
 */
 #define CommonHeader	\
   GCObject *next; \
+  GCObject **logptr; \
   scpt_atomic_t ref; \
   lu_byte tt; \
   lu_byte marked
