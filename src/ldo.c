@@ -103,8 +103,10 @@ static void correctstack (lua_State *L, TValue *oldstack) {
   CallInfo *ci;
   UpVal *up;
   L->top = (L->top - oldstack) + L->stack;
-  for (up = L->openupval.u.l.next; up != &L->openupval; up = up->u.l.next)
+  for (up = L->openupval.u.l.next; up != &L->openupval; up = up->u.l.next) {
+    lua_assert(up->v != NULL && up->v != &up->u.value);
     up->v = (up->v - oldstack) + L->stack;
+  }
   for (ci = L->base_ci; ci <= L->ci; ci++) {
     ci->top = (ci->top - oldstack) + L->stack;
     ci->base = (ci->base - oldstack) + L->stack;
@@ -212,7 +214,7 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
   /* add `arg' parameter */
   if (htab) {
     sethvalue(L, L->top++, htab);
-    lua_assert(iswhite(obj2gco(htab)));
+//    lua_assert(iswhite(obj2gco(htab)));
   }
   return base;
 }

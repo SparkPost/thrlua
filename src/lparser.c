@@ -169,7 +169,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   int oldsize = f->sizeupvalues;
   for (i=0; i<f->nups; i++) {
     if (fs->upvalues[i].k == v->k && fs->upvalues[i].info == v->u.s.info) {
-      lua_assert(f->upvalues[i] == name);
+      lua_assert((TString*)f->upvalues[i] == name);
       return i;
     }
   }

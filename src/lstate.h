@@ -140,8 +140,9 @@ struct global_State {
   struct Table *mt[NUM_TAGS];  /* metatables for basic types */
   TString *tmname[TM_N];  /* array with tag-method names */
 
-  lu_byte currentwhite;
   lu_byte gcstate;  /* state of garbage collector */
+#if 0
+  lu_byte currentwhite;
   int sweepstrgc;  /* position of sweep in `strt' */
   GCObject *rootgc;  /* list of all collectable objects */
   GCObject **sweepgc;  /* position of sweep in `rootgc' */
@@ -149,6 +150,7 @@ struct global_State {
   GCObject *grayagain;  /* list of objects to be traversed atomically */
   GCObject *weak;  /* list of weak tables (to be cleared) */
   GCObject *tmudata;  /* last element of list of userdata to be GC */
+#endif
   lu_mem GCthreshold;
   lu_mem totalbytes;  /* number of bytes currently allocated */
   lu_mem estimate;  /* an estimate of number of bytes actually in use */
@@ -200,7 +202,7 @@ struct lua_State {
   TValue l_gt;  /* table of globals */
   TValue env;  /* temporary place for environments */
   UpVal openupval;  /* list of open upvalues in this stack */
-  GCObject *gclist;
+//  GCObject *gclist;
   struct lua_longjmp *errorJmp;  /* current error recover point */
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
 };
@@ -231,7 +233,7 @@ union GCObject {
 #define gco2u(o)	(&rawgco2u(o)->uv)
 #define gco2cl(o)	check_exp((o)->gch.tt == LUA_TFUNCTION, &((o)->cl))
 #define gco2h(o)	check_exp((o)->gch.tt == LUA_TTABLE, &((o)->h))
-#define gch2h(o)	check_exp((o)->tt == LUA_TTABLE, (Table*)(o))
+#define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
 #define gco2p(o)	check_exp((o)->gch.tt == LUA_TPROTO, &((o)->p))
 #define gco2uv(o)	check_exp((o)->gch.tt == LUA_TUPVAL, &((o)->uv))
 #define ngcotouv(o) \

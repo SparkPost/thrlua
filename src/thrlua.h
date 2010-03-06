@@ -13,6 +13,9 @@
 #define THRLUA_H
 
 #include "luaconf.h"
+
+#define lua_assert assert
+
 #include <setjmp.h>
 #include <locale.h>
 #include <time.h>

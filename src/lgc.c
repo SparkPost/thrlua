@@ -46,13 +46,15 @@
 #define setthreshold(g)  (g->GCthreshold = (g->estimate/100) * g->gcpause)
 
 
+#endif
+
 static void removeentry (Node *n) {
   lua_assert(ttisnil(gval(n)));
   if (iscollectable(gkey(n)))
     setttype(gkey(n), LUA_TDEADKEY);  /* dead key; remove it */
 }
 
-
+#if 0
 static void reallymarkobject (global_State *g, GCObject *o) {
   lua_assert(iswhite(o) && !isdead(g, o));
   white2gray(o);
@@ -983,7 +985,8 @@ void luaC_writebarriervv(global_State *g, GCheader *object,
       object->logptr == NULL) {
     log_object(g, pt, (GCObject*)object);
   }
-  *lvalue = *rvalue;
+  lvalue->value = rvalue->value;
+  lvalue->tt = rvalue->tt;
   if (pt->snoop && ro != NULL) {
     o_push(g, &pt->snoop_buf, ro);
   }
@@ -1225,6 +1228,8 @@ static void finalize(global_State *g)
   while (g->to_finalize) {
     o = g->to_finalize;
     g->to_finalize = o->gch.next;
+    o->gch.next = NULL;
+
     switch (o->gch.tt) {
       case LUA_TPROTO:
         luaF_freeproto(NULL, gco2p(o));
@@ -1602,7 +1607,7 @@ static void *collector(void *ptr)
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
-    deadline.tv_sec = time(NULL) + 1;
+    deadline.tv_sec = time(NULL) + 61;
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
     if (ret == 0 || ret == ETIMEDOUT) {
@@ -1639,6 +1644,7 @@ thr_State *luaC_init_pt(global_State *g)
 
   pthread_mutex_init(&pt->strt.lock, NULL);
   pt->strt.hash = luaM_newvector(NULL, MINSTRTABSIZE, struct stringtable_node*);
+  memset(pt->strt.hash, 0, MINSTRTABSIZE * sizeof(struct stringtable_node*));
   pt->strt.size = MINSTRTABSIZE;
   
   pthread_mutex_lock(&g->collector_lock);
@@ -1710,6 +1716,7 @@ void *luaC_newobj(global_State *g, lu_byte tt)
     case LUA_TGLOBAL:
     default:
       lua_assert(0);
+      abort();
       return NULL;
   }
 }
@@ -1736,8 +1743,11 @@ void *luaC_newobjv(global_State *g, lu_byte tt, size_t size)
       pthread_mutex_unlock(&pt->handshake); \
       return o
     NEWIMPL(LUA_TFUNCTION, Closure);
+    NEWIMPL(LUA_TSTRING, TString);
+    NEWIMPL(LUA_TUSERDATA, TString);
     default:
       lua_assert(0);
+      abort();
       return NULL;
   }
 }

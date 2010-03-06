@@ -199,6 +199,7 @@ static int l_strcmp (const TString *ls, const TString *rs) {
   size_t ll = ls->tsv.len;
   const char *r = getstr(rs);
   size_t lr = rs->tsv.len;
+  if (ls == rs || l == r) return 0;
   for (;;) {
     int temp = strcoll(l, r);
     if (temp != 0) return temp;

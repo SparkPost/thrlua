@@ -480,10 +480,12 @@ LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n) {
   cl = luaF_newCclosure(L, n, getcurrenv(L));
   cl->c.f = fn;
   L->top -= n;
-  while (n--)
-    setobj2n(L, &cl->c.upvalue[n], L->top+n);
+  while (n--) {
+    luaC_writebarriervv(G(L), &cl->gch, &cl->c.upvalue[n], L->top+n);
+//    setobj2n(L, &cl->c.upvalue[n], L->top+n);
+  }
   setclvalue(L, L->top, cl);
-  lua_assert(iswhite(obj2gco(cl)));
+//  lua_assert(iswhite(obj2gco(cl)));
   api_incr_top(L);
   lua_unlock(L);
 }
@@ -947,7 +949,7 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
       else
         g->GCthreshold = 0;
       while (g->GCthreshold <= g->totalbytes) {
-        luaC_step(L);
+//        luaC_step(L);
         if (g->gcstate == GCSpause) {  /* end of cycle? */
           res = 1;  /* signal it */
           break;
