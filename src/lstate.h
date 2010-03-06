@@ -114,7 +114,7 @@ typedef struct thr_State {
 ** `global state', shared by all threads of this state
 */
 struct global_State {
-  CommonHeader;
+  GCheader gch;
 
   pthread_key_t tls_key;
   pthread_cond_t gc_cond;
@@ -133,6 +133,12 @@ struct global_State {
   void *allocdata;
   int exiting;
 
+  TString *memerr;
+  TValue l_registry;
+  TValue l_globals;
+  lua_CFunction panic;  /* to be called in unprotected errors */
+  struct Table *mt[NUM_TAGS];  /* metatables for basic types */
+  TString *tmname[TM_N];  /* array with tag-method names */
 
   lu_byte currentwhite;
   lu_byte gcstate;  /* state of garbage collector */
@@ -149,12 +155,10 @@ struct global_State {
   lu_mem gcdept;  /* how much GC is `behind schedule' */
   int gcpause;  /* size of pause between successive GCs */
   int gcstepmul;  /* GC `granularity' */
-  lua_CFunction panic;  /* to be called in unprotected errors */
-  TValue l_registry;
   struct lua_State *mainthread;
+#if 0
   UpVal uvhead;  /* head of double-linked list of all open upvalues */
-  struct Table *mt[NUM_TAGS];  /* metatables for basic types */
-  TString *tmname[TM_N];  /* array with tag-method names */
+#endif
 };
 
 LUAI_FUNC thr_State *luaC_init_pt(global_State *g);
@@ -173,7 +177,7 @@ static inline thr_State *getpt(global_State *g)
 ** `per thread' state
 */
 struct lua_State {
-  CommonHeader;
+  GCheader gch;
   lu_byte status;
   StkId top;  /* first free slot in the stack */
   StkId base;  /* base of current function */
@@ -195,7 +199,7 @@ struct lua_State {
   lua_Hook hook;
   TValue l_gt;  /* table of globals */
   TValue env;  /* temporary place for environments */
-  GCObject *openupval;  /* list of open upvalues in this stack */
+  UpVal openupval;  /* list of open upvalues in this stack */
   GCObject *gclist;
   struct lua_longjmp *errorJmp;  /* current error recover point */
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
@@ -227,6 +231,7 @@ union GCObject {
 #define gco2u(o)	(&rawgco2u(o)->uv)
 #define gco2cl(o)	check_exp((o)->gch.tt == LUA_TFUNCTION, &((o)->cl))
 #define gco2h(o)	check_exp((o)->gch.tt == LUA_TTABLE, &((o)->h))
+#define gch2h(o)	check_exp((o)->tt == LUA_TTABLE, (Table*)(o))
 #define gco2p(o)	check_exp((o)->gch.tt == LUA_TPROTO, &((o)->p))
 #define gco2uv(o)	check_exp((o)->gch.tt == LUA_TUPVAL, &((o)->uv))
 #define ngcotouv(o) \
@@ -239,6 +244,7 @@ union GCObject {
 
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
 LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
+LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
 
 #endif
 

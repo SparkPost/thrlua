@@ -60,23 +60,16 @@ typedef union GCObject GCObject;
 ** Common Header for all collectable objects (in macro form, to be
 ** included in other objects)
 */
-#define CommonHeader	\
-  GCObject *next; \
-  GCObject **logptr; \
-  scpt_atomic_t ref; \
-  lu_byte tt; \
-  lu_byte marked
-
-
 /*
 ** Common header in struct form
 */
 typedef struct GCheader {
-  CommonHeader;
+  GCObject *next;
+  GCObject **logptr;
+  scpt_atomic_t ref;
+  lu_byte tt;
+  lu_byte marked;
 } GCheader;
-
-
-
 
 /*
 ** Union of all Lua values
@@ -224,7 +217,8 @@ typedef TValue *StkId;  /* index to stack elements */
 typedef union TString {
   L_Umaxalign dummy;  /* ensures maximum alignment for strings */
   struct {
-    CommonHeader;
+    GCheader gch;
+    /** is this a reserved word? */
     lu_byte reserved;
     unsigned int hash;
     size_t len;
@@ -240,9 +234,9 @@ typedef union TString {
 typedef union Udata {
   L_Umaxalign dummy;  /* ensures maximum alignment for `local' udata */
   struct {
-    CommonHeader;
-    struct Table *metatable;
-    struct Table *env;
+    GCheader gch;
+    GCheader /*struct Table*/ *metatable;
+    GCheader /*struct Table*/ *env;
     size_t len;
   } uv;
 } Udata;
@@ -254,13 +248,13 @@ typedef union Udata {
 ** Function Prototypes
 */
 typedef struct Proto {
-  CommonHeader;
+  GCheader gch;
   TValue *k;  /* constants used by the function */
   Instruction *code;
   struct Proto **p;  /* functions defined inside the function */
   int *lineinfo;  /* map from opcodes to source lines */
   struct LocVar *locvars;  /* information about local variables */
-  TString **upvalues;  /* upvalue names */
+  GCheader **upvalues;  /* upvalue names */
   TString  *source;
   int sizeupvalues;
   int sizek;  /* size of `k' */
@@ -285,7 +279,7 @@ typedef struct Proto {
 
 
 typedef struct LocVar {
-  TString *varname;
+  GCheader /*TString*/ *varname;
   int startpc;  /* first point where variable is active */
   int endpc;    /* first point where variable is dead */
 } LocVar;
@@ -297,7 +291,7 @@ typedef struct LocVar {
 */
 
 typedef struct UpVal {
-  CommonHeader;
+  GCheader gch;
   TValue *v;  /* points to stack or to its own value */
   union {
     TValue value;  /* the value (when closed) */
@@ -314,8 +308,8 @@ typedef struct UpVal {
 */
 
 #define ClosureHeader \
-	CommonHeader; lu_byte isC; lu_byte nupvalues; GCObject *gclist; \
-	struct Table *env
+	GCheader gch; lu_byte isC; lu_byte nupvalues; GCObject *gclist; \
+	GCheader *env
 
 typedef struct CClosure {
   ClosureHeader;
@@ -332,6 +326,7 @@ typedef struct LClosure {
 
 
 typedef union Closure {
+  GCheader gch;
   CClosure c;
   LClosure l;
 } Closure;
@@ -361,11 +356,11 @@ typedef struct Node {
 
 
 typedef struct Table {
-  CommonHeader;
+  GCheader gch;
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */ 
   lu_byte lsizenode;  /* log2 of size of `node' array */
   pthread_rwlock_t lock;
-  struct Table *metatable;
+  GCheader /*struct Table*/ *metatable;
   TValue *array;  /* array part */
   Node *node;
   Node *lastfree;  /* any free position is before this position */

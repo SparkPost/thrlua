@@ -106,7 +106,28 @@ LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud)
   }
 }
 
+void *luaM_reallocG(global_State *g, void *block,
+  size_t oldsize, size_t size)
+{
+  if (!g->alloc) {
+    g->alloc = default_alloc;
+  }
+  return g->alloc(g->allocdata, block, oldsize, size);
+}
 
+static int panic (lua_State *L) {
+  (void)L;  /* to avoid warnings */
+  fprintf(stderr, "PANIC: unprotected error in call to Lua API (%s)\n",
+                   lua_tostring(L, -1));
+  return 0;
+}
+
+
+LUALIB_API lua_State *luaL_newstate (void) {
+  lua_State *L = lua_newstate(default_alloc, NULL);
+  if (L) lua_atpanic(L, &panic);
+  return L;
+}
 
 /* vim:ts=2:sw=2:et:
  */

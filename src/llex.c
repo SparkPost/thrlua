@@ -48,8 +48,30 @@ static void save (LexState *ls, int c) {
   b->buffer[b->n++] = cast(char, c);
 }
 
+static inline int is_reserved_word(TString *ts)
+{
+  int i;
+
+  if (ts->tsv.reserved == 0xff) {
+    /* negative cache */
+    return 0;
+  }
+  if (ts->tsv.reserved > 0) {
+    return ts->tsv.reserved;
+  }
+  for (i = 0; i < NUM_RESERVED; i++) {
+    int l = strlen(luaX_tokens[i]);
+    if (l == ts->tsv.len && !memcmp((char*)(ts + 1), luaX_tokens[i], l)) {
+      ts->tsv.reserved = i + 1;
+      return ts->tsv.reserved;
+    }
+  }
+  ts->tsv.reserved = 0xff;
+  return 0;
+}
 
 void luaX_init (lua_State *L) {
+#if 0
   int i;
   for (i=0; i<NUM_RESERVED; i++) {
     TString *ts = luaS_new(L, luaX_tokens[i]);
@@ -57,6 +79,7 @@ void luaX_init (lua_State *L) {
     lua_assert(strlen(luaX_tokens[i])+1 <= TOKEN_LEN);
     ts->tsv.reserved = cast_byte(i+1);  /* reserved word */
   }
+#endif
 }
 
 
@@ -514,14 +537,16 @@ static int llex (LexState *ls, SemInfo *seminfo) {
         else if (isalpha(ls->current) || ls->current == '_') {
           /* identifier or reserved word */
           TString *ts;
+          int res;
           do {
             save_and_next(ls);
           } while (isalnum(ls->current) || ls->current == '_');
           ts = luaX_newstring(ls, luaZ_buffer(ls->buff),
                                   luaZ_bufflen(ls->buff));
-          if (ts->tsv.reserved > 0)  /* reserved word? */
-            return ts->tsv.reserved - 1 + FIRST_RESERVED;
-          else {
+          res = is_reserved_word(ts);
+          if (res > 0) {
+            return res - 1 + FIRST_RESERVED;
+          } else {
             seminfo->ts = ts;
             return TK_NAME;
           }

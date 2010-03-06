@@ -38,6 +38,8 @@ LUAI_FUNC void *luaM_toobig (lua_State *L);
 LUAI_FUNC void *luaM_growaux_ (lua_State *L, void *block, int *size,
                                size_t size_elem, int limit,
                                const char *errormsg);
+LUAI_FUNC void *luaM_reallocG(global_State *g, void *block,
+  size_t oldsize, size_t size);
 
 #endif
 

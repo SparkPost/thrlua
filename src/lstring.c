@@ -43,7 +43,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
   int i;
   thr_State *pt = getpt(g);
 
-  newhash = g->alloc(g->allocdata, NULL, 0,
+  newhash = luaM_reallocG(g, NULL, 0,
               newsize * sizeof(struct stringtable_node *));
   memset(newhash, 0, newsize * sizeof(struct stringtable_node*));
 
@@ -60,7 +60,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
       p = next;
     }
   }
-  g->alloc(g->allocdata, tb->hash, 
+  luaM_reallocG(g, tb->hash, 
     tb->size * sizeof(struct stringtable_node *), 0);
   tb->size = newsize;
   tb->hash = newhash;
@@ -80,8 +80,8 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   ts = cast(TString *, luaM_malloc(L, (l+1)*sizeof(char)+sizeof(TString)));
   ts->tsv.len = l;
   ts->tsv.hash = h;
-  ts->tsv.marked = luaC_white(G(L));
-  ts->tsv.tt = LUA_TSTRING;
+//  ts->tsv.marked = luaC_white(G(L));
+  ts->tsv.gch.tt = LUA_TSTRING;
   ts->tsv.reserved = 0;
   memcpy(ts+1, str, l*sizeof(char));
   ((char *)(ts+1))[l] = '\0';  /* ending 0 */
@@ -136,14 +136,14 @@ Udata *luaS_newudata (lua_State *L, size_t s, Table *e) {
   if (s > MAX_SIZET - sizeof(Udata))
     luaM_toobig(L);
   u = cast(Udata *, luaM_malloc(L, s + sizeof(Udata)));
-  u->uv.marked = luaC_white(G(L));  /* is not finalized */
-  u->uv.tt = LUA_TUSERDATA;
+//  u->uv.marked = luaC_white(G(L));  /* is not finalized */
+  u->uv.gch.tt = LUA_TUSERDATA;
   u->uv.len = s;
   u->uv.metatable = NULL;
-  u->uv.env = e;
+  u->uv.env = &e->gch;
   /* chain it on udata list (after main thread) */
-  u->uv.next = G(L)->mainthread->next;
-  G(L)->mainthread->next = obj2gco(u);
+//  u->uv.next = G(L)->mainthread->next;
+//  G(L)->mainthread->next = obj2gco(u);
   return u;
 }
 

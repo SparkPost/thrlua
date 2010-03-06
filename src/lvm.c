@@ -97,7 +97,8 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
       luaH_rdlock(G(L), h);
       res = luaH_get(h, key); /* do a primitive get */
       if (!ttisnil(res) ||  /* result is no nil? */
-          (tm = fasttm(L, h->metatable, TM_INDEX)) == NULL) { /* or no TM? */
+          (tm = fasttm(L, gch2h(h->metatable), TM_INDEX)) == NULL) {
+        /* or no TM? */
         setobj2s(L, val, res);
         luaH_unlock(G(L), h);
         return;
@@ -130,9 +131,11 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
       luaH_wrlock(G(L), h);
       oldval = luaH_set(L, h, key); /* do a primitive set */
       if (!ttisnil(oldval) ||  /* result is no nil? */
-          (tm = fasttm(L, h->metatable, TM_NEWINDEX)) == NULL) { /* or no TM? */
-        setobj2t(L, oldval, val);
-        luaC_barriert(L, h, val);
+          (tm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX)) == NULL) {
+        /* or no TM? */
+        luaC_writebarriervv(G(L), &h->gch, oldval, val);
+//        setobj2t(L, oldval, val);
+//        luaC_barriert(L, h, val);
         luaH_unlock(G(L), h);
         return;
       }
@@ -253,13 +256,14 @@ int luaV_equalval (lua_State *L, const TValue *t1, const TValue *t2) {
     case LUA_TLIGHTUSERDATA: return pvalue(t1) == pvalue(t2);
     case LUA_TUSERDATA: {
       if (uvalue(t1) == uvalue(t2)) return 1;
-      tm = get_compTM(L, uvalue(t1)->metatable, uvalue(t2)->metatable,
-                         TM_EQ);
+      tm = get_compTM(L, gch2h(uvalue(t1)->metatable),
+            gch2h(uvalue(t2)->metatable), TM_EQ);
       break;  /* will try TM */
     }
     case LUA_TTABLE: {
       if (hvalue(t1) == hvalue(t2)) return 1;
-      tm = get_compTM(L, hvalue(t1)->metatable, hvalue(t2)->metatable, TM_EQ);
+      tm = get_compTM(L, gch2h(hvalue(t1)->metatable),
+            gch2h(hvalue(t2)->metatable), TM_EQ);
       break;  /* will try TM */
     }
     default: return gcvalue(t1) == gcvalue(t2);
@@ -492,8 +496,9 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       }
       case OP_SETUPVAL: {
         UpVal *uv = cl->upvals[GETARG_B(i)];
-        setobj(L, uv->v, ra);
-        luaC_barrier(L, uv, ra);
+        luaC_writebarriervv(G(L), &uv->gch, uv->v, ra);
+//        setobj(L, uv->v, ra);
+//        luaC_barrier(L, uv, ra);
         continue;
       }
       case OP_SETTABLE: {
@@ -700,7 +705,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             int aux;
             StkId func = ci->func;
             StkId pfunc = (ci+1)->func;  /* previous function index */
-            if (L->openupval) luaF_close(L, ci->base);
+            if (L->openupval.u.l.next) luaF_close(L, ci->base);
             L->base = ci->base = ci->func + ((ci+1)->base - pfunc);
             for (aux = 0; pfunc+aux < L->top; aux++)  /* move frame down */
               setobjs2s(L, func+aux, pfunc+aux);
@@ -723,7 +728,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       case OP_RETURN: {
         int b = GETARG_B(i);
         if (b != 0) L->top = ra+b-1;
-        if (L->openupval) luaF_close(L, base);
+        if (L->openupval.u.l.next) luaF_close(L, base);
         L->savedpc = pc;
         b = luaD_poscall(L, ra);
         if (--nexeccalls == 0)  /* was previous function running `here'? */
@@ -796,8 +801,10 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           luaH_resizearray(L, h, last);  /* pre-alloc it at once */
         for (; n > 0; n--) {
           TValue *val = ra+n;
-          setobj2t(L, luaH_setnum(L, h, last--), val);
-          luaC_barriert(L, h, val);
+          TValue *src = luaH_setnum(L, h, last--);
+          luaC_writebarriervv(G(L), &h->gch, src, val);
+//          setobj2t(L, luaH_setnum(L, h, last--), val);
+//          luaC_barriert(L, h, val);
         }
         luaH_unlock(G(L), h);
         continue;
@@ -812,7 +819,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         int nup, j;
         p = cl->p->p[GETARG_Bx(i)];
         nup = p->nups;
-        ncl = luaF_newLclosure(L, nup, cl->env);
+        ncl = luaF_newLclosure(L, nup, gch2h(cl->env));
         ncl->l.p = p;
         for (j=0; j<nup; j++, pc++) {
           if (GET_OPCODE(*pc) == OP_GETUPVAL)

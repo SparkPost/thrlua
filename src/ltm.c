@@ -31,7 +31,7 @@ void luaT_init (lua_State *L) {
   int i;
   for (i=0; i<TM_N; i++) {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
-    luaS_fix(G(L)->tmname[i]);  /* never collect these names */
+//    luaS_fix(G(L)->tmname[i]);  /* never collect these names */
   }
 }
 
@@ -57,10 +57,10 @@ const TValue *luaT_gettmbyobj (lua_State *L, const TValue *o, TMS event) {
   Table *mt;
   switch (ttype(o)) {
     case LUA_TTABLE:
-      mt = hvalue(o)->metatable;
+      mt = gch2h(hvalue(o)->metatable);
       break;
     case LUA_TUSERDATA:
-      mt = uvalue(o)->metatable;
+      mt = gch2h(uvalue(o)->metatable);
       break;
     default:
       mt = G(L)->mt[ttype(o)];

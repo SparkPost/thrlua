@@ -10,20 +10,20 @@
 #include "thrlua.h"
 
 Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = luaC_newobjv(L, LUA_TFUNCTION, sizeCclosure(nelems));
-  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
+  Closure *c = luaC_newobjv(G(L), LUA_TFUNCTION, sizeCclosure(nelems));
+//  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
   c->c.isC = 1;
-  c->c.env = e;
+  c->c.env = &e->gch;
   c->c.nupvalues = cast_byte(nelems);
   return c;
 }
 
 
 Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = luaC_newobjv(L, LUA_TFUNCTION, sizeLclosure(nelems));
-  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
+  Closure *c = luaC_newobjv(G(L), LUA_TFUNCTION, sizeLclosure(nelems));
+//  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
   c->l.isC = 0;
-  c->l.env = e;
+  c->l.env = &e->gch;
   c->l.nupvalues = cast_byte(nelems);
   while (nelems--) c->l.upvals[nelems] = NULL;
   return c;
@@ -31,8 +31,7 @@ Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
 
 
 UpVal *luaF_newupval (lua_State *L) {
-  UpVal *uv = luaC_newobj(L, LUA_TUPVAL);
-  luaC_link(L, obj2gco(uv), LUA_TUPVAL);
+  UpVal *uv = luaC_newobj(G(L), LUA_TUPVAL);
   uv->v = &uv->u.value;
   setnilvalue(uv->v);
   return uv;
@@ -41,27 +40,25 @@ UpVal *luaF_newupval (lua_State *L) {
 
 UpVal *luaF_findupval (lua_State *L, StkId level) {
   global_State *g = G(L);
-  GCObject **pp = &L->openupval;
   UpVal *p;
   UpVal *uv;
-  while (*pp != NULL && (p = ngcotouv(*pp))->v >= level) {
+
+  for (p = L->openupval.u.l.next;
+      p != &L->openupval && p->v >= level;
+      p = p->u.l.next) {
     lua_assert(p->v != &p->u.value);
     if (p->v == level) {  /* found a corresponding upvalue? */
-      if (isdead(g, obj2gco(p)))  /* is it dead? */
-        changewhite(obj2gco(p));  /* ressurect it */
       return p;
     }
-    pp = &p->next;
   }
-  uv = luaC_newobj(L, LUA_TUPVAL);  /* not found: create a new one */
-  uv->marked = luaC_white(g);
+
+  /* not found: create a new one */
+  uv = luaC_newobj(G(L), LUA_TUPVAL);
   uv->v = level;  /* current value lives in the stack */
-  uv->next = *pp;  /* chain it in the proper position */
-  *pp = obj2gco(uv);
-  uv->u.l.prev = &g->uvhead;  /* double link it in `uvhead' list */
-  uv->u.l.next = g->uvhead.u.l.next;
+  uv->u.l.next = p;
+  uv->u.l.prev = uv->u.l.next->u.l.prev;
   uv->u.l.next->u.l.prev = uv;
-  g->uvhead.u.l.next = uv;
+
   lua_assert(uv->u.l.next->u.l.prev == uv && uv->u.l.prev->u.l.next == uv);
   return uv;
 }
@@ -84,25 +81,24 @@ void luaF_freeupval (lua_State *L, UpVal *uv) {
 void luaF_close (lua_State *L, StkId level) {
   UpVal *uv;
   global_State *g = G(L);
-  while (L->openupval != NULL && (uv = ngcotouv(L->openupval))->v >= level) {
-    GCObject *o = obj2gco(uv);
-    lua_assert(!isblack(o) && uv->v != &uv->u.value);
-    L->openupval = uv->next;  /* remove from `open' list */
-    if (isdead(g, o))
-      luaF_freeupval(L, uv);  /* free upvalue */
-    else {
-      unlinkupval(uv);
-      setobj(L, &uv->u.value, uv->v);
-      uv->v = &uv->u.value;  /* now current value lives here */
-      luaC_linkupval(L, uv);  /* link upvalue into `gcroot' list */
-    }
+  while (L->openupval.u.l.next != &L->openupval &&
+      (uv = L->openupval.u.l.next)->v >= level) {
+    lua_assert(uv->v != &uv->u.value);
+//    L->openupval = uv->u.l.next;  /* remove from `open' list */
+    unlinkupval(uv);
+
+    /* copy value into the upval itself */
+    luaC_writebarriervv(G(L), &uv->gch, &uv->u.value, uv->v);
+//      setobj(L, &uv->u.value, uv->v);
+//      uv->v = &uv->u.value;  /* now current value lives here */
+//      luaC_linkupval(L, uv);  /* link upvalue into `gcroot' list */
   }
 }
 
 
 Proto *luaF_newproto (lua_State *L) {
-  Proto *f = luaC_newobj(L, LUA_TPROTO);
-  luaC_link(L, obj2gco(f), LUA_TPROTO);
+  Proto *f = luaC_newobj(G(L), LUA_TPROTO);
+//  luaC_link(L, obj2gco(f), LUA_TPROTO);
   f->k = NULL;
   f->sizek = 0;
   f->p = NULL;
@@ -160,3 +156,5 @@ const char *luaF_getlocalname (const Proto *f, int local_number, int pc) {
   return NULL;  /* not found */
 }
 
+/* vim:ts=2:sw=2:et:
+ */

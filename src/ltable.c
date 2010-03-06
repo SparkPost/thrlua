@@ -345,7 +345,7 @@ static void rehash (lua_State *L, Table *t, const TValue *ek) {
 
 Table *luaH_new (lua_State *L, int narray, int nhash) {
   int r;
-  Table *t = luaC_newobj(L, LUA_TTABLE);
+  Table *t = luaC_newobj(G(L), LUA_TTABLE);
   do {
     r = pthread_rwlock_init(&t->lock, NULL);
   } while (r == EAGAIN || r == EINTR);
@@ -354,7 +354,7 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
       errno, strerror(errno));
   }
 
-  luaC_link(L, obj2gco(t), LUA_TTABLE);
+//  luaC_link(L, obj2gco(t), LUA_TTABLE);
   t->metatable = NULL;
   t->flags = cast_byte(~0);
   /* temporary values (kept only if some malloc fails) */
@@ -420,8 +420,10 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
       mp = n;
     }
   }
-  gkey(mp)->value = key->value; gkey(mp)->tt = key->tt;
-  luaC_barriert(L, t, key);
+  luaC_writebarriervv(G(L), &t->gch, key2tval(mp), key);
+//  gkey(mp)->value = key->value;
+//  gkey(mp)->tt = key->tt;
+//  luaC_barriert(L, t, key);
   lua_assert(ttisnil(gval(mp)));
   return gval(mp);
 }
@@ -599,6 +601,7 @@ void luaH_rdlock(global_State *g, Table *t)
   do {
     r = pthread_rwlock_rdlock(&t->lock);
   } while (r == EINTR || r == EAGAIN);
+  if (r) {
 #if FIXME
     luaL_error(L, "table rdlock failed with errno %d: %s\n",
       errno, strerror(errno));
@@ -607,6 +610,7 @@ void luaH_rdlock(global_State *g, Table *t)
       errno, strerror(errno));
     abort();
 #endif
+  }
 }
 
 /* release a lock */
@@ -616,6 +620,7 @@ void luaH_unlock(global_State *g, Table *t)
   do {
     r = pthread_rwlock_unlock(&t->lock);
   } while (r == EINTR || r == EAGAIN);
+  if (r) {
 #if FIXME
     luaL_error(L, "table unlock failed with errno %d: %s\n",
       errno, strerror(errno));
@@ -624,6 +629,7 @@ void luaH_unlock(global_State *g, Table *t)
       errno, strerror(errno));
     abort();
 #endif
+  }
 }
 
 #if defined(LUA_DEBUG)

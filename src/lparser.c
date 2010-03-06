@@ -129,8 +129,9 @@ static int registerlocalvar (LexState *ls, TString *varname) {
   luaM_growvector(ls->L, f->locvars, fs->nlocvars, f->sizelocvars,
                   LocVar, SHRT_MAX, "too many local variables");
   while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL;
-  f->locvars[fs->nlocvars].varname = varname;
-  luaC_objbarrier(ls->L, f, varname);
+  luaC_writebarrier(G(ls->L), &f->gch,
+    &f->locvars[fs->nlocvars].varname, &varname->tsv.gch);
+//  luaC_objbarrier(ls->L, f, varname);
   return fs->nlocvars++;
 }
 
@@ -175,10 +176,12 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   /* new one */
   luaY_checklimit(fs, f->nups + 1, LUAI_MAXUPVALUES, "upvalues");
   luaM_growvector(fs->L, f->upvalues, f->nups, f->sizeupvalues,
-                  TString *, MAX_INT, "");
+                  GCheader *, MAX_INT, "");
   while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL;
-  f->upvalues[f->nups] = name;
-  luaC_objbarrier(fs->L, f, name);
+  luaC_writebarrier(G(fs->L), &f->gch,
+    &f->upvalues[f->nups], &name->tsv.gch);
+//  f->upvalues[f->nups] = name;
+//  luaC_objbarrier(fs->L, f, name);
   lua_assert(v->k == VLOCAL || v->k == VUPVAL);
   fs->upvalues[f->nups].k = cast_byte(v->k);
   fs->upvalues[f->nups].info = cast_byte(v->u.s.info);
@@ -189,7 +192,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
 static int searchvar (FuncState *fs, TString *n) {
   int i;
   for (i=fs->nactvar-1; i >= 0; i--) {
-    if (n == getlocvar(fs, i).varname)
+    if (n == (TString*)getlocvar(fs, i).varname)
       return i;
   }
   return -1;  /* not found */
@@ -297,8 +300,10 @@ static void pushclosure (LexState *ls, FuncState *func, expdesc *v) {
   luaM_growvector(ls->L, f->p, fs->np, f->sizep, Proto *,
                   MAXARG_Bx, "constant table overflow");
   while (oldsize < f->sizep) f->p[oldsize++] = NULL;
-  f->p[fs->np++] = func->f;
-  luaC_objbarrier(ls->L, f, func->f);
+  luaC_writebarrier(G(ls->L), &f->gch, (GCheader**)&f->p[fs->np], &func->f->gch);
+  fs->np++;
+//  f->p[fs->np++] = func->f;
+//  luaC_objbarrier(ls->L, f, func->f);
   init_exp(v, VRELOCABLE, luaK_codeABx(fs, OP_CLOSURE, 0, fs->np-1));
   for (i=0; i<func->f->nups; i++) {
     OpCode o = (func->upvalues[i].k == VLOCAL) ? OP_MOVE : OP_GETUPVAL;
@@ -351,7 +356,7 @@ static void close_func (LexState *ls) {
   f->sizep = fs->np;
   luaM_reallocvector(L, f->locvars, f->sizelocvars, fs->nlocvars, LocVar);
   f->sizelocvars = fs->nlocvars;
-  luaM_reallocvector(L, f->upvalues, f->sizeupvalues, f->nups, TString *);
+  luaM_reallocvector(L, f->upvalues, f->sizeupvalues, f->nups, GCheader *);
   f->sizeupvalues = f->nups;
   lua_assert(luaG_checkcode(f));
   lua_assert(fs->bl == NULL);

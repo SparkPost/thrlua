@@ -231,8 +231,9 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
     luaM_growvector(L, f->k, fs->nk, f->sizek, TValue,
                     MAXARG_Bx, "constant table overflow");
     while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
-    setobj(L, &f->k[fs->nk], v);
-    luaC_barrier(L, f, v);
+    luaC_writebarriervv(G(L), &f->gch, &f->k[fs->nk], v);
+//    setobj(L, &f->k[fs->nk], v);
+//    luaC_barrier(L, f, v);
     luaH_unlock(G(L), fs->h);
     return fs->nk++;
   }

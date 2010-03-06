@@ -136,15 +136,15 @@ static void LoadDebug(LoadState* S, Proto* f)
  for (i=0; i<n; i++) f->locvars[i].varname=NULL;
  for (i=0; i<n; i++)
  {
-  f->locvars[i].varname=LoadString(S);
+  f->locvars[i].varname=&LoadString(S)->tsv.gch;
   f->locvars[i].startpc=LoadInt(S);
   f->locvars[i].endpc=LoadInt(S);
  }
  n=LoadInt(S);
- f->upvalues=luaM_newvector(S->L,n,TString*);
+ f->upvalues=luaM_newvector(S->L,n,GCheader*);
  f->sizeupvalues=n;
  for (i=0; i<n; i++) f->upvalues[i]=NULL;
- for (i=0; i<n; i++) f->upvalues[i]=LoadString(S);
+ for (i=0; i<n; i++) f->upvalues[i]=&LoadString(S)->tsv.gch;
 }
 
 static Proto* LoadFunction(LoadState* S, TString* p)
