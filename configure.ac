@@ -20,6 +20,9 @@ AC_ARG_ENABLE(coverage,
     LIBS="$LIBS -lgcov"
   ]
 )
+AC_CHECK_HEADERS([ \
+/opt/msys/3rdParty/include/valgrind/valgrind.h \
+])
 
 PCRE_LIBS=`pcre-config --libs`
 PCRE_CFLAGS=`pcre-config --cflags`
