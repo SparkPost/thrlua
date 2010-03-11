@@ -14,7 +14,34 @@
 
 #include "luaconf.h"
 
-#define lua_assert assert
+#define LUA_ASSERTIONS 1
+
+#include </opt/msys/3rdParty/include/valgrind/memcheck.h>
+#include </opt/msys/3rdParty/include/valgrind/valgrind.h>
+#define HAVE_VALGRIND 1
+
+#if LUA_ASSERTIONS && HAVE_VALGRIND
+static inline void lua_assert_fail(const char *expr, const char *file, int line)
+{
+  VALGRIND_PRINTF_BACKTRACE("Assertion %s failed\n", expr);
+  fprintf(stderr, "Assertion %s failed at %s:%d\n", expr, file, line);
+  abort();
+}
+
+# define lua_assert(expr)	\
+  ((expr)							   	\
+   ? (void) (0)						\
+   : (lua_assert_fail (#expr, __FILE__, __LINE__), \
+      (void) (0)))
+
+
+#elif LUA_ASSERTIONS
+# define lua_assert assert
+#else
+# define lua_assert(expr)
+#endif
+
+
 
 #include <setjmp.h>
 #include <locale.h>
@@ -46,6 +73,111 @@ typedef struct global_State global_State;
 #include "lstring.h"
 #include "lundump.h"
 #include "lvm.h"
+
+/* Macros to set values */
+static inline void setnilvalue(TValue *obj)
+{
+  obj->tt = LUA_TNIL;
+}
+
+static inline void setnvalue(TValue *obj, lua_Number n)
+{
+  obj->value.n = n;
+  obj->tt = LUA_TNUMBER;
+}
+
+static inline void setpvalue(TValue *obj, void *ud)
+{
+  obj->value.p = ud;
+  obj->tt = LUA_TLIGHTUSERDATA;
+}
+
+static inline void setbvalue(TValue *obj, int b)
+{
+  obj->value.b = b;
+  obj->tt = LUA_TBOOLEAN;
+}
+
+static inline void setsvalue(lua_State *L, TValue *obj, TString *str)
+{
+  obj->value.gc = &str->tsv.gch;
+  obj->tt = LUA_TSTRING;
+  checkliveness(G(L), obj);
+}
+
+static inline void setuvalue(lua_State *L, TValue *obj, Udata *ud)
+{
+  obj->value.gc = &ud->uv.gch;
+  obj->tt = LUA_TUSERDATA;
+  checkliveness(G(L), obj);
+}
+
+static inline void setthvalue(lua_State *L, TValue *obj, lua_State *thr)
+{
+  obj->value.gc = &thr->gch;
+  obj->tt = LUA_TTHREAD;
+  checkliveness(G(L), obj);
+}
+
+static inline void setclvalue(lua_State *L, TValue *obj, Closure *cl)
+{
+  obj->value.gc = &cl->gch;
+  obj->tt = LUA_TFUNCTION;
+  checkliveness(G(L), obj);
+}
+
+static inline void sethvalue(lua_State *L, TValue *obj, Table *t)
+{
+  obj->value.gc = &t->gch;
+  obj->tt = LUA_TTABLE;
+  checkliveness(G(L), obj);
+}
+
+static inline void setptvalue(lua_State *L, TValue *obj, Proto *p)
+{
+  obj->value.gc = &p->gch;
+  obj->tt = LUA_TPROTO;
+  checkliveness(G(L), obj);
+}
+
+static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
+{
+  obj1->value = obj2->value;
+  obj1->tt = obj2->tt;
+  checkliveness(G(L), obj1);
+}
+
+/*
+** different types of sets, according to destination
+*/
+
+/* from stack to (same) stack */
+#define setobjs2s	setobj
+/* to stack (not from same stack) */
+#define setobj2s	setobj
+#define setsvalue2s	setsvalue
+#define sethvalue2s	sethvalue
+#define setptvalue2s	setptvalue
+/* from table to same table */
+#define setobjt2t	setobj
+/* to table */
+#define setobj2t	setobj
+/* to new object */
+#define setobj2n	setobj
+#define setsvalue2n	setsvalue
+
+static inline void setttype(TValue *obj, lu_byte tt)
+{
+#if HAVE_VALGRIND
+  VALGRIND_PRINTF_BACKTRACE("changing type on value %p from %s to %s\n",
+    obj, lua_typename(NULL, ttype(obj)), lua_typename(NULL, tt));
+#endif
+  ttype(obj) = tt;
+}
+
+
+#define getstr(ts)	cast(const char *, (ts) + 1)
+#define svalue(o)       getstr(rawtsvalue(o))
 
 
 #ifdef __cplusplus

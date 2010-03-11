@@ -115,10 +115,17 @@ void *luaM_reallocG(global_State *g, void *block,
   return g->alloc(g->allocdata, block, oldsize, size);
 }
 
-static int panic (lua_State *L) {
+static int panic (lua_State *L)
+{
+  const char *err;
+
   (void)L;  /* to avoid warnings */
-  fprintf(stderr, "PANIC: unprotected error in call to Lua API (%s)\n",
-                   lua_tostring(L, -1));
+  err = lua_tostring(L, -1);
+#if HAVE_VALGRIND
+  VALGRIND_PRINTF_BACKTRACE("unprotected error in call to Lua API (%s)\n",
+    err);
+#endif
+  fprintf(stderr, "PANIC: unprotected error in call to Lua API (%s)\n", err);
   return 0;
 }
 

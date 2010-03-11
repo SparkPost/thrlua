@@ -39,7 +39,7 @@ static TValue *index2adr (lua_State *L, int idx) {
     case LUA_REGISTRYINDEX: return registry(L);
     case LUA_ENVIRONINDEX: {
       Closure *func = curr_func(L);
-      sethvalue(L, &L->env, func->c.env);
+      sethvalue(L, &L->env, gch2h(func->c.env));
       return &L->env;
     }
     case LUA_GLOBALSINDEX: return gt(L);
@@ -615,10 +615,10 @@ LUA_API void lua_getfenv (lua_State *L, int idx) {
   api_checkvalidindex(L, o);
   switch (ttype(o)) {
     case LUA_TFUNCTION:
-      sethvalue(L, L->top, clvalue(o)->c.env);
+      sethvalue(L, L->top, gch2h(clvalue(o)->c.env));
       break;
     case LUA_TUSERDATA:
-      sethvalue(L, L->top, uvalue(o)->env);
+      sethvalue(L, L->top, gch2h(uvalue(o)->env));
       break;
     case LUA_TTHREAD:
       setobj2s(L, L->top,  gt(thvalue(o)));

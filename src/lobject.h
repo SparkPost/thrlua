@@ -50,10 +50,12 @@ static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
 #define LUA_TGLOBAL (LAST_TAG+4)
 
 
+#if 0
 /*
 ** Union of all collectable objects
 */
 typedef union GCObject GCObject;
+#endif
 
 
 /*
@@ -64,8 +66,8 @@ typedef union GCObject GCObject;
 ** Common header in struct form
 */
 typedef struct GCheader {
-  GCObject *next;
-  GCObject **logptr;
+  struct GCheader *next, *prev;
+  struct GCheader **logptr;
   scpt_atomic_t ref;
   lu_byte tt;
   lu_byte marked;
@@ -75,7 +77,7 @@ typedef struct GCheader {
 ** Union of all Lua values
 */
 typedef union {
-  GCObject *gc;
+  GCheader *gc;
   void *p;
   lua_Number n;
   int b;
@@ -91,122 +93,6 @@ typedef union {
 typedef struct lua_TValue {
   TValuefields;
 } TValue;
-
-
-/* Macros to test type */
-#define ttisnil(o)	(ttype(o) == LUA_TNIL)
-#define ttisnumber(o)	(ttype(o) == LUA_TNUMBER)
-#define ttisstring(o)	(ttype(o) == LUA_TSTRING)
-#define ttistable(o)	(ttype(o) == LUA_TTABLE)
-#define ttisfunction(o)	(ttype(o) == LUA_TFUNCTION)
-#define ttisboolean(o)	(ttype(o) == LUA_TBOOLEAN)
-#define ttisuserdata(o)	(ttype(o) == LUA_TUSERDATA)
-#define ttisthread(o)	(ttype(o) == LUA_TTHREAD)
-#define ttislightuserdata(o)	(ttype(o) == LUA_TLIGHTUSERDATA)
-
-/* Macros to access values */
-#define ttype(o)	((o)->tt)
-#define gcvalue(o)	check_exp(iscollectable(o), (o)->value.gc)
-#define pvalue(o)	check_exp(ttislightuserdata(o), (o)->value.p)
-#define nvalue(o)	check_exp(ttisnumber(o), (o)->value.n)
-#define rawtsvalue(o)	check_exp(ttisstring(o), &(o)->value.gc->ts)
-#define tsvalue(o)	(&rawtsvalue(o)->tsv)
-#define rawuvalue(o)	check_exp(ttisuserdata(o), &(o)->value.gc->u)
-#define uvalue(o)	(&rawuvalue(o)->uv)
-#define clvalue(o)	check_exp(ttisfunction(o), &(o)->value.gc->cl)
-#define hvalue(o)	check_exp(ttistable(o), &(o)->value.gc->h)
-#define bvalue(o)	check_exp(ttisboolean(o), (o)->value.b)
-#define thvalue(o)	check_exp(ttisthread(o), &(o)->value.gc->th)
-
-#define l_isfalse(o)	(ttisnil(o) || (ttisboolean(o) && bvalue(o) == 0))
-
-/*
-** for internal debug only
-*/
-#define checkconsistency(obj) \
-  lua_assert(!iscollectable(obj) || (ttype(obj) == (obj)->value.gc->gch.tt))
-
-#define checkliveness(g,obj) \
-  lua_assert(!iscollectable(obj) || \
-  ((ttype(obj) == (obj)->value.gc->gch.tt))) // && !isdead(g, (obj)->value.gc)))
-
-
-/* Macros to set values */
-#define setnilvalue(obj) ((obj)->tt=LUA_TNIL)
-
-#define setnvalue(obj,x) \
-  { TValue *i_o=(obj); i_o->value.n=(x); i_o->tt=LUA_TNUMBER; }
-
-#define setpvalue(obj,x) \
-  { TValue *i_o=(obj); i_o->value.p=(x); i_o->tt=LUA_TLIGHTUSERDATA; }
-
-#define setbvalue(obj,x) \
-  { TValue *i_o=(obj); i_o->value.b=(x); i_o->tt=LUA_TBOOLEAN; }
-
-#define setsvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TSTRING; \
-    checkliveness(G(L),i_o); }
-
-#define setuvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TUSERDATA; \
-    checkliveness(G(L),i_o); }
-
-#define setthvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TTHREAD; \
-    checkliveness(G(L),i_o); }
-
-#define setclvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TFUNCTION; \
-    checkliveness(G(L),i_o); }
-
-#define sethvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TTABLE; \
-    checkliveness(G(L),i_o); }
-
-#define setptvalue(L,obj,x) \
-  { TValue *i_o=(obj); \
-    i_o->value.gc=cast(GCObject *, (x)); i_o->tt=LUA_TPROTO; \
-    checkliveness(G(L),i_o); }
-
-
-
-
-#define setobj(L,obj1,obj2) \
-  { const TValue *o2=(obj2); TValue *o1=(obj1); \
-    o1->value = o2->value; o1->tt=o2->tt; \
-    checkliveness(G(L),o1); }
-
-
-/*
-** different types of sets, according to destination
-*/
-
-/* from stack to (same) stack */
-#define setobjs2s	setobj
-/* to stack (not from same stack) */
-#define setobj2s	setobj
-#define setsvalue2s	setsvalue
-#define sethvalue2s	sethvalue
-#define setptvalue2s	setptvalue
-/* from table to same table */
-#define setobjt2t	setobj
-/* to table */
-#define setobj2t	setobj
-/* to new object */
-#define setobj2n	setobj
-#define setsvalue2n	setsvalue
-
-#define setttype(obj, tt) (ttype(obj) = (tt))
-
-
-#define iscollectable(o)	(ttype(o) >= LUA_TSTRING)
-
-
 
 typedef TValue *StkId;  /* index to stack elements */
 
@@ -226,8 +112,45 @@ typedef union TString {
 } TString;
 
 
-#define getstr(ts)	cast(const char *, (ts) + 1)
-#define svalue(o)       getstr(rawtsvalue(o))
+
+/* Macros to test type */
+#define ttisnil(o)	(ttype(o) == LUA_TNIL)
+#define ttisnumber(o)	(ttype(o) == LUA_TNUMBER)
+#define ttisstring(o)	(ttype(o) == LUA_TSTRING)
+#define ttistable(o)	(ttype(o) == LUA_TTABLE)
+#define ttisfunction(o)	(ttype(o) == LUA_TFUNCTION)
+#define ttisboolean(o)	(ttype(o) == LUA_TBOOLEAN)
+#define ttisuserdata(o)	(ttype(o) == LUA_TUSERDATA)
+#define ttisthread(o)	(ttype(o) == LUA_TTHREAD)
+#define ttislightuserdata(o)	(ttype(o) == LUA_TLIGHTUSERDATA)
+
+/* Macros to access values */
+#define ttype(o)	((o)->tt)
+#define gcvalue(o)	check_exp(iscollectable(o), (o)->value.gc)
+#define pvalue(o)	check_exp(ttislightuserdata(o), (o)->value.p)
+#define nvalue(o)	check_exp(ttisnumber(o), (o)->value.n)
+#define rawtsvalue(o)	check_exp(ttisstring(o), (TString*)(o)->value.gc)
+#define tsvalue(o)	(&rawtsvalue(o)->tsv)
+#define rawuvalue(o)	check_exp(ttisuserdata(o), (Udata*)(o)->value.gc)
+#define uvalue(o)	(&rawuvalue(o)->uv)
+#define clvalue(o)	check_exp(ttisfunction(o), (Closure*)(o)->value.gc)
+#define hvalue(o)	check_exp(ttistable(o), (Table*)(o)->value.gc)
+#define bvalue(o)	check_exp(ttisboolean(o), (o)->value.b)
+#define thvalue(o)	check_exp(ttisthread(o), (lua_State*)(o)->value.gc)
+
+#define l_isfalse(o)	(ttisnil(o) || (ttisboolean(o) && bvalue(o) == 0))
+
+/*
+** for internal debug only
+*/
+#define checkconsistency(obj) \
+  lua_assert(!iscollectable(obj) || (ttype(obj) == (obj)->value.gc->tt))
+
+#define iscollectable(o)	(ttype(o) >= LUA_TSTRING)
+#define checkliveness(g,obj) \
+  lua_assert(!iscollectable(obj) || \
+  ((ttype(obj) == (obj)->value.gc->tt))) // && !isdead(g, (obj)->value.gc)))
+
 
 
 
@@ -238,6 +161,7 @@ typedef union Udata {
     GCheader /*struct Table*/ *metatable;
     GCheader /*struct Table*/ *env;
     size_t len;
+    lu_byte finalized;
   } uv;
 } Udata;
 
@@ -264,7 +188,7 @@ typedef struct Proto {
   int sizelocvars;
   int linedefined;
   int lastlinedefined;
-  GCObject *gclist;
+//  GCObject *gclist;
   lu_byte nups;  /* number of upvalues */
   lu_byte numparams;
   lu_byte is_vararg;
@@ -308,7 +232,7 @@ typedef struct UpVal {
 */
 
 #define ClosureHeader \
-	GCheader gch; lu_byte isC; lu_byte nupvalues; GCObject *gclist; \
+	GCheader gch; lu_byte isC; lu_byte nupvalues; \
 	GCheader *env
 
 typedef struct CClosure {
@@ -364,7 +288,6 @@ typedef struct Table {
   TValue *array;  /* array part */
   Node *node;
   Node *lastfree;  /* any free position is before this position */
-  GCObject *gclist;
   int sizearray;  /* size of `array' array */
 } Table;
 

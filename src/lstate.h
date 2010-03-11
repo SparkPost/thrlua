@@ -66,7 +66,7 @@ typedef struct CallInfo {
  * stack and the root stack.
  * We cache memory for these to avoid churn and fragmentation */
 struct gc_stack {
-  GCObject **obj;
+  GCheader **obj;
   unsigned int alloc, items;
 };
 
@@ -81,7 +81,7 @@ struct gc_log_buffer {
   struct gc_log_buffer *next;
   unsigned int items;
   unsigned int alloc;
-  GCObject *obj[1];
+  GCheader *obj[1];
 };
 
 /** State used for each OS thread */
@@ -90,10 +90,8 @@ typedef struct thr_State {
   struct thr_State *next, *prev;
   pthread_mutex_t handshake;
 
-  GCObject *olist, *olist_tail;
-  /* thread no longer active; this struct can be disposed
-   * by the next collection run */
-  unsigned int vacant;
+  /* head of thread-local heap */
+  GCheader olist;
   unsigned int trace;
   unsigned int snoop;
   unsigned int alloc_color;
@@ -120,10 +118,9 @@ struct global_State {
   pthread_cond_t gc_cond;
   pthread_t collector_thread;
   pthread_mutex_t collector_lock;
-  GCObject *the_heap;
-  GCObject *to_finalize;
+  GCheader the_heap;
+  GCheader to_finalize;
   struct gc_stack
-    root_set,
     weak_set,
     mark_set;
   thr_State *all_threads;
@@ -141,16 +138,6 @@ struct global_State {
   TString *tmname[TM_N];  /* array with tag-method names */
 
   lu_byte gcstate;  /* state of garbage collector */
-#if 0
-  lu_byte currentwhite;
-  int sweepstrgc;  /* position of sweep in `strt' */
-  GCObject *rootgc;  /* list of all collectable objects */
-  GCObject **sweepgc;  /* position of sweep in `rootgc' */
-  GCObject *gray;  /* list of gray objects */
-  GCObject *grayagain;  /* list of objects to be traversed atomically */
-  GCObject *weak;  /* list of weak tables (to be cleared) */
-  GCObject *tmudata;  /* last element of list of userdata to be GC */
-#endif
   lu_mem GCthreshold;
   lu_mem totalbytes;  /* number of bytes currently allocated */
   lu_mem estimate;  /* an estimate of number of bytes actually in use */
@@ -202,7 +189,6 @@ struct lua_State {
   TValue l_gt;  /* table of globals */
   TValue env;  /* temporary place for environments */
   UpVal openupval;  /* list of open upvalues in this stack */
-//  GCObject *gclist;
   struct lua_longjmp *errorJmp;  /* current error recover point */
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
 };
@@ -210,7 +196,7 @@ struct lua_State {
 
 #define G(L)	(L->l_G)
 
-
+#if 0
 /*
 ** Union of all collectable objects
 */
@@ -225,24 +211,24 @@ union GCObject {
   struct lua_State th;  /* thread */
 };
 
+#endif
 
-/* macros to convert a GCObject into a specific value */
-#define rawgco2ts(o)	check_exp((o)->gch.tt == LUA_TSTRING, &((o)->ts))
+/* macros to convert a GCheader into a specific value */
+#define rawgco2ts(o)	check_exp((o)->tt == LUA_TSTRING, (TString*)(o))
 #define gco2ts(o)	(&rawgco2ts(o)->tsv)
-#define rawgco2u(o)	check_exp((o)->gch.tt == LUA_TUSERDATA, &((o)->u))
+#define rawgco2u(o)	check_exp((o)->tt == LUA_TUSERDATA, (Udata*)(o))
 #define gco2u(o)	(&rawgco2u(o)->uv)
-#define gco2cl(o)	check_exp((o)->gch.tt == LUA_TFUNCTION, &((o)->cl))
-#define gco2h(o)	check_exp((o)->gch.tt == LUA_TTABLE, &((o)->h))
-#define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
-#define gco2p(o)	check_exp((o)->gch.tt == LUA_TPROTO, &((o)->p))
-#define gco2uv(o)	check_exp((o)->gch.tt == LUA_TUPVAL, &((o)->uv))
+#define gco2cl(o)	check_exp((o)->tt == LUA_TFUNCTION, (Closure*)(o))
+#define gco2h(o)	check_exp((o)->tt == LUA_TTABLE, (Table*)(o))
+#define gco2p(o)	check_exp((o)->tt == LUA_TPROTO, (Proto*)(o))
+#define gco2uv(o)	check_exp((o)->tt == LUA_TUPVAL, (UpVal*)(o))
 #define ngcotouv(o) \
-	check_exp((o) == NULL || (o)->gch.tt == LUA_TUPVAL, &((o)->uv))
-#define gco2th(o)	check_exp((o)->gch.tt == LUA_TTHREAD, &((o)->th))
+	check_exp((o) == NULL || (o)->tt == LUA_TUPVAL, (UpVal*)(o))
+#define gco2th(o)	check_exp((o)->tt == LUA_TTHREAD, (lua_State*)(o))
 
 /* macro to convert any Lua object into a GCObject */
 #define obj2gco(v)	(cast(GCObject *, (v)))
-
+#define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
 
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
 LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);

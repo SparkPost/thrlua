@@ -479,7 +479,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       case OP_GETGLOBAL: {
         TValue g;
         TValue *rb = KBx(i);
-        sethvalue(L, &g, cl->env);
+        sethvalue(L, &g, gch2h(cl->env));
         lua_assert(ttisstring(rb));
         Protect(luaV_gettable(L, &g, rb, ra));
         continue;
@@ -490,7 +490,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       }
       case OP_SETGLOBAL: {
         TValue g;
-        sethvalue(L, &g, cl->env);
+        sethvalue(L, &g, gch2h(cl->env));
         lua_assert(ttisstring(KBx(i)));
         Protect(luaV_settable(L, &g, KBx(i), ra));
         continue;

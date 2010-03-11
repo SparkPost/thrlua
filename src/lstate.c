@@ -9,16 +9,6 @@
 
 #include "thrlua.h"
 
-/*
-** Main thread combines a thread state and the global state
-*/
-typedef struct LG {
-  lua_State l;
-  global_State g;
-} LG;
-  
-
-
 static void stack_init (lua_State *L1, lua_State *L) {
   /* initialize CallInfo array */
   L1->base_ci = luaM_newvector(L, BASIC_CI_SIZE, CallInfo);
@@ -53,6 +43,8 @@ static void f_luaopen (lua_State *L, void *ud) {
   UNUSED(ud);
   stack_init(L, L);  /* init stack */
   sethvalue(L, gt(L), luaH_new(L, 0, 2));  /* table of globals */
+  setobj2n(L, &g->l_globals, gt(L));
+  lua_assert(iscollectable(&g->l_globals));
   sethvalue(L, registry(L), luaH_new(L, 0, 2));  /* registry */
   luaT_init(L);
   luaX_init(L);
@@ -62,12 +54,10 @@ static void f_luaopen (lua_State *L, void *ud) {
 
 static void preinit_state (lua_State *L, global_State *g)
 {
-  memset(L, 0, sizeof(*L));
   G(L) = g;
   L->allowhook = 1;
   L->openupval.u.l.prev = &L->openupval;
   L->openupval.u.l.next = &L->openupval;
-
   setnilvalue(gt(L));
 }
 
@@ -107,6 +97,9 @@ lua_State *luaE_newthread (lua_State *L) {
 
 
 void luaE_freethread (lua_State *L, lua_State *L1) {
+#if HAVE_VALGRIND
+  VALGRIND_PRINTF_BACKTRACE("freeing thread at %p\n", L1);
+#endif
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(L, L1);
@@ -123,74 +116,22 @@ LUA_API lua_State *lua_newstate (lua_Alloc falloc, void *fud) {
   if (!g) {
     return NULL;
   }
-
   L = luaC_newobj(g, LUA_TTHREAD);
-  if (L == NULL) return NULL;
+  if (L == NULL) {
+    /* FIXME: leak */
+    return NULL;
+  }
   scpt_atomic_inc(&L->gch.ref);
-#if 0
-  L->next = NULL;
-  L->tt = LUA_TTHREAD;
-  g->currentwhite = bit2mask(WHITE0BIT, FIXEDBIT);
-  L->marked = luaC_white(g);
-  set2bits(L->marked, FIXEDBIT, SFIXEDBIT);
-#endif
   preinit_state(L, g);
   g->mainthread = L;
-#if 0
-  g->uvhead.u.l.prev = &g->uvhead;
-  g->uvhead.u.l.next = &g->uvhead;
-  g->GCthreshold = 0;  /* mark it as unfinished state */
-#endif
-  setnilvalue(registry(L));
   g->panic = NULL;
-#if 0
-  g->gcstate = GCSpause;
-  g->rootgc = obj2gco(L);
-  g->sweepstrgc = 0;
-  g->sweepgc = &g->rootgc;
-  g->gray = NULL;
-  g->grayagain = NULL;
-  g->weak = NULL;
-  g->tmudata = NULL;
-#endif
-  g->totalbytes = sizeof(LG);
-#if 0
-  g->gcpause = LUAI_GCPAUSE;
-  g->gcstepmul = LUAI_GCMUL;
-  g->gcdept = 0;
-  for (i=0; i<NUM_TAGS; i++) g->mt[i] = NULL;
-#endif
+
   if (luaD_rawrunprotected(L, f_luaopen, NULL) != 0) {
     /* memory allocation error: free partial state */
     close_state(L);
     L = NULL;
   }
   return L;
-}
-
-#if 0
-static void callallgcTM (lua_State *L, void *ud) {
-  UNUSED(ud);
-  luaC_callGCTM(L);  /* call GC metamethods for all udata */
-}
-#endif
-
-
-LUA_API void lua_close (lua_State *L) {
-  L = G(L)->mainthread;  /* only the main thread can be closed */
-  lua_lock(L);
-  luaF_close(L, L->stack);  /* close all upvalues for this thread */
-//  luaC_separateudata(L, 1);  /* separate udata that have GC metamethods */
-  L->errfunc = 0;  /* no error function during GC metamethods */
-#if 0
-  do {  /* repeat until no more errors */
-    L->ci = L->base_ci;
-    L->base = L->top = L->ci->base;
-    L->nCcalls = L->baseCcalls = 0;
-  } while (luaD_rawrunprotected(L, callallgcTM, NULL) != 0);
-  lua_assert(G(L)->tmudata == NULL);
-#endif
-  close_state(L);
 }
 
 /* vim:ts=2:sw=2:et:
