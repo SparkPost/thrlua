@@ -1,5 +1,4 @@
 This version of lua has the following patches applied:
-
 -----
 
 A patch to allow "\xAA" as a means for specifying 8-bit hex constants
