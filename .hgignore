@@ -29,3 +29,5 @@ rcluaconfig.h*
 *.gcno
 *.gcda
 lcovhtml
+doc/reference/*.html
+doc/reference/*.css
