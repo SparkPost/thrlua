@@ -16,7 +16,7 @@
 
 #define LUA_ASSERTIONS 1
 
-#if HAVE_OPT_MSYS_3RDPARTY_INCLUDE_VALGRIND_VALGRIND_H
+#if HAVE__OPT_MSYS_3RDPARTY_INCLUDE_VALGRIND_VALGRIND_H
 #include </opt/msys/3rdParty/include/valgrind/memcheck.h>
 #include </opt/msys/3rdParty/include/valgrind/valgrind.h>
 #define HAVE_VALGRIND 1

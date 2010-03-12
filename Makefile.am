@@ -3,6 +3,8 @@ hdrdir = $(includedir)/rclua
 cmoddir = $(prefix)/lib/lua/@PACKAGE_VERMAJORMINOR@
 smoddir = $(prefix)/share/lua/@PACKAGE_VERMAJORMINOR@
 
+MAKEFLAGS = -s
+
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
 cmod_LTLIBRARIES = pcre.la

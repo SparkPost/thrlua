@@ -1,0 +1,7 @@
+#!/bin/sh
+LD_LIBRARY_PATH=.libs
+DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+RCLUA_CPATH='.libs/?.so'
+RCLUA_PATH='./?.lua;./etc/?.lua'
+export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
+exec valgrind --tool=memcheck --leak-check=full --num-callers=48 --track-origins=yes --show-reachable=yes --log-file=vg.vg .libs/rclua $*

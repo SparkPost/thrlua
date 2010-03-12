@@ -26,5 +26,6 @@ LUAI_FUNC void luaV_settable (lua_State *L, const TValue *t, TValue *key,
                                             StkId val);
 LUAI_FUNC void luaV_execute (lua_State *L, int nexeccalls);
 LUAI_FUNC void luaV_concat (lua_State *L, int total, int last);
+LUAI_FUNC int luaV_strcmp (const TString *ls, const TString *rs);
 
 #endif

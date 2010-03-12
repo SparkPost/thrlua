@@ -39,7 +39,7 @@ static inline void append_list(GCheader *head, GCheader *obj)
 static void walk_gch_list(global_State *g, GCheader *list, const char *caption)
 {
   GCheader *o;
-
+return;
   printf("%s\n", caption);
   printf("head=%p head->next=%p head->prev=%p\n", list, list->next, list->prev);
   for (o = list->next; o != list; o = o->next) {
@@ -445,6 +445,11 @@ static void mark_object(global_State *g, GCheader *o)
             while (i--) {
               /* strings are never weak */
               if (!weakvalue || ttisstring(&h->array[i])) {
+#if HAVE_VALGRIND
+                if (h == hvalue(&g->l_registry)) {
+                  VALGRIND_PRINTF_BACKTRACE("marking registry item %d\n", i);
+                }
+#endif
                 mark_value(g, &h->array[i]);
               }
             }
@@ -461,6 +466,11 @@ static void mark_object(global_State *g, GCheader *o)
                 /* strings are never weak */
                 if (!weakvalue || ttisstring(gval(n))) {
                   mark_value(g, gval(n));
+#if HAVE_VALGRIND
+                  if (h == hvalue(&g->l_registry)) {
+                    VALGRIND_PRINTF_BACKTRACE("marking registry item keyed by %s value %s:%p\n", lua_typename(NULL, gkey(n)->tt), lua_typename(NULL, gval(n)->tt), gcvalue(gval(n)));
+                  }
+#endif
                 }
               }
             }
@@ -505,7 +515,7 @@ static void mark_object(global_State *g, GCheader *o)
               o_push(g, &g->mark_set, (GCheader*)uv);
             }
             if (iscollectable(&th->l_gt)) {
-              printf("*** adding thread globals\n");
+//              printf("*** adding thread globals\n");
               o_push(g, &g->mark_set, &hvalue(&th->l_gt)->gch);
             }
 
@@ -539,27 +549,27 @@ static void mark_object(global_State *g, GCheader *o)
             break;
           }
         case LUA_TGLOBAL:
-          if (1 || !g->exiting) {
-            /* don't count the global refs during shutdown */
-            o_push(g, &g->mark_set, (GCheader*)g->memerr);
-            for (i = 0; i < NUM_TAGS; i++) {
-              if (g->mt[i]) {
-                o_push(g, &g->mark_set, (GCheader*)g->mt[i]);
-              }
+          o_push(g, &g->mark_set, (GCheader*)g->memerr);
+          for (i = 0; i < NUM_TAGS; i++) {
+            if (g->mt[i]) {
+              o_push(g, &g->mark_set, (GCheader*)g->mt[i]);
             }
-            for (i = 0; i < TM_N; i++) {
-              if (g->tmname[i]) {
-                o_push(g, &g->mark_set, (GCheader*)g->tmname[i]);
-              }
+          }
+          for (i = 0; i < TM_N; i++) {
+            if (g->tmname[i]) {
+              o_push(g, &g->mark_set, (GCheader*)g->tmname[i]);
             }
-            if (iscollectable(&g->l_registry)) {
-              printf("*** adding registry\n");
-              o_push(g, &g->mark_set, &hvalue(&g->l_registry)->gch);
-            }
-            if (iscollectable(&g->l_globals)) {
-              printf("*** adding globals\n");
-              o_push(g, &g->mark_set, &hvalue(&g->l_globals)->gch);
-            }
+          }
+          if (iscollectable(&g->l_registry)) {
+//            printf("*** adding registry\n");
+#if HAVE_VALGRIND
+            VALGRIND_PRINTF_BACKTRACE("g->l_registry = %p\n", hvalue(&g->l_registry));
+#endif
+            o_push(g, &g->mark_set, &hvalue(&g->l_registry)->gch);
+          }
+          if (iscollectable(&g->l_globals)) {
+//            printf("*** adding globals\n");
+            o_push(g, &g->mark_set, &hvalue(&g->l_globals)->gch);
           }
           break;
 
@@ -802,13 +812,19 @@ static unsigned int collect(global_State *g)
      * are exiting, we want to clear it out */
     pthread_mutex_lock(&pt->strt.lock);
     for (i = 0; i < pt->strt.size; i++) {
+      struct stringtable_node *n;
+
       if (g->exiting) {
-        pt->strt.hash[i] = NULL;
+        while (pt->strt.hash[i]) {
+          n = pt->strt.hash[i];
+          pt->strt.hash[i] = n->next;
+          luaM_free(NULL, n);
+        }
       } else {
-        struct stringtable_node *n = pt->strt.hash[i];
+        n = pt->strt.hash[i];
         while (n) {
           o_push(g, &g->mark_set, &n->str->tsv.gch);
-if (g->exiting) printf("+root strt %s %p\n", lua_typename(NULL, n->str->tsv.gch.tt), n->str);
+//if (g->exiting) printf("+root strt %s %p\n", lua_typename(NULL, n->str->tsv.gch.tt), n->str);
           n = n->next;
         }
       }
@@ -817,12 +833,12 @@ if (g->exiting) printf("+root strt %s %p\n", lua_typename(NULL, n->str->tsv.gch.
   }
 
   /* Identify roots in the heap; they have a non-zero ref count */
-printf("walking heap looking for roots\n");
+//printf("walking heap looking for roots\n");
   for (o = g->the_heap.next; o != &g->the_heap; o = o->next) {
     heap_size++;
     if (o->ref > 0) {
       o_push(g, &g->mark_set, o);
-if (g->exiting) printf("+root heap %s %p (next=%p prev=%p)\n", lua_typename(NULL, o->tt), o, o->next, o->prev);
+//if (g->exiting) printf("+root heap %s %p (next=%p prev=%p)\n", lua_typename(NULL, o->tt), o, o->next, o->prev);
     }
   }
 
@@ -832,7 +848,7 @@ if (g->exiting) printf("+root heap %s %p (next=%p prev=%p)\n", lua_typename(NULL
   for (pt = g->all_threads; pt; pt = pt->next) {
     for (i = 0; i < pt->snoop_buf.items; i++) {
       o_push(g, &g->mark_set, pt->snoop_buf.obj[i]);
-if (g->exiting) printf("+root snoop %s %p\n", lua_typename(NULL, pt->snoop_buf.obj[i]->tt), pt->snoop_buf.obj[i]);
+//if (g->exiting) printf("+root snoop %s %p\n", lua_typename(NULL, pt->snoop_buf.obj[i]->tt), pt->snoop_buf.obj[i]);
     }
     o_clear(&pt->snoop_buf);
   }
@@ -949,7 +965,7 @@ if (g->exiting) printf("+root snoop %s %p\n", lua_typename(NULL, pt->snoop_buf.o
 
   /* return 0 to indicate that collect_all does not need to loop;
    * it means that there are roots */
-printf("nroots=%d heap_size=%d swept=%d\n", nroots, heap_size, swept);
+//printf("nroots=%d heap_size=%d swept=%d\n", nroots, heap_size, swept);
   return nroots ? 0 : heap_size - swept;
 }
 
@@ -1000,6 +1016,8 @@ static void tls_dtor(void *ptr)
 {
   thr_State *pt = ptr;
   global_State *g = pt->g;
+  int i;
+  struct stringtable_node *n;
 
   pthread_mutex_lock(&g->collector_lock);
   if (pt->prev) {
@@ -1022,6 +1040,13 @@ static void tls_dtor(void *ptr)
 
   pthread_mutex_destroy(&pt->handshake);
   luaZ_freebuffer(NULL, &pt->buff);
+  for (i = 0; i < pt->strt.size; i++) {
+    while (pt->strt.hash[i]) {
+      n = pt->strt.hash[i];
+      pt->strt.hash[i] = n->next;
+      luaM_free(NULL, n);
+    }
+  }
   luaM_freearray(NULL, pt->strt.hash, pt->strt.size, TString *);
   if (pt->log_buf) {
     luaM_reallocG(g, pt->log_buf,
@@ -1165,18 +1190,16 @@ LUA_API void lua_close (lua_State *L)
 {
   pthread_t ct;
   global_State *g = G(L);
-  GCheader *o;
+  GCheader *o, *n;
   Table *reg;
-  int n = 1;
   thr_State *pt = getpt(g);
+  unsigned int udata;
   
-  L = G(L)->mainthread;  /* only the main thread can be closed */
+  /* only the main thread can be closed */
+  lua_assert(L == G(L)->mainthread);
 
   /* keep a ref on the global state */
   scpt_atomic_inc(&g->gch.ref);
-  /* release the ref on the main thread */
-  scpt_atomic_dec(&L->gch.ref);
-  L = NULL;
 
   /* persuade collector to exit */
   g->exiting = 1;
@@ -1184,23 +1207,42 @@ LUA_API void lua_close (lua_State *L)
   /* wait for collector to exit */
   pthread_join(g->collector_thread, NULL);
   collect_all(g);
-  /* ensure that the registry goes away after the global table */
-  reg = hvalue(&g->l_registry);
-  scpt_atomic_inc(&reg->gch.ref);
-  /* break the global variables */
-  setnilvalue(&g->l_globals);
-  collect_all(g);
-  /* global is now collectable (but won't yet be freed) */
-  printf("*** delref global\n");
-  scpt_atomic_dec(&g->gch.ref);
-  collect_all(g);
-  printf("*** delref registry\n");
-  /* now we can collect the registry */
-  setnilvalue(&g->l_registry);
-  scpt_atomic_dec(&reg->gch.ref);
-  collect_all(g);
 
-  walk_gch_list(g, &g->the_heap, "Outstanding heap");
+//  printf("**** all collectable\n");
+  /* now everything is collectable; walk the heap and finalize all userdata */
+  do {
+    udata = 0;
+    o = g->the_heap.prev;
+    while (o != &g->the_heap) {
+      if (o->tt == LUA_TUSERDATA) {
+        n = o->prev;
+        udata++;
+        append_list(&g->to_finalize, o);
+        o = n;
+      } else {
+        o = o->prev;
+      }
+    }
+    finalize(g);
+  } while (udata);
+
+  /* at this point, everything is garbage */
+  unlink_list(&g->gch);
+  while (g->the_heap.next != &g->the_heap) {
+    append_list(&g->to_finalize, g->the_heap.next);
+  }
+  while (pt->olist.next != &pt->olist) {
+    append_list(&g->to_finalize, pt->olist.next);
+  }
+  finalize(g);
+  walk_gch_list(g, &g->the_heap, "the heap");
+  walk_gch_list(g, &pt->olist, "olist");
+
+  pthread_setspecific(g->tls_key, NULL);
+  tls_dtor(pt);
+  o_free(g, &g->mark_set);
+  o_free(g, &g->weak_set);
+  g->alloc(g->allocdata, g, sizeof(*g), 0);
 }
 
 

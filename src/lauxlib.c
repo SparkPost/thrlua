@@ -105,21 +105,36 @@ LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
   lua_newtable(L);  /* create metatable */
   lua_pushvalue(L, -1);
   lua_setfield(L, LUA_REGISTRYINDEX, tname);  /* registry.name = metatable */
+#if HAVE_VALGRIND
+  VALGRIND_PRINTF_BACKTRACE("metatable %s is table at %p\n", tname, hvalue(L->top));
+#endif
   return 1;
 }
 
 
 LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname) {
   void *p = lua_touserdata(L, ud);
+  const char *reason = "unknown";
+
   if (p != NULL) {  /* value is a userdata? */
     if (lua_getmetatable(L, ud)) {  /* does it have a metatable? */
       lua_getfield(L, LUA_REGISTRYINDEX, tname);  /* get correct metatable */
       if (lua_rawequal(L, -1, -2)) {  /* does it have the correct mt? */
         lua_pop(L, 2);  /* remove both metatables */
         return p;
+      } else {
+        reason = "metatable mismatch";
       }
+    } else {
+      reason = "userdata has no metatable";
     }
+  } else {
+    reason = "userdata is NULL";
   }
+#if HAVE_VALGRIND
+  VALGRIND_PRINTF_BACKTRACE("userdata p=%p != type %s (%s) registry=%p\n",
+    p, tname, reason, hvalue(registry(L)));
+#endif
   luaL_typerror(L, ud, tname);  /* else error */
   return NULL;  /* to avoid warnings */
 }
@@ -611,5 +626,5 @@ LUALIB_API int (luaL_loadstring) (lua_State *L, const char *s) {
 
 /* }====================================================== */
 
-
-
+/* vim:ts=2:sw=2:et:
+ */

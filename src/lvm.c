@@ -194,7 +194,8 @@ static int call_orderTM (lua_State *L, const TValue *p1, const TValue *p2,
 }
 
 
-static int l_strcmp (const TString *ls, const TString *rs) {
+int luaV_strcmp (const TString *ls, const TString *rs)
+{
   const char *l = getstr(ls);
   size_t ll = ls->tsv.len;
   const char *r = getstr(rs);
@@ -224,7 +225,7 @@ int luaV_lessthan (lua_State *L, const TValue *l, const TValue *r) {
   else if (ttisnumber(l))
     return luai_numlt(nvalue(l), nvalue(r));
   else if (ttisstring(l))
-    return l_strcmp(rawtsvalue(l), rawtsvalue(r)) < 0;
+    return luaV_strcmp(rawtsvalue(l), rawtsvalue(r)) < 0;
   else if ((res = call_orderTM(L, l, r, TM_LT)) != -1)
     return res;
   return luaG_ordererror(L, l, r);
@@ -238,7 +239,7 @@ static int lessequal (lua_State *L, const TValue *l, const TValue *r) {
   else if (ttisnumber(l))
     return luai_numle(nvalue(l), nvalue(r));
   else if (ttisstring(l))
-    return l_strcmp(rawtsvalue(l), rawtsvalue(r)) <= 0;
+    return luaV_strcmp(rawtsvalue(l), rawtsvalue(r)) <= 0;
   else if ((res = call_orderTM(L, l, r, TM_LE)) != -1)  /* first try `le' */
     return res;
   else if ((res = call_orderTM(L, r, l, TM_LT)) != -1)  /* else try `lt' */
