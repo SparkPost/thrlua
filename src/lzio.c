@@ -14,8 +14,11 @@ int luaZ_fill (ZIO *z) {
   lua_State *L = z->L;
   const char *buff;
   lua_unlock(L);
-  buff = z->reader(L, z->data, &size);
-  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    buff = z->reader(L, z->data, &size);
+  } LUAI_TRY_FINALLY(L) {
+    lua_lock(L);
+  } LUAI_TRY_END(L);
   if (buff == NULL || size == 0) return EOZ;
   z->n = size - 1;
   z->p = buff;

@@ -182,6 +182,35 @@ static inline void setttype(TValue *obj, lu_byte tt)
 #define getstr(ts)	cast(const char *, ((TString*)ts) + 1)
 #define svalue(o)       getstr(rawtsvalue(o))
 
+/* chain list of long jump buffers */
+struct lua_longjmp {
+  struct lua_longjmp *previous;
+  luai_jmpbuf b;
+  volatile int status;  /* error code */
+};
+
+/* NOTE: undefined (certainly bad!) behavior will result if the function
+ * returns from within the TRY/FINALLY block handling */
+#define LUAI_TRY_BLOCK(L) do { \
+  struct lua_longjmp lj; \
+  lj.status = 0; \
+  lj.previous = (L)->errorJmp; \
+  (L)->errorJmp = &lj; \
+  if (setjmp(lj.b) == 0) {
+
+#define LUAI_TRY_FINALLY(L) \
+  }
+
+#define LUAI_TRY_END(L) \
+  (L)->errorJmp = lj.previous; \
+  if (lj.status) { \
+    luaD_throw((L), lj.status); \
+  } \
+} while(0)
+
+#define LUAI_TRY_CATCH(L) \
+  } \
+  if (lj.status -= lj.status)
 
 #ifdef __cplusplus
 extern "C" {

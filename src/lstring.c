@@ -104,26 +104,27 @@ TString *luaS_newlstr (lua_State *L, const char *str, size_t l) {
   size_t step = (l>>5)+1;  /* if string is too long, don't hash all its chars */
   size_t l1;
   thr_State *pt = get_per_thread(G(L));
-  TString *ts;
+  TString *ts = NULL;
 
   for (l1=l; l1>=step; l1-=step)  /* compute hash */
     h = h ^ ((h<<5)+(h>>2)+cast(unsigned char, str[l1-1]));
   strt_lock(L, &pt->strt);
-  for (o = pt->strt.hash[lmod(h, pt->strt.size)];
-       o != NULL;
-       o = o->next) {
-    TString *ts = o->str;
-    if (ts->tsv.len == l && (memcmp(str, getstr(ts), l) == 0)) {
-#if 0
-      /* string may be dead */
-      if (isdead(G(L), o)) changewhite(o);
-#endif
-      strt_unlock(L, &pt->strt);
-      return ts;
+  LUAI_TRY_BLOCK(L) {
+    for (o = pt->strt.hash[lmod(h, pt->strt.size)];
+        o != NULL;
+        o = o->next) {
+      ts = o->str;
+      if (ts->tsv.len == l && (memcmp(str, getstr(ts), l) == 0)) {
+        break;
+      }
+      ts = NULL;
     }
-  }
-  ts = newlstr(L, str, l, h);  /* not found */
-  strt_unlock(L, &pt->strt);
+    if (ts == NULL) {
+      ts = newlstr(L, str, l, h);  /* not found */
+    }
+  } LUAI_TRY_FINALLY(L) {
+    strt_unlock(L, &pt->strt);
+  } LUAI_TRY_END(L);
   return ts;
 }
 

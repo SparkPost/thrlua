@@ -64,21 +64,24 @@ LUA_API int lua_getstack (lua_State *L, int level, lua_Debug *ar) {
   int status;
   CallInfo *ci;
   lua_lock(L);
-  for (ci = L->ci; level > 0 && ci > L->base_ci; ci--) {
-    level--;
-    if (f_isLua(ci))  /* Lua function? */
-      level -= ci->tailcalls;  /* skip lost tail calls */
-  }
-  if (level == 0 && ci > L->base_ci) {  /* level found? */
-    status = 1;
-    ar->i_ci = cast_int(ci - L->base_ci);
-  }
-  else if (level < 0) {  /* level is of a lost tail call? */
-    status = 1;
-    ar->i_ci = 0;
-  }
-  else status = 0;  /* no such level */
-  lua_unlock(L);
+  LUAI_TRY_BLOCK(L) {
+    for (ci = L->ci; level > 0 && ci > L->base_ci; ci--) {
+      level--;
+      if (f_isLua(ci))  /* Lua function? */
+        level -= ci->tailcalls;  /* skip lost tail calls */
+    }
+    if (level == 0 && ci > L->base_ci) {  /* level found? */
+      status = 1;
+      ar->i_ci = cast_int(ci - L->base_ci);
+    }
+    else if (level < 0) {  /* level is of a lost tail call? */
+      status = 1;
+      ar->i_ci = 0;
+    }
+    else status = 0;  /* no such level */
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return status;
 }
 
@@ -107,9 +110,12 @@ LUA_API const char *lua_getlocal (lua_State *L, const lua_Debug *ar, int n) {
   CallInfo *ci = L->base_ci + ar->i_ci;
   const char *name = findlocal(L, ci, n);
   lua_lock(L);
-  if (name)
+  LUAI_TRY_BLOCK(L) {
+    if (name)
       luaA_pushobject(L, ci->base + (n - 1));
-  lua_unlock(L);
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return name;
 }
 
@@ -118,10 +124,13 @@ LUA_API const char *lua_setlocal (lua_State *L, const lua_Debug *ar, int n) {
   CallInfo *ci = L->base_ci + ar->i_ci;
   const char *name = findlocal(L, ci, n);
   lua_lock(L);
-  if (name)
+  LUAI_TRY_BLOCK(L) {
+    if (name)
       setobjs2s(L, ci->base + (n - 1), L->top - 1);
-  L->top--;  /* pop value */
-  lua_unlock(L);
+    L->top--;  /* pop value */
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return name;
 }
 
@@ -163,10 +172,13 @@ static void collectvalidlines (lua_State *L, Closure *f) {
     int i;
 
     luaH_wrlock(G(L), t);
-    for (i=0; i<f->l.p->sizelineinfo; i++)
-      setbvalue(luaH_setnum(L, t, lineinfo[i]), 1);
-    sethvalue(L, L->top, t); 
-    luaH_unlock(G(L), t);
+    LUAI_TRY_BLOCK(L) {
+      for (i=0; i<f->l.p->sizelineinfo; i++)
+        setbvalue(luaH_setnum(L, t, lineinfo[i]), 1);
+      sethvalue(L, L->top, t);
+    } LUAI_TRY_FINALLY(L) {
+      luaH_unlock(G(L), t);
+    } LUAI_TRY_END(L);
   }
   incr_top(L);
 }
@@ -216,27 +228,30 @@ LUA_API int lua_getinfo (lua_State *L, const char *what, lua_Debug *ar) {
   Closure *f = NULL;
   CallInfo *ci = NULL;
   lua_lock(L);
-  if (*what == '>') {
-    StkId func = L->top - 1;
-    luai_apicheck(L, ttisfunction(func));
-    what++;  /* skip the '>' */
-    f = clvalue(func);
-    L->top--;  /* pop function */
-  }
-  else if (ar->i_ci != 0) {  /* no tail call? */
-    ci = L->base_ci + ar->i_ci;
-    lua_assert(ttisfunction(ci->func));
-    f = clvalue(ci->func);
-  }
-  status = auxgetinfo(L, what, ar, f, ci);
-  if (strchr(what, 'f')) {
-    if (f == NULL) setnilvalue(L->top);
-    else setclvalue(L, L->top, f);
-    incr_top(L);
-  }
-  if (strchr(what, 'L'))
-    collectvalidlines(L, f);
-  lua_unlock(L);
+  LUAI_TRY_BLOCK(L) {
+    if (*what == '>') {
+      StkId func = L->top - 1;
+      luai_apicheck(L, ttisfunction(func));
+      what++;  /* skip the '>' */
+      f = clvalue(func);
+      L->top--;  /* pop function */
+    }
+    else if (ar->i_ci != 0) {  /* no tail call? */
+      ci = L->base_ci + ar->i_ci;
+      lua_assert(ttisfunction(ci->func));
+      f = clvalue(ci->func);
+    }
+    status = auxgetinfo(L, what, ar, f, ci);
+    if (strchr(what, 'f')) {
+      if (f == NULL) setnilvalue(L->top);
+      else setclvalue(L, L->top, f);
+      incr_top(L);
+    }
+    if (strchr(what, 'L'))
+      collectvalidlines(L, f);
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return status;
 }
 

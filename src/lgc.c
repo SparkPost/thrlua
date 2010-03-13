@@ -428,7 +428,7 @@ static void mark_object(global_State *g, GCheader *o)
 
             luaH_rdlock(g, h);
             if (h->metatable) {
-              o_push(g, &g->mark_set, (GCheader*)h->metatable);
+              o_push(g, &g->mark_set, h->metatable);
             }
             mode = gfasttm(g, gch2h(h->metatable), TM_MODE);
             if (mode && ttisstring(mode)) {
@@ -622,7 +622,10 @@ static void finalize(global_State *g)
         setuvalue(L, L->top + 1, ud);
         L->top += 2;
         lua_lock(L);
-        luaD_call(L, L->top - 2, 0);
+        LUAI_TRY_BLOCK(L) {
+          luaD_call(L, L->top - 2, 0);
+        } LUAI_TRY_CATCH(L) {
+        } LUAI_TRY_END(L);
         lua_unlock(L);
       }
     }

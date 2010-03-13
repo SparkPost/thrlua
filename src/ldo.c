@@ -16,14 +16,6 @@
 */
 
 
-/* chain list of long jump buffers */
-struct lua_longjmp {
-  struct lua_longjmp *previous;
-  luai_jmpbuf b;
-  volatile int status;  /* error code */
-};
-
-
 void luaD_seterrorobj (lua_State *L, int errcode, StkId oldtop) {
   switch (errcode) {
     case LUA_ERRMEM: {
@@ -176,8 +168,11 @@ void luaD_callhook (lua_State *L, int event, int line) {
     lua_assert(L->ci->top <= L->stack_last);
     L->allowhook = 0;  /* cannot call hooks inside a hook */
     lua_unlock(L);
-    (*hook)(L, &ar);
-    lua_lock(L);
+    LUAI_TRY_BLOCK(L) {
+      (*hook)(L, &ar);
+    } LUAI_TRY_FINALLY(L) {
+      lua_lock(L);
+    } LUAI_TRY_END(L);
     lua_assert(!L->allowhook);
     L->allowhook = 1;
     L->ci->top = restorestack(L, ci_top);
@@ -200,11 +195,14 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
     luaC_checkGC(L);
     htab = luaH_new(L, nvar, 1);  /* create `arg' table */
     luaH_wrlock(G(L), htab);
-    for (i=0; i<nvar; i++)  /* put extra arguments into `arg' table */
-      setobj2n(L, luaH_setnum(L, htab, i+1), L->top - nvar + i);
-    /* store counter in field `n' */
-    setnvalue(luaH_setstr(L, htab, luaS_newliteral(L, "n")), cast_num(nvar));
-    luaH_unlock(G(L), htab);
+    LUAI_TRY_BLOCK(L) {
+      for (i=0; i<nvar; i++)  /* put extra arguments into `arg' table */
+        setobj2n(L, luaH_setnum(L, htab, i+1), L->top - nvar + i);
+      /* store counter in field `n' */
+      setnvalue(luaH_setstr(L, htab, luaS_newliteral(L, "n")), cast_num(nvar));
+    } LUAI_TRY_FINALLY(L) {
+      luaH_unlock(G(L), htab);
+    } LUAI_TRY_END(L);
   }
 #endif
   /* move fixed parameters to final position */
@@ -299,8 +297,11 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
     if (L->hookmask & LUA_MASKCALL)
       luaD_callhook(L, LUA_HOOKCALL, -1);
     lua_unlock(L);
-    n = (*curr_func(L)->c.f)(L);  /* do the actual call */
-    lua_lock(L);
+    LUAI_TRY_BLOCK(L) {
+      n = (*curr_func(L)->c.f)(L);  /* do the actual call */
+    } LUAI_TRY_FINALLY(L) {
+      lua_lock(L);
+    } LUAI_TRY_END(L);
     if (n < 0)  /* yielding? */
       return PCRYIELD;
     else {
@@ -392,43 +393,55 @@ static int resume_error (lua_State *L, const char *msg) {
   L->top = L->ci->base;
   setsvalue2s(L, L->top, luaS_new(L, msg));
   incr_top(L);
-  lua_unlock(L);
   return LUA_ERRRUN;
 }
 
 
 LUA_API int lua_resume (lua_State *L, int nargs) {
   int status;
+  const char *reserr = NULL;
+
   lua_lock(L);
-  if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci))
-      return resume_error(L, "cannot resume non-suspended coroutine");
-  if (L->nCcalls >= LUAI_MAXCCALLS)
-    return resume_error(L, "C stack overflow");
-  lua_assert(L->errfunc == 0);
-  L->baseCcalls = ++L->nCcalls;
-  status = luaD_rawrunprotected(L, resume, L->top - nargs);
-  if (status != 0) {  /* error? */
-    L->status = cast_byte(status);  /* mark thread as `dead' */
-    luaD_seterrorobj(L, status, L->top);
-    L->ci->top = L->top;
+  LUAI_TRY_BLOCK(L) {
+  if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci)) {
+    reserr = "cannot resume non-suspended coroutine";
+  } else if (L->nCcalls >= LUAI_MAXCCALLS) {
+    reserr = "C stack overflow";
   }
-  else {
-    lua_assert(L->nCcalls == L->baseCcalls);
-    status = L->status;
+  if (reserr) {
+    status = resume_error(L, reserr);
+  } else {
+    lua_assert(L->errfunc == 0);
+    L->baseCcalls = ++L->nCcalls;
+    status = luaD_rawrunprotected(L, resume, L->top - nargs);
+    if (status != 0) {  /* error? */
+      L->status = cast_byte(status);  /* mark thread as `dead' */
+      luaD_seterrorobj(L, status, L->top);
+      L->ci->top = L->top;
+    }
+    else {
+      lua_assert(L->nCcalls == L->baseCcalls);
+      status = L->status;
+    }
+    --L->nCcalls;
   }
-  --L->nCcalls;
-  lua_unlock(L);
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return status;
 }
 
 
 LUA_API int lua_yield (lua_State *L, int nresults) {
   lua_lock(L);
-  if (L->nCcalls > L->baseCcalls)
-    luaG_runerror(L, "attempt to yield across metamethod/C-call boundary");
-  L->base = L->top - nresults;  /* protect stack slots below */
-  L->status = LUA_YIELD;
-  lua_unlock(L);
+  LUAI_TRY_BLOCK(L) {
+    if (L->nCcalls > L->baseCcalls)
+      luaG_runerror(L, "attempt to yield across metamethod/C-call boundary");
+    L->base = L->top - nresults;  /* protect stack slots below */
+    L->status = LUA_YIELD;
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
   return -1;
 }
 

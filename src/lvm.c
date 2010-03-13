@@ -93,18 +93,27 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
       const TValue *res;
+      int done;
 
       luaH_rdlock(G(L), h);
-      res = luaH_get(h, key); /* do a primitive get */
-      if (!ttisnil(res) ||  /* result is no nil? */
-          (tm = fasttm(L, gch2h(h->metatable), TM_INDEX)) == NULL) {
-        /* or no TM? */
-        setobj2s(L, val, res);
+      LUAI_TRY_BLOCK(L) {
+        res = luaH_get(h, key); /* do a primitive get */
+        if (!ttisnil(res) ||  /* result is no nil? */
+            (tm = fasttm(L, gch2h(h->metatable), TM_INDEX)) == NULL) {
+          /* or no TM? */
+          setobj2s(L, val, res);
+          /* will return out of the loop after we have unlocked below */
+          done = 1;
+        } else {
+          /* will try the tag method */
+          done = 0;
+        }
+      } LUAI_TRY_FINALLY(L) {
         luaH_unlock(G(L), h);
+      } LUAI_TRY_END(L);
+      if (done) {
         return;
       }
-      /* else will try the tag method */
-      luaH_unlock(G(L), h);
     }
     else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_INDEX)))
       luaG_typeerror(L, t, "index");
@@ -127,20 +136,26 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
       TValue *oldval;
+      int done;
 
       luaH_wrlock(G(L), h);
-      oldval = luaH_set(L, h, key); /* do a primitive set */
-      if (!ttisnil(oldval) ||  /* result is no nil? */
-          (tm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX)) == NULL) {
-        /* or no TM? */
-        luaC_writebarriervv(G(L), &h->gch, oldval, val);
-//        setobj2t(L, oldval, val);
-//        luaC_barriert(L, h, val);
+      LUAI_TRY_BLOCK(L) {
+        oldval = luaH_set(L, h, key); /* do a primitive set */
+        if (!ttisnil(oldval) ||  /* result is no nil? */
+            (tm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX)) == NULL) {
+          /* or no TM? */
+          luaC_writebarriervv(G(L), &h->gch, oldval, val);
+          done = 1;
+        } else {
+          /* else will try the tag method */
+          done = 0;
+        }
+      } LUAI_TRY_FINALLY(L) {
         luaH_unlock(G(L), h);
+      } LUAI_TRY_END(L);
+      if (done) {
         return;
       }
-      /* else will try the tag method */
-      luaH_unlock(G(L), h);
     }
     else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_NEWINDEX)))
       luaG_typeerror(L, t, "index");
@@ -605,8 +620,11 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           case LUA_TTABLE: {
             Table *t = hvalue(rb);
             luaH_rdlock(G(L), t);
-            setnvalue(ra, cast_num(luaH_getn(t)));
-            luaH_unlock(G(L), t);
+            LUAI_TRY_BLOCK(L) {
+              setnvalue(ra, cast_num(luaH_getn(t)));
+            } LUAI_TRY_FINALLY(L) {
+              luaH_unlock(G(L), t);
+            } LUAI_TRY_END(L);
             break;
           }
           case LUA_TSTRING: {
@@ -799,16 +817,17 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         h = hvalue(ra);
         last = ((c-1)*LFIELDS_PER_FLUSH) + n;
         luaH_wrlock(G(L), h);
-        if (last > h->sizearray)  /* needs more space? */
-          luaH_resizearray(L, h, last);  /* pre-alloc it at once */
-        for (; n > 0; n--) {
-          TValue *val = ra+n;
-          TValue *src = luaH_setnum(L, h, last--);
-          luaC_writebarriervv(G(L), &h->gch, src, val);
-//          setobj2t(L, luaH_setnum(L, h, last--), val);
-//          luaC_barriert(L, h, val);
-        }
-        luaH_unlock(G(L), h);
+        LUAI_TRY_BLOCK(L) {
+          if (last > h->sizearray)  /* needs more space? */
+            luaH_resizearray(L, h, last);  /* pre-alloc it at once */
+          for (; n > 0; n--) {
+            TValue *val = ra+n;
+            TValue *src = luaH_setnum(L, h, last--);
+            luaC_writebarriervv(G(L), &h->gch, src, val);
+          }
+        } LUAI_TRY_FINALLY(L) {
+          luaH_unlock(G(L), h);
+        } LUAI_TRY_END(L);
         continue;
       }
       case OP_CLOSE: {
