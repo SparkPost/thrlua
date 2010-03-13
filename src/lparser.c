@@ -169,7 +169,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   int oldsize = f->sizeupvalues;
   for (i=0; i<f->nups; i++) {
     if (fs->upvalues[i].k == v->k && fs->upvalues[i].info == v->u.s.info) {
-      lua_assert((TString*)f->upvalues[i] == name);
+      lua_assert(luaV_strcmp((TString*)f->upvalues[i], name) == 0);
       return i;
     }
   }
@@ -180,8 +180,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL;
   luaC_writebarrier(G(fs->L), &f->gch,
     &f->upvalues[f->nups], &name->tsv.gch);
-//  f->upvalues[f->nups] = name;
-//  luaC_objbarrier(fs->L, f, name);
+
   lua_assert(v->k == VLOCAL || v->k == VUPVAL);
   fs->upvalues[f->nups].k = cast_byte(v->k);
   fs->upvalues[f->nups].info = cast_byte(v->u.s.info);
@@ -1340,3 +1339,5 @@ static void chunk (LexState *ls) {
 }
 
 /* }====================================================================== */
+/* vim:ts=2:sw=2:et:
+ */

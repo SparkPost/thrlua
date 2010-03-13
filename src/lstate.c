@@ -97,9 +97,6 @@ lua_State *luaE_newthread (lua_State *L) {
 
 
 void luaE_freethread (lua_State *L, lua_State *L1) {
-#if HAVE_VALGRIND
-  VALGRIND_PRINTF_BACKTRACE("freeing thread at %p\n", L1);
-#endif
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(L, L1);

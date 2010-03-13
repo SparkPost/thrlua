@@ -178,7 +178,7 @@ static inline void setttype(TValue *obj, lu_byte tt)
 }
 
 
-#define getstr(ts)	cast(const char *, (ts) + 1)
+#define getstr(ts)	cast(const char *, ((TString*)ts) + 1)
 #define svalue(o)       getstr(rawtsvalue(o))
 
 

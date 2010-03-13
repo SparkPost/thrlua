@@ -105,9 +105,6 @@ LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
   lua_newtable(L);  /* create metatable */
   lua_pushvalue(L, -1);
   lua_setfield(L, LUA_REGISTRYINDEX, tname);  /* registry.name = metatable */
-#if HAVE_VALGRIND
-  VALGRIND_PRINTF_BACKTRACE("metatable %s is table at %p\n", tname, hvalue(L->top));
-#endif
   return 1;
 }
 

@@ -6,6 +6,7 @@
 
 #define lgc_c
 #define LUA_CORE
+#define DEBUG_ALLOC 0
 
 #include "thrlua.h"
 
@@ -39,7 +40,6 @@ static inline void append_list(GCheader *head, GCheader *obj)
 static void walk_gch_list(global_State *g, GCheader *list, const char *caption)
 {
   GCheader *o;
-return;
   printf("%s\n", caption);
   printf("head=%p head->next=%p head->prev=%p\n", list, list->next, list->prev);
   for (o = list->next; o != list; o = o->next) {
@@ -418,9 +418,6 @@ static void mark_object(global_State *g, GCheader *o)
           {
             UpVal *uv = gco2uv(o);
             mark_value(g, uv->v);
-            if (uv->v == &uv->u.value) {
-              /* FIXME: open upvalues are never black? */
-            }
             break;
           }
         case LUA_TTABLE:
@@ -445,11 +442,6 @@ static void mark_object(global_State *g, GCheader *o)
             while (i--) {
               /* strings are never weak */
               if (!weakvalue || ttisstring(&h->array[i])) {
-#if HAVE_VALGRIND
-                if (h == hvalue(&g->l_registry)) {
-                  VALGRIND_PRINTF_BACKTRACE("marking registry item %d\n", i);
-                }
-#endif
                 mark_value(g, &h->array[i]);
               }
             }
@@ -457,20 +449,16 @@ static void mark_object(global_State *g, GCheader *o)
             while (i--) {
               Node *n = gnode(h, i);
 
-              if (!ttisnil(gval(n))) {
-                lua_assert(!ttisnil(gkey(n)));
+              if (!ttisnil(gkey(n))) {
                 /* strings are never weak */
                 if (!weakkey || ttisstring(gkey(n))) {
                   mark_value(g, key2tval(n));
                 }
+              }
+              if (!ttisnil(gval(n))) {
                 /* strings are never weak */
                 if (!weakvalue || ttisstring(gval(n))) {
                   mark_value(g, gval(n));
-#if HAVE_VALGRIND
-                  if (h == hvalue(&g->l_registry)) {
-                    VALGRIND_PRINTF_BACKTRACE("marking registry item keyed by %s value %s:%p\n", lua_typename(NULL, gkey(n)->tt), lua_typename(NULL, gval(n)->tt), gcvalue(gval(n)));
-                  }
-#endif
                 }
               }
             }
@@ -483,14 +471,16 @@ static void mark_object(global_State *g, GCheader *o)
             Closure *cl = gco2cl(o);
 
             if (cl->c.isC) {
+              o_push(g, &g->mark_set, cl->c.env);
               for (i = 0; i < cl->c.nupvalues; i++) {
                 mark_value(g, &cl->c.upvalue[i]);
               }
             } else {
               lua_assert(cl->l.nupvalues == cl->l.p->nups);
-              o_push(g, &g->mark_set, (GCheader*)cl->l.p);
+              o_push(g, &g->mark_set, &cl->l.p->gch);
+              o_push(g, &g->mark_set, cl->l.env);
               for (i = 0; i < cl->l.nupvalues; i++) {
-                o_push(g, &g->mark_set, (GCheader*)cl->l.upvals[i]);
+                o_push(g, &g->mark_set, &cl->l.upvals[i]->gch);
               }
             }
             break;
@@ -502,7 +492,8 @@ static void mark_object(global_State *g, GCheader *o)
             UpVal *uv;
 
             /* FIXME: lock */
-            mark_value(g, gt(th));
+            mark_value(g, &th->l_gt);
+            mark_value(g, &th->env);
             /* the corresponding global state */
             lua_assert(g == th->l_G);
             o_push(g, &g->mark_set, (GCheader*)th->l_G);
@@ -514,11 +505,6 @@ static void mark_object(global_State *g, GCheader *o)
                 uv != &th->openupval; uv = uv->u.l.next) {
               o_push(g, &g->mark_set, (GCheader*)uv);
             }
-            if (iscollectable(&th->l_gt)) {
-//              printf("*** adding thread globals\n");
-              o_push(g, &g->mark_set, &hvalue(&th->l_gt)->gch);
-            }
-
             break;
           }
         case LUA_TPROTO:
@@ -526,51 +512,43 @@ static void mark_object(global_State *g, GCheader *o)
             Proto *f = gco2p(o);
 
             if (f->source) {
-              o_push(g, &g->mark_set, (GCheader*)f->source);
+              o_push(g, &g->mark_set, &f->source->tsv.gch);
             }
             for (i = 0; i < f->sizek; i++) {
               mark_value(g, &f->k[i]);
             }
             for (i = 0; i < f->sizeupvalues; i++) {
               if (f->upvalues[i]) {
-                o_push(g, &g->mark_set, (GCheader*)f->upvalues[i]);
+                o_push(g, &g->mark_set, f->upvalues[i]);
               }
             }
             for (i = 0; i < f->sizep; i++) {
               if (f->p[i]) {
-                o_push(g, &g->mark_set, (GCheader*)f->p[i]);
+                o_push(g, &g->mark_set, &f->p[i]->gch);
               }
             }
             for (i = 0; i < f->sizelocvars; i++) {
               if (f->locvars[i].varname) {
-                o_push(g, &g->mark_set, (GCheader*)f->locvars[i].varname);
+                o_push(g, &g->mark_set, f->locvars[i].varname);
               }
             }
             break;
           }
         case LUA_TGLOBAL:
-          o_push(g, &g->mark_set, (GCheader*)g->memerr);
+          o_push(g, &g->mark_set, &g->memerr->tsv.gch);
           for (i = 0; i < NUM_TAGS; i++) {
             if (g->mt[i]) {
-              o_push(g, &g->mark_set, (GCheader*)g->mt[i]);
+              o_push(g, &g->mark_set, &g->mt[i]->gch);
             }
           }
           for (i = 0; i < TM_N; i++) {
             if (g->tmname[i]) {
-              o_push(g, &g->mark_set, (GCheader*)g->tmname[i]);
+              o_push(g, &g->mark_set, &g->tmname[i]->tsv.gch);
             }
           }
-          if (iscollectable(&g->l_registry)) {
-//            printf("*** adding registry\n");
-#if HAVE_VALGRIND
-            VALGRIND_PRINTF_BACKTRACE("g->l_registry = %p\n", hvalue(&g->l_registry));
-#endif
-            o_push(g, &g->mark_set, &hvalue(&g->l_registry)->gch);
-          }
-          if (iscollectable(&g->l_globals)) {
-//            printf("*** adding globals\n");
-            o_push(g, &g->mark_set, &hvalue(&g->l_globals)->gch);
-          }
+          mark_value(g, &g->l_registry);
+          mark_value(g, &g->l_globals);
+          o_push(g, &g->mark_set, &g->mainthread->gch);
           break;
 
         default:
@@ -646,13 +624,15 @@ static void finalize(global_State *g)
     }
   }
 
+#if DEBUG_ALLOC
   walk_gch_list(g, &g->to_finalize, "to_finalize");
+#endif
   while (g->to_finalize.next != &g->to_finalize) {
     o = g->to_finalize.next;
     lua_assert(o != NULL);
     unlink_list(o);
 
-#if HAVE_VALGRIND
+#if HAVE_VALGRIND && DEBUG_ALLOC
     VALGRIND_PRINTF_BACKTRACE("finalize %s at %p\n",
       lua_typename(NULL, o->tt), o);
 #endif
@@ -997,7 +977,7 @@ static void *collector(void *ptr)
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
-    deadline.tv_sec = time(NULL) + 61;
+    deadline.tv_sec = time(NULL) + 1;
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
     if (ret == 0 || ret == ETIMEDOUT) {
@@ -1007,7 +987,7 @@ static void *collector(void *ptr)
       /* let the exiting thread do the final collection */
       return 0;
     }
-    collect_all(g);
+//    collect_all(g);
   }
   return 0;
 }
@@ -1145,7 +1125,7 @@ void *luaC_newobj(global_State *g, lu_byte tt)
       abort();
       return NULL;
   }
-#if HAVE_VALGRIND
+#if HAVE_VALGRIND && DEBUG_ALLOC
   VALGRIND_PRINTF_BACKTRACE("new %s at %p\n",
     lua_typename(NULL, o->tt), o);
 #endif
@@ -1177,7 +1157,7 @@ void *luaC_newobjv(global_State *g, lu_byte tt, size_t size)
       abort();
       return NULL;
   }
-#if HAVE_VALGRIND
+#if HAVE_VALGRIND && DEBUG_ALLOC
   VALGRIND_PRINTF_BACKTRACE("new %s of size %d at %p\n",
     lua_typename(NULL, tt), size, o);
 #endif
@@ -1235,8 +1215,10 @@ LUA_API void lua_close (lua_State *L)
     append_list(&g->to_finalize, pt->olist.next);
   }
   finalize(g);
+#if DEBUG_ALLOC
   walk_gch_list(g, &g->the_heap, "the heap");
   walk_gch_list(g, &pt->olist, "olist");
+#endif
 
   pthread_setspecific(g->tls_key, NULL);
   tls_dtor(pt);

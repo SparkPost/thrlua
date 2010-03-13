@@ -130,11 +130,7 @@ static int io_close (lua_State *L) {
 
 
 static int io_gc (lua_State *L) {
-  FILE *f;
-#if HAVE_VALGRIND
-  VALGRIND_PRINTF_BACKTRACE("io_gc invoked\n");
-#endif
-  f = *tofilep(L);
+  FILE *f = *tofilep(L);
   /* ignore closed files */
   if (f != NULL)
     aux_close(L);

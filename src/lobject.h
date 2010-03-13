@@ -49,15 +49,6 @@ static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
 #define LUA_TDEADKEY	(LAST_TAG+3)
 #define LUA_TGLOBAL (LAST_TAG+4)
 
-
-#if 0
-/*
-** Union of all collectable objects
-*/
-typedef union GCObject GCObject;
-#endif
-
-
 /*
 ** Common Header for all collectable objects (in macro form, to be
 ** included in other objects)
@@ -188,7 +179,6 @@ typedef struct Proto {
   int sizelocvars;
   int linedefined;
   int lastlinedefined;
-//  GCObject *gclist;
   lu_byte nups;  /* number of upvalues */
   lu_byte numparams;
   lu_byte is_vararg;

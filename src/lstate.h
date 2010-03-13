@@ -145,9 +145,6 @@ struct global_State {
   int gcpause;  /* size of pause between successive GCs */
   int gcstepmul;  /* GC `granularity' */
   struct lua_State *mainthread;
-#if 0
-  UpVal uvhead;  /* head of double-linked list of all open upvalues */
-#endif
 };
 
 LUAI_FUNC thr_State *luaC_init_pt(global_State *g);
@@ -195,23 +192,6 @@ struct lua_State {
 
 
 #define G(L)	(L->l_G)
-
-#if 0
-/*
-** Union of all collectable objects
-*/
-union GCObject {
-  GCheader gch;
-  union TString ts;
-  union Udata u;
-  union Closure cl;
-  struct Table h;
-  struct Proto p;
-  struct UpVal uv;
-  struct lua_State th;  /* thread */
-};
-
-#endif
 
 /* macros to convert a GCheader into a specific value */
 #define rawgco2ts(o)	check_exp((o)->tt == LUA_TSTRING, (TString*)(o))
