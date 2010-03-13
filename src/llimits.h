@@ -94,8 +94,8 @@ typedef uint32_t Instruction;
 
 
 #ifndef lua_lock
-#define lua_lock(L)     ((void) 0) 
-#define lua_unlock(L)   ((void) 0)
+#define lua_lock(L)     pthread_mutex_lock(&L->lock)
+#define lua_unlock(L)   pthread_mutex_unlock(&L->lock)
 #endif
 
 #ifndef luai_threadyield

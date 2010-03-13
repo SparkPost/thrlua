@@ -290,7 +290,7 @@ void luaV_concat (lua_State *L, int total, int last) {
       size_t tl = tsvalue(top-1)->len;
       char *buffer;
       int i;
-      thr_State *pt = getpt(G(L));
+      thr_State *pt = get_per_thread(G(L));
 
       /* collect total length */
       for (n = 1; n < total && tostring(L, top-n-1); n++) {

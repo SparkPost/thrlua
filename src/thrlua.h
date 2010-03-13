@@ -12,6 +12,7 @@
 #ifndef THRLUA_H
 #define THRLUA_H
 
+#define _GNU_SOURCE
 #include "luaconf.h"
 
 #define LUA_ASSERTIONS 1

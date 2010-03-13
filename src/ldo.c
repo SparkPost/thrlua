@@ -70,6 +70,9 @@ static void resetstack (lua_State *L, int status) {
 void luaD_throw (lua_State *L, int errcode) {
   if (L->errorJmp) {
     L->errorJmp->status = errcode;
+#if HAVE_VALGRIND
+    VALGRIND_PRINTF_BACKTRACE("throwing errcode=%d\n", errcode);
+#endif
     LUAI_THROW(L, L->errorJmp);
   }
   else {

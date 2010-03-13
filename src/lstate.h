@@ -148,7 +148,7 @@ struct global_State {
 };
 
 LUAI_FUNC thr_State *luaC_init_pt(global_State *g);
-static inline thr_State *getpt(global_State *g)
+static inline thr_State *get_per_thread(global_State *g)
 {
   thr_State *pt = pthread_getspecific(g->tls_key);
   if (pt == NULL) {
@@ -165,6 +165,7 @@ static inline thr_State *getpt(global_State *g)
 struct lua_State {
   GCheader gch;
   lu_byte status;
+  pthread_mutex_t lock;
   StkId top;  /* first free slot in the stack */
   StkId base;  /* base of current function */
   global_State *l_G;

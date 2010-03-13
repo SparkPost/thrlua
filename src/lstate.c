@@ -54,11 +54,18 @@ static void f_luaopen (lua_State *L, void *ud) {
 
 static void preinit_state (lua_State *L, global_State *g)
 {
+  pthread_mutexattr_t mattr;
+
   G(L) = g;
   L->allowhook = 1;
   L->openupval.u.l.prev = &L->openupval;
   L->openupval.u.l.next = &L->openupval;
   setnilvalue(gt(L));
+
+  pthread_mutexattr_init(&mattr);
+  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutex_init(&L->lock, &mattr);
+  pthread_mutexattr_destroy(&mattr);
 }
 
 
@@ -100,6 +107,7 @@ void luaE_freethread (lua_State *L, lua_State *L1) {
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(L, L1);
+  pthread_mutex_destroy(&L1->lock);
   luaM_freemem(L, L1, sizeof(lua_State));
 }
 

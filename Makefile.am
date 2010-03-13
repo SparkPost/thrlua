@@ -17,7 +17,7 @@ noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-libthrlua_la_LDFLAGS = -lpthread -ldl -lm
+libthrlua_la_LDFLAGS = -lpthread -lm
 libthrlua_la_SOURCES = \
 	src/lapi.c src/lcode.c src/ldebug.c src/ldo.c src/ldump.c src/lfunc.c \
 	src/lgc.c src/llex.c src/lmem.c src/lobject.c src/lopcodes.c \

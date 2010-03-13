@@ -348,9 +348,11 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
     case LUA_TUSERDATA: return uvalue(o)->len;
     case LUA_TTABLE: {
       size_t n;
-      luaH_rdlock(G(L), hvalue(o));
-      n = luaH_getn(hvalue(o));
-      luaH_unlock(G(L), hvalue(o));
+      Table *table = hvalue(o);
+
+      luaH_rdlock(G(L), table);
+      n = luaH_getn(table);
+      luaH_unlock(G(L), table);
       return n;
     }
     case LUA_TNUMBER: {
@@ -547,24 +549,30 @@ LUA_API void lua_getfield (lua_State *L, int idx, const char *k) {
 
 LUA_API void lua_rawget (lua_State *L, int idx) {
   StkId t;
+  Table *table;
+
   lua_lock(L);
   t = index2adr(L, idx);
   api_check(L, ttistable(t));
-  luaH_rdlock(G(L), hvalue(t));
-  setobj2s(L, L->top - 1, luaH_get(hvalue(t), L->top - 1));
-  luaH_unlock(G(L), hvalue(t));
+  table = hvalue(t);
+  luaH_rdlock(G(L), table);
+  setobj2s(L, L->top - 1, luaH_get(table, L->top - 1));
+  luaH_unlock(G(L), table);
   lua_unlock(L);
 }
 
 
 LUA_API void lua_rawgeti (lua_State *L, int idx, int n) {
   StkId o;
+  Table *table;
+
   lua_lock(L);
   o = index2adr(L, idx);
   api_check(L, ttistable(o));
-  luaH_rdlock(G(L), hvalue(o));
-  setobj2s(L, L->top, luaH_getnum(hvalue(o), n));
-  luaH_unlock(G(L), hvalue(o));
+  table = hvalue(o);
+  luaH_rdlock(G(L), table);
+  setobj2s(L, L->top, luaH_getnum(table, n));
+  luaH_unlock(G(L), table);
   api_incr_top(L);
   lua_unlock(L);
 }
@@ -991,13 +999,16 @@ LUA_API int lua_error (lua_State *L) {
 
 LUA_API int lua_next (lua_State *L, int idx) {
   StkId t;
+  Table *table;
   int more;
+
   lua_lock(L);
   t = index2adr(L, idx);
   api_check(L, ttistable(t));
-  luaH_rdlock(G(L), hvalue(t));
-  more = luaH_next(L, hvalue(t), L->top - 1);
-  luaH_unlock(G(L), hvalue(t));
+  table = hvalue(t);
+  luaH_rdlock(G(L), table);
+  more = luaH_next(L, table, L->top - 1);
+  luaH_unlock(G(L), table);
   if (more) {
     api_incr_top(L);
   }

@@ -41,7 +41,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
 {
   struct stringtable_node **newhash;
   int i;
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
 
   newhash = luaM_reallocG(g, NULL, 0,
               newsize * sizeof(struct stringtable_node *));
@@ -73,7 +73,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   TString *ts;
   stringtable *tb;
   struct stringtable_node *n;
-  thr_State *pt = getpt(G(L));
+  thr_State *pt = get_per_thread(G(L));
 
   if (l+1 > (MAX_SIZET - sizeof(TString))/sizeof(char))
     luaM_toobig(L);
@@ -103,7 +103,7 @@ TString *luaS_newlstr (lua_State *L, const char *str, size_t l) {
   unsigned int h = cast(unsigned int, l);  /* seed */
   size_t step = (l>>5)+1;  /* if string is too long, don't hash all its chars */
   size_t l1;
-  thr_State *pt = getpt(G(L));
+  thr_State *pt = get_per_thread(G(L));
   TString *ts;
 
   for (l1=l; l1>=step; l1-=step)  /* compute hash */

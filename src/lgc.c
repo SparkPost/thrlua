@@ -314,7 +314,7 @@ static void log_object(global_State *g, thr_State *pt, GCheader *o)
 void luaC_writebarrierov(global_State *g, GCheader *object,
   GCheader **lvalue, const TValue *rvalue)
 {
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
   GCheader *ro = gcvalue(rvalue);
 
   pthread_mutex_lock(&pt->handshake);
@@ -333,7 +333,7 @@ void luaC_writebarrierov(global_State *g, GCheader *object,
 void luaC_writebarriervv(global_State *g, GCheader *object,
   TValue *lvalue, const TValue *rvalue)
 {
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
   GCheader *ro = iscollectable(rvalue) ? gcvalue(rvalue) : NULL;
 
   pthread_mutex_lock(&pt->handshake);
@@ -352,7 +352,7 @@ void luaC_writebarriervv(global_State *g, GCheader *object,
 void luaC_writebarrier(global_State *g, GCheader *object,
   GCheader **lvalue, GCheader *rvalue)
 {
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
 
   pthread_mutex_lock(&pt->handshake);
   if (pt->trace && object->marked != pt->alloc_color &&
@@ -492,6 +492,7 @@ static void mark_object(global_State *g, GCheader *o)
             UpVal *uv;
 
             /* FIXME: lock */
+            lua_lock(th);
             mark_value(g, &th->l_gt);
             mark_value(g, &th->env);
             /* the corresponding global state */
@@ -505,6 +506,7 @@ static void mark_object(global_State *g, GCheader *o)
                 uv != &th->openupval; uv = uv->u.l.next) {
               o_push(g, &g->mark_set, (GCheader*)uv);
             }
+            lua_unlock(th);
             break;
           }
         case LUA_TPROTO:
@@ -619,7 +621,9 @@ static void finalize(global_State *g)
         setobj2s(L, L->top, tm);
         setuvalue(L, L->top + 1, ud);
         L->top += 2;
+        lua_lock(L);
         luaD_call(L, L->top - 2, 0);
+        lua_unlock(L);
       }
     }
   }
@@ -963,7 +967,9 @@ static void collect_all(global_State *g)
 
 void luaC_fullgc (lua_State *L)
 {
+  lua_unlock(L);
   collect_all(G(L));
+  lua_lock(L);
 }
 
 /** The collector thread collects every second or when woken up
@@ -977,7 +983,8 @@ static void *collector(void *ptr)
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
-    deadline.tv_sec = time(NULL) + 1;
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += 10;
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
     if (ret == 0 || ret == ETIMEDOUT) {
@@ -987,7 +994,7 @@ static void *collector(void *ptr)
       /* let the exiting thread do the final collection */
       return 0;
     }
-//    collect_all(g);
+    collect_all(g);
   }
   return 0;
 }
@@ -1040,17 +1047,21 @@ static void tls_dtor(void *ptr)
 thr_State *luaC_init_pt(global_State *g)
 {
   thr_State *pt;
+  pthread_mutexattr_t mattr;
 
   pt = calloc(1, sizeof(*pt));
   pt->g = g;
   init_list(&pt->olist);
 
-  pthread_mutex_init(&pt->handshake, NULL);
+  pthread_mutexattr_init(&mattr);
+  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutex_init(&pt->handshake, &mattr);
+  pthread_mutex_init(&pt->strt.lock, &mattr);
+  pthread_mutexattr_destroy(&mattr);
 
   pthread_setspecific(g->tls_key, pt);
   luaZ_initbuffer(NULL, &pt->buff);
 
-  pthread_mutex_init(&pt->strt.lock, NULL);
   pt->strt.hash = luaM_newvector(NULL, MINSTRTABSIZE, struct stringtable_node*);
   memset(pt->strt.hash, 0, MINSTRTABSIZE * sizeof(struct stringtable_node*));
   pt->strt.size = MINSTRTABSIZE;
@@ -1071,6 +1082,8 @@ thr_State *luaC_init_pt(global_State *g)
 global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
 {
   global_State *g;
+  pthread_condattr_t cattr;
+  pthread_mutexattr_t mattr;
 
   g = alloc(ud, NULL, 0, sizeof(*g));
   if (!g) {
@@ -1080,8 +1093,17 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
   g->gch.tt = LUA_TGLOBAL;
  
   pthread_key_create(&g->tls_key, tls_dtor);
-  pthread_cond_init(&g->gc_cond, NULL);
-  pthread_mutex_init(&g->collector_lock, NULL);
+
+  pthread_condattr_init(&cattr);
+  pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+  pthread_cond_init(&g->gc_cond, &cattr);
+  pthread_condattr_destroy(&cattr);
+
+  pthread_mutexattr_init(&mattr);
+  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutex_init(&g->collector_lock, &mattr);
+  pthread_mutexattr_destroy(&mattr);
+
   g->black = 0;
   /* color is implicitly black as we are initialized to zero */
   g->white = 1;
@@ -1102,7 +1124,7 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
 void *luaC_newobj(global_State *g, lu_byte tt)
 {
   GCheader *o;
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
 
   switch (tt) {
 #define NEWIMPL(a, b) \
@@ -1135,7 +1157,7 @@ void *luaC_newobj(global_State *g, lu_byte tt)
 void *luaC_newobjv(global_State *g, lu_byte tt, size_t size)
 {
   GCheader *o = NULL;
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
 
   switch (tt) {
 #undef NEWIMPL
@@ -1172,7 +1194,7 @@ LUA_API void lua_close (lua_State *L)
   global_State *g = G(L);
   GCheader *o, *n;
   Table *reg;
-  thr_State *pt = getpt(g);
+  thr_State *pt = get_per_thread(g);
   unsigned int udata;
   
   /* only the main thread can be closed */
@@ -1183,7 +1205,9 @@ LUA_API void lua_close (lua_State *L)
 
   /* persuade collector to exit */
   g->exiting = 1;
+  pthread_mutex_lock(&g->collector_lock);
   pthread_cond_signal(&g->gc_cond);
+  pthread_mutex_unlock(&g->collector_lock);
   /* wait for collector to exit */
   pthread_join(g->collector_thread, NULL);
   collect_all(g);
