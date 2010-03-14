@@ -4,4 +4,4 @@ DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 RCLUA_CPATH='.libs/?.so'
 RCLUA_PATH='./?.lua;./etc/?.lua'
 export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
-exec valgrind --tool=drd --shared-threshold=10 --exclusive-threshold=800 -v --num-callers=48 --log-file=vg.vg .libs/rclua $*
+exec valgrind --tool=drd --read-var-info=yes --shared-threshold=10 --exclusive-threshold=800 -v --num-callers=48 --log-file=vg.vg .libs/rclua $*

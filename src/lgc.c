@@ -781,17 +781,7 @@ static unsigned int collect(global_State *g)
 
     /* take its object list */
     while (pt->olist.next != &pt->olist) {
-      o = pt->olist.next;
-      unlink_list(o);
-      append_list(&g->the_heap, o);
-#if 0
-      /* insert the list at the head of the heap */
-      pt->olist.prev->next = g->the_heap.next;
-      g->the_heap.next->prev = pt->olist.prev;
-      pt->olist.next->prev = g->the_heap.prev;
-      g->the_heap.prev->next = pt->olist.next;
-      init_list(&pt->olist);
-#endif
+      append_list(&g->the_heap, pt->olist.next);
     }
     pthread_mutex_unlock(&pt->handshake);
 
@@ -1018,13 +1008,9 @@ static void tls_dtor(void *ptr)
   if (pt->next) {
     pt->next->prev = pt->prev;
   }
-  if (pt->olist.next != &pt->olist) {
-    /* insert the list at the head of the heap */
-    pt->olist.prev->next = g->the_heap.next;
-    g->the_heap.next->prev = pt->olist.prev;
-    pt->olist.next->prev = g->the_heap.prev;
-    g->the_heap.prev->next = pt->olist.next;
-    init_list(&pt->olist);
+  /* take its object list */
+  while (pt->olist.next != &pt->olist) {
+    append_list(&g->the_heap, pt->olist.next);
   }
   pthread_mutex_unlock(&g->collector_lock);
 
