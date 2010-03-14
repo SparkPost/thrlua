@@ -2,7 +2,7 @@
 require("Test.More");
 require("pcre");
 
-plan(75);
+plan(76);
 
 matches, e = pcre.match("hello there", "^(\\S+)\\s+(\\S+)$");
 
@@ -110,6 +110,14 @@ res = pcre.replace("the quick lemon quick quick brown",
     return "foo";
   end);
 is(res, "the foo lemon foo foo brown", "callback operated correctly");
+
+error_like(function()
+  pcre.replace("the quick lemon quick quick brown",
+  "(?P<name>qu)ic(k)",
+  function (t)
+    error("checking error handling wrt. leak management");
+  end);
+end, "checking error handling", "error in callback is re-thrown");
 
 res = pcre.split("the quick brown fox", "\\s+");
 is(#res, 4, "split into 4 strings");
