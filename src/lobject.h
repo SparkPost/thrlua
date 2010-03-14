@@ -228,6 +228,7 @@ typedef struct UpVal {
 typedef struct CClosure {
   ClosureHeader;
   lua_CFunction f;
+  const char *fname;
   TValue upvalue[1];
 } CClosure;
 

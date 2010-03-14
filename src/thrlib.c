@@ -10,6 +10,9 @@
 
 #include "thrlua.h"
 
+#define THRLIB_THREAD "thread.thread"
+#define THRLIB_MUTEX  "thread.mutex"
+
 struct thrlib_thread {
   pthread_t osthr;
   int joined;
@@ -50,37 +53,31 @@ static int thrlib_create(lua_State *L)
   lua_pushvalue(L, -1);
   lua_xmove(L, th->L, 1);
 
-  /* FIXME: gc/metatable */
-  luaL_getmetatable(L, "thread");
+  luaL_getmetatable(L, THRLIB_THREAD);
   lua_setmetatable(L, -2);
 
   err = pthread_create(&th->osthr, NULL, thrlib_thread_func, th);
   if (err) {
-    luaL_error(L, "thread.create failed: %d %s", err, strerror(err));
+    return luaL_error(L, "thread.create failed: %d %s", err, strerror(err));
   }
+  return 1;
+}
+
+static int thread_join(lua_State *L)
+{
+  struct thrlib_thread *th = luaL_checkudata(L, 1, THRLIB_THREAD);
+  if (!th->joined) {
+    void *retval = NULL;
+    pthread_join(th->osthr, &retval);
+    th->joined = 1;
+  }
+  lua_pushboolean(L, 1);
   return 1;
 }
 
 static int thread_gc(lua_State *L)
 {
-  struct thrlib_thread *th = luaL_checkudata(L, 1, "thread");
-  if (!th->joined) {
-    void *retval = NULL;
-    pthread_join(th->osthr, &retval);
-    th->joined = 1;
-  }
-  return 0;
-}
-
-static int thread_join(lua_State *L)
-{
-  struct thrlib_thread *th = luaL_checkudata(L, 1, "thread");
-  if (!th->joined) {
-    void *retval = NULL;
-    pthread_join(th->osthr, &retval);
-    th->joined = 1;
-  }
-  return 0;
+  return thread_join(L);
 }
 
 static const luaL_Reg thread_funcs[] = {
@@ -98,20 +95,139 @@ static int thrlib_sleep(lua_State *L)
   return 1;
 }
 
+static int thrlib_mutex_new(lua_State *L)
+{
+  pthread_mutexattr_t mattr;
+  int nargs = lua_gettop(L);
+  pthread_mutex_t *mtx = lua_newuserdata(L, sizeof(*mtx));
+
+  pthread_mutexattr_init(&mattr);
+  LUAI_TRY_BLOCK(L) {
+    lua_Integer t = PTHREAD_MUTEX_ERRORCHECK;
+
+    if (nargs) {
+      t = luaL_checkinteger(L, 1);
+      switch (t) {
+        case PTHREAD_MUTEX_NORMAL:
+        case PTHREAD_MUTEX_RECURSIVE:
+        case PTHREAD_MUTEX_ERRORCHECK:
+          break;
+        default:
+          luaL_argcheck(L, 0, 1,
+            "specify one of thread.MUTEX_NORMAL, "
+            "thread.MUTEX_RECURSIVE or thread.MUTEX_ERRORCHECK");
+      }
+    }
+    pthread_mutexattr_settype(&mattr, t);
+
+    pthread_mutex_init(mtx, &mattr);
+  } LUAI_TRY_FINALLY(L) {
+    pthread_mutexattr_destroy(&mattr);
+  } LUAI_TRY_END(L);
+
+  luaL_getmetatable(L, THRLIB_MUTEX);
+  lua_setmetatable(L, -2);
+
+  return 1;
+}
+
+static int handle_mutex_return(lua_State *L, const char *what, int ret)
+{
+  switch (ret) {
+    case 0:
+      lua_pushboolean(L, 1);
+      return 1;
+
+    case EINVAL:
+    case EDEADLK:
+    case EPERM:
+      return luaL_error(L, "failed to %s mutex: %d %s",
+        what, ret, strerror(ret));
+
+    default:
+      lua_pushinteger(L, ret);
+      return 1;
+  }
+}
+
+static int thrlib_mutex_lock(lua_State *L)
+{
+  pthread_mutex_t *mtx = luaL_checkudata(L, 1, THRLIB_MUTEX);
+  int ret;
+
+  ret = pthread_mutex_lock(mtx);
+
+  return handle_mutex_return(L, "lock", ret);
+}
+
+static int thrlib_mutex_trylock(lua_State *L)
+{
+  pthread_mutex_t *mtx = luaL_checkudata(L, 1, THRLIB_MUTEX);
+  int ret;
+
+  ret = pthread_mutex_trylock(mtx);
+
+  return handle_mutex_return(L, "trylock", ret);
+}
+
+static int thrlib_mutex_unlock(lua_State *L)
+{
+  pthread_mutex_t *mtx = luaL_checkudata(L, 1, THRLIB_MUTEX);
+  int ret;
+
+  ret = pthread_mutex_unlock(mtx);
+
+  return handle_mutex_return(L, "unlock", ret);
+}
+
+static int thrlib_mutex_gc(lua_State *L)
+{
+  pthread_mutex_t *mtx = luaL_checkudata(L, 1, THRLIB_MUTEX);
+
+  pthread_mutex_destroy(mtx);
+
+  return 0;
+}
+
+static const luaL_Reg mutex_funcs[] = {
+  {"lock", thrlib_mutex_lock },
+  {"unlock", thrlib_mutex_unlock },
+  {"trylock", thrlib_mutex_trylock },
+  {"__gc", thrlib_mutex_gc },
+  {NULL, NULL}
+};
+
 static const luaL_Reg thrlib[] = {
   {"create", thrlib_create },
   {"sleep", thrlib_sleep },
+  {"mutex", thrlib_mutex_new },
   {NULL, NULL}
 };
 
 LUALIB_API int luaopen_thread(lua_State *L)
 {
-  luaL_newmetatable(L, "thread");
+  /* OS thread metatable */
+  luaL_newmetatable(L, THRLIB_THREAD);
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, thread_funcs);
 
+  /* mutex metatable */
+  luaL_newmetatable(L, THRLIB_MUTEX);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_register(L, NULL, mutex_funcs);
+
   luaL_register(L, LUA_THREADLIBNAME, thrlib);
+
+  /* thread.MUTEX_NORMAL through thread.MUTEX_ERRORCHECK */
+  lua_pushinteger(L, PTHREAD_MUTEX_NORMAL);
+  lua_setfield(L, -2, "MUTEX_NORMAL");
+  lua_pushinteger(L, PTHREAD_MUTEX_RECURSIVE);
+  lua_setfield(L, -2, "MUTEX_RECURSIVE");
+  lua_pushinteger(L, PTHREAD_MUTEX_ERRORCHECK);
+  lua_setfield(L, -2, "MUTEX_ERRORCHECK");
+
   return 1;
 }
 

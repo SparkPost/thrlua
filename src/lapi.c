@@ -540,8 +540,14 @@ LUA_API const char *lua_pushfstring (lua_State *L, const char *fmt, ...) {
   return ret;
 }
 
+LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n)
+{
+  lua_pushcclosure2(L, NULL, fn, n);
+}
 
-LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n) {
+LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
+  lua_CFunction fn, int n)
+{
   Closure *cl;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
@@ -549,6 +555,7 @@ LUA_API void lua_pushcclosure (lua_State *L, lua_CFunction fn, int n) {
     api_checknelems(L, n);
     cl = luaF_newCclosure(L, n, getcurrenv(L));
     cl->c.f = fn;
+    cl->c.fname = name;
     L->top -= n;
     while (n--) {
       luaC_writebarriervv(G(L), &cl->gch, &cl->c.upvalue[n], L->top+n);

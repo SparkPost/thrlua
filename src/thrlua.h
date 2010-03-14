@@ -187,6 +187,8 @@ struct lua_longjmp {
   struct lua_longjmp *previous;
   luai_jmpbuf b;
   volatile int status;  /* error code */
+  const char *file;
+  unsigned int line;
 };
 
 /* NOTE: undefined (certainly bad!) behavior will result if the function
@@ -196,6 +198,8 @@ struct lua_longjmp {
   lj.status = 0; \
   lj.previous = (L)->errorJmp; \
   (L)->errorJmp = &lj; \
+  lj.file = __FILE__; \
+  lj.line = __LINE__; \
   if (setjmp(lj.b) == 0) {
 
 #define LUAI_TRY_FINALLY(L) \

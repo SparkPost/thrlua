@@ -83,6 +83,8 @@ int luaD_rawrunprotected (lua_State *L, Pfunc f, void *ud) {
   struct lua_longjmp lj;
   lj.status = 0;
   lj.previous = L->errorJmp;  /* chain new error handler */
+  lj.file = __FILE__;
+  lj.line = __LINE__;
   L->errorJmp = &lj;
   LUAI_TRY(L, &lj,
     (*f)(L, ud);

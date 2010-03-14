@@ -283,7 +283,11 @@ int luaV_equalval (lua_State *L, const TValue *t1, const TValue *t2) {
             gch2h(hvalue(t2)->metatable), TM_EQ);
       break;  /* will try TM */
     }
-    default: return gcvalue(t1) == gcvalue(t2);
+    case LUA_TSTRING:
+      return luaV_strcmp(rawtsvalue(t1), rawtsvalue(t2)) == 0;
+
+    default:
+      return gcvalue(t1) == gcvalue(t2);
   }
   if (tm == NULL) return 0;  /* no TM? */
   callTMres(L, L->top, tm, t1, t2);  /* call TM */
