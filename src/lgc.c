@@ -592,6 +592,7 @@ static void finalize(global_State *g)
   GCheader *o;
   lua_State *L = NULL;
   int called_finalizer = 0;
+  unsigned int size;
 
   pthread_mutex_lock(&g->collector_lock);
   /* first we make passes to find userdata that need finalizing; we
@@ -646,28 +647,33 @@ static void finalize(global_State *g)
 
     switch (o->tt) {
       case LUA_TPROTO:
-        luaF_freeproto(NULL, gco2p(o));
+        luaF_freeproto(g, gco2p(o));
         break;
       case LUA_TFUNCTION:
-        luaF_freeclosure(NULL, gco2cl(o));
-        break;
+        {
+          Closure *c = gco2cl(o);
+          size = (c->c.isC) ? sizeCclosure(c->c.nupvalues) :
+            sizeLclosure(c->l.nupvalues);
+          luaM_freememG(g, c, size);
+          break;
+        }
       case LUA_TUPVAL:
-        luaF_freeupval(NULL, gco2uv(o));
+        luaF_freeupval(g, gco2uv(o));
         break;
       case LUA_TTABLE:
-        luaH_free(NULL, gco2h(o));
+        luaH_free(g, gco2h(o));
         break;
       case LUA_TTHREAD:
-        luaE_freethread(NULL, gco2th(o));
+        luaE_freethread(g, gco2th(o));
         break;
       case LUA_TSTRING:
-        luaM_freemem(NULL, o, sizestring(gco2ts(o)));
+        luaM_freememG(g, o, sizestring(gco2ts(o)));
         break;
       case LUA_TGLOBAL:
         /* skip; someone else will clear this out */
         break;
       case LUA_TUSERDATA:
-        luaM_freemem(NULL, o, sizeudata(gco2u(o)));
+        luaM_freememG(g, o, sizeudata(gco2u(o)));
         break;
 
       default:
@@ -795,7 +801,7 @@ static unsigned int collect(global_State *g)
         while (pt->strt.hash[i]) {
           n = pt->strt.hash[i];
           pt->strt.hash[i] = n->next;
-          luaM_free(NULL, n);
+          g->alloc(g->allocdata, n, sizeof(*n), 0);
         }
       } else {
         n = pt->strt.hash[i];
@@ -1015,22 +1021,22 @@ static void tls_dtor(void *ptr)
   pthread_mutex_unlock(&g->collector_lock);
 
   pthread_mutex_destroy(&pt->handshake);
-  luaZ_freebuffer(NULL, &pt->buff);
+  luaZ_freebuffer(g, &pt->buff);
   for (i = 0; i < pt->strt.size; i++) {
     while (pt->strt.hash[i]) {
       n = pt->strt.hash[i];
       pt->strt.hash[i] = n->next;
-      luaM_free(NULL, n);
+      luaM_freeG(g, n);
     }
   }
-  luaM_freearray(NULL, pt->strt.hash, pt->strt.size, TString *);
+  luaM_freearrayG(g, pt->strt.hash, pt->strt.size, TString *);
   if (pt->log_buf) {
     luaM_reallocG(g, pt->log_buf,
         sizeof(*pt->log_buf) + (pt->log_buf->alloc - 1)
         * sizeof(GCheader*), 0);
   }
   o_free(g, &pt->snoop_buf);
-  free(pt);
+  luaM_freeG(g, pt);
 }
 
 thr_State *luaC_init_pt(global_State *g)
@@ -1038,7 +1044,8 @@ thr_State *luaC_init_pt(global_State *g)
   thr_State *pt;
   pthread_mutexattr_t mattr;
 
-  pt = calloc(1, sizeof(*pt));
+  pt = g->alloc(g->allocdata, NULL, 0, sizeof(*pt));
+  memset(pt, 0, sizeof(*pt));
   pt->g = g;
   init_list(&pt->olist);
 
@@ -1051,7 +1058,8 @@ thr_State *luaC_init_pt(global_State *g)
   pthread_setspecific(g->tls_key, pt);
   luaZ_initbuffer(NULL, &pt->buff);
 
-  pt->strt.hash = luaM_newvector(NULL, MINSTRTABSIZE, struct stringtable_node*);
+  pt->strt.hash = g->alloc(g->allocdata, NULL, 0,
+                    MINSTRTABSIZE * sizeof(struct stringtable_node*));
   memset(pt->strt.hash, 0, MINSTRTABSIZE * sizeof(struct stringtable_node*));
   pt->strt.size = MINSTRTABSIZE;
   

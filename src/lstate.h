@@ -205,7 +205,7 @@ struct lua_State {
 #define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
 
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
-LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
+LUAI_FUNC void luaE_freethread (global_State *g, lua_State *L1);
 LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
 
 #endif

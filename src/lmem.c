@@ -38,15 +38,7 @@ static void *default_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
   return realloc(ptr, nsize);
 }
 
-/** function to reallocate memory */
-static lua_Alloc frealloc = default_alloc;
-/** auxiliary data to `frealloc' */
-static void *fud = NULL;
-
-
-
 #define MINSIZEARRAY	4
-
 
 void *luaM_growaux_ (lua_State *L, void *block, int *size, size_t size_elems,
                      int limit, const char *errormsg) {
@@ -80,7 +72,7 @@ void *luaM_toobig (lua_State *L) {
 */
 void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
   lua_assert((osize == 0) == (block == NULL));
-  block = (*frealloc)(fud, block, osize, nsize);
+  block = (*G(L)->alloc)(G(L)->allocdata, block, osize, nsize);
   if (block == NULL && nsize > 0)
     luaD_throw(L, LUA_ERRMEM);
   lua_assert((nsize == 0) == (block == NULL));
@@ -89,25 +81,18 @@ void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
 
 LUA_API lua_Alloc lua_getallocf (lua_State *L, void **ud)
 {
-  return frealloc;
+  if (ud) *ud = G(L)->allocdata;
+  return G(L)->alloc;
 }
 
-LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud)
+LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 {
-  if (L) {
-    /* no-op */
-  } else {
-    frealloc = f;
-    fud = ud;
-  }
+  luaG_runerror(L, "it is not safe to change the allocator");
 }
 
 void *luaM_reallocG(global_State *g, void *block,
   size_t oldsize, size_t size)
 {
-  if (!g->alloc) {
-    g->alloc = default_alloc;
-  }
   return g->alloc(g->allocdata, block, oldsize, size);
 }
 

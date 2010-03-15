@@ -28,9 +28,9 @@ static void stack_init (lua_State *L1, lua_State *L) {
 }
 
 
-static void freestack (lua_State *L, lua_State *L1) {
-  luaM_freearray(L, L1->base_ci, L1->size_ci, CallInfo);
-  luaM_freearray(L, L1->stack, L1->stacksize, TValue);
+static void freestack (global_State *g, lua_State *L1) {
+  luaM_freearrayG(g, L1->base_ci, L1->size_ci, CallInfo);
+  luaM_freearrayG(g, L1->stack, L1->stacksize, TValue);
 }
 
 
@@ -72,10 +72,8 @@ static void close_state (lua_State *L) {
   global_State *g = G(L);
   luaF_close(L, L->stack);  /* close all upvalues for this thread */
 //  luaC_freeall(L);  /* collect all objects */
-//  lua_assert(g->rootgc == obj2gco(L));
-  freestack(L, L);
-//  lua_assert(g->totalbytes == sizeof(LG));
-  luaM_freemem(NULL, L, sizeof(*L));
+  freestack(G(L), L);
+  luaM_freememG(G(L), L, sizeof(*L));
 }
 
 lua_State *luaE_newthreadG(global_State *g)
@@ -102,12 +100,12 @@ lua_State *luaE_newthread (lua_State *L) {
 }
 
 
-void luaE_freethread (lua_State *L, lua_State *L1) {
+void luaE_freethread (global_State *g, lua_State *L1) {
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
-  freestack(L, L1);
+  freestack(g, L1);
   pthread_mutex_destroy(&L1->lock);
-  luaM_freemem(L, L1, sizeof(lua_State));
+  luaM_freememG(g, L1, sizeof(lua_State));
 }
 
 

@@ -368,12 +368,12 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
 }
 
 
-void luaH_free (lua_State *L, Table *t) {
+void luaH_free (global_State *g, Table *t) {
   if (t->node != dummynode)
-    luaM_freearray(L, t->node, sizenode(t), Node);
-  luaM_freearray(L, t->array, t->sizearray, TValue);
+    luaM_freearrayG(g, t->node, sizenode(t), Node);
+  luaM_freearrayG(g, t->array, t->sizearray, TValue);
   pthread_rwlock_destroy(&t->lock);
-  luaM_free(L, t);
+  luaM_freeG(g, t);
 }
 
 

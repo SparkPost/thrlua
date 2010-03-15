@@ -16,13 +16,20 @@
 		luaM_toobig(L))
 
 #define luaM_freemem(L, b, s)	luaM_realloc_(L, (b), (s), 0)
+#define luaM_freememG(g, b, s)	luaM_reallocG(g, (b), (s), 0)
 #define luaM_free(L, b)		luaM_realloc_(L, (b), sizeof(*(b)), 0)
+#define luaM_freeG(g, b)		luaM_reallocG(g, (b), sizeof(*(b)), 0)
 #define luaM_freearray(L, b, n, t)   luaM_reallocv(L, (b), n, 0, sizeof(t))
+#define luaM_freearrayG(g, b, n, t)   luaM_reallocG(g, (b), n * sizeof(t), 0)
 
 #define luaM_malloc(L,t)	luaM_realloc_(L, NULL, 0, (t))
+#define luaM_mallocG(g,t)	luaM_reallocG(g, NULL, 0, (t))
 #define luaM_new(L,t)		cast(t *, luaM_malloc(L, sizeof(t)))
+#define luaM_newG(g,t)		cast(t *, luaM_mallocG(g, sizeof(t)))
 #define luaM_newvector(L,n,t) \
 		cast(t *, luaM_reallocv(L, NULL, 0, n, sizeof(t)))
+#define luaM_newvectorG(g,n,t) \
+		cast(t *, luaM_reallocG(g, NULL, 0, n, sizeof(t)))
 
 #define luaM_growvector(L,v,nelems,size,t,limit,e) \
           if ((nelems)+1 > (size)) \
@@ -30,6 +37,9 @@
 
 #define luaM_reallocvector(L, v,oldn,n,t) \
    ((v)=cast(t *, luaM_reallocv(L, v, oldn, n, sizeof(t))))
+#define luaM_reallocvectorG(g, v,oldn,n,t) \
+   ((v)=cast(t *, luaM_reallocG(g, v, oldn * sizeof(t), n * sizeof(t))))
+
 
 
 LUAI_FUNC void *luaM_realloc_ (lua_State *L, void *block, size_t oldsize,

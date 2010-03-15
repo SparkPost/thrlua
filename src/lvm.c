@@ -329,7 +329,7 @@ void luaV_concat (lua_State *L, int total, int last) {
       if (luaZ_sizebuffer(&pt->buff) > LUA_MINBUFFER*2) {
         /* buffer is too big */
         size_t newsize = luaZ_sizebuffer(&pt->buff) / 2;
-        luaZ_resizebuffer(L, &pt->buff, newsize);
+        luaZ_resizebuffer(G(L), &pt->buff, newsize);
       }
     }
     total -= n-1;  /* got `n' strings to create 1 new */
