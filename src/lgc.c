@@ -494,6 +494,7 @@ static void mark_object(global_State *g, GCheader *o)
             lua_lock(th);
             mark_value(g, &th->l_gt);
             mark_value(g, &th->env);
+            mark_value(g, &th->tls);
             /* the corresponding global state */
             lua_assert(g == th->l_G);
             o_push(g, &g->mark_set, (GCheader*)th->l_G);

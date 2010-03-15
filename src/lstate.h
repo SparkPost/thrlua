@@ -182,6 +182,16 @@ struct lua_State {
   UpVal openupval;  /* list of open upvalues in this stack */
   struct lua_longjmp *errorJmp;  /* current error recover point */
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
+
+  /* for suspend/resume */
+  int (*on_suspend)(lua_State *thr, void *ptr);
+  int (*arrange_resume)(lua_State *thr, void *ptr);
+  void *suspend_resume_ptr;
+  int (*on_resume)(lua_State *thr, void *ptr);
+  void *on_resume_ptr;
+
+  /* if not nil, encapsulates thread local storage */
+  TValue tls;
 };
 
 

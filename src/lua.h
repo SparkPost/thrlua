@@ -43,6 +43,7 @@
 
 
 /* thread status; 0 is OK */
+#define LUA_OK 0
 #define LUA_YIELD	1
 #define LUA_ERRRUN	2
 #define LUA_ERRSYNTAX	3
@@ -365,10 +366,85 @@ struct lua_Debug {
 
 /* }====================================================================== */
 
+/** A function to be called on resumption of a suspende script.
+ *
+ * ptr is the pointer passed along with the resume function to the
+ * lua_suspend() call.
+ *
+ * The resume func is responsible for freeing up the ptr, if required.
+ *
+ * You should return one of LUA_SUSPEND, LUA_OK or LUA_ERRERR.
+ */
+typedef int (*lua_ResumeFunc)(lua_State *L, void *ptr);
+
+/** Suspends script execution.
+ *
+ * yields the VM and arranges for an optional function to be invoked
+ * on resume when lua_resume() is subsequently invoked.
+ *
+ * If func is NULL, then the script simply yields.
+ *
+ * The idiom is to return lua_suspend() from your lua_CFunction, without
+ * modifying the state of the lua_State between the time of the call and
+ * return from that function.
+ *
+ * Raises an error if it is not safe to yield; you can check for the safety
+ * of this by calling lua_can_suspend().
+ */
+LUA_API int lua_suspend(lua_State *L, lua_ResumeFunc func, void *ptr);
+
+LUA_API int lua_can_suspend(lua_State *L);
+
+struct lua_Suspender {
+  lua_ResumeFunc suspender;
+  lua_ResumeFunc resumer;
+  void *ptr;
+};
+
+/** Sets suspend and resume handlers.
+ *
+ * In order to run in a variety of environments with async or non-blocking
+ * operation modes, thrlua provides the caller with a means for specifying
+ * exactly how to perform a suspend and how to re-schedule the running of
+ * the script when the external procedure completes.
+ *
+ * The suspender function is called internally as part of the lua_suspend()
+ * implementation.
+ *
+ * The resumer function is called as part of the lua_arrange_resume()
+ * implementation.
+ *
+ * This function copies the current suspender details into the old_suspender
+ * structure (if it is not NULL) and then replaces the suspender details with
+ * those in suspender.
+ *
+ * If suspender is NULL, the suspender details in L are cleared.
+ *
+ * If a suspender routine is registered in a lua_State, lua_resume() changes
+ * its behavior such that a LUA_YIELD status discards the yielded values, and
+ * a successful execution status returns a positive integer, 0 or higher, that
+ * indicates the number of values returned by the completed call.
+ */
+LUA_API void lua_set_suspender(lua_State *L,
+  const struct lua_Suspender *suspender,
+  struct lua_Suspender *old_suspender);
+
+/** Arranges for a script to resume running.
+ *
+ * A VM may have been previously suspended via the lua_suspend() call.  When
+ * it is appropriate for that processing to continue, lua_arrange_resume()
+ * should be invoked to arrange for the VM to run again.
+ *
+ * It is important to realize that the VM may not actually resume execution
+ * as part of this call; it may simply be scheduled to resume at the next
+ * convenient point.
+ */
+LUA_API int lua_arrange_resume(lua_State *L);
+
 
 /******************************************************************************
 * Copyright (C) 1994-2008 Lua.org, PUC-Rio.  All rights reserved.
-* Copyright (C) 2008 Message Systems, Inc.
+* Copyright (C) 2008-2010 Message Systems, Inc.
 *
 * Permission is hereby granted, free of charge, to any person obtaining
 * a copy of this software and associated documentation files (the

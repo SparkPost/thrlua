@@ -398,6 +398,64 @@ static int resume_error (lua_State *L, const char *msg) {
   return LUA_ERRRUN;
 }
 
+int lua_can_suspend(lua_State *L)
+{
+  return L->arrange_resume ? 1 : 0;
+}
+
+int lua_suspend(lua_State *L, lua_ResumeFunc func, void *ptr)
+{
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    if (L->arrange_resume == NULL) {
+      luaL_error(L, "it is not safe to suspend here\n");
+    }
+    if (L->on_suspend) {
+      L->on_suspend(L, L->suspend_resume_ptr);
+    }
+    L->on_resume = func;
+    L->on_resume_ptr = ptr;
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+  return lua_yield(L, 0);
+}
+
+void lua_set_suspender(lua_State *L,
+  const struct lua_Suspender *suspender,
+  struct lua_Suspender *old_suspender)
+{
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    if (old_suspender) {
+      old_suspender->suspender = L->on_suspend;
+      old_suspender->resumer = L->arrange_resume;
+      old_suspender->ptr = L->suspend_resume_ptr;
+    }
+
+    if (suspender) {
+      L->arrange_resume = suspender->resumer;
+      L->on_suspend = suspender->suspender;
+      L->suspend_resume_ptr = suspender->ptr;
+    } else {
+      L->arrange_resume = NULL;
+      L->on_suspend = NULL;
+      L->suspend_resume_ptr = NULL;
+    }
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+}
+
+int lua_arrange_resume(lua_State *L)
+{
+  if (L->arrange_resume == NULL) {
+    luaL_error(L,
+      "lua_arrange_resume called on a thread that has no resume handler\n");
+  }
+
+  return L->arrange_resume(L, L->suspend_resume_ptr);
+}
 
 LUA_API int lua_resume (lua_State *L, int nargs) {
   int status;
@@ -405,28 +463,66 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
 
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
-  if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci)) {
-    reserr = "cannot resume non-suspended coroutine";
-  } else if (L->nCcalls >= LUAI_MAXCCALLS) {
-    reserr = "C stack overflow";
-  }
-  if (reserr) {
-    status = resume_error(L, reserr);
-  } else {
-    lua_assert(L->errfunc == 0);
-    L->baseCcalls = ++L->nCcalls;
-    status = luaD_rawrunprotected(L, resume, L->top - nargs);
-    if (status != 0) {  /* error? */
-      L->status = cast_byte(status);  /* mark thread as `dead' */
-      luaD_seterrorobj(L, status, L->top);
-      L->ci->top = L->top;
+    if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci)) {
+      reserr = "cannot resume non-suspended coroutine";
+    } else if (L->nCcalls >= LUAI_MAXCCALLS) {
+      reserr = "C stack overflow";
     }
-    else {
-      lua_assert(L->nCcalls == L->baseCcalls);
-      status = L->status;
+    if (reserr) {
+      status = resume_error(L, reserr);
+    } else {
+      int top = lua_gettop(L);
+
+      lua_assert(L->errfunc == 0);
+
+      if (L->on_resume) {
+        lua_ResumeFunc on_resume;
+        void *on_resume_ptr;
+
+        /* clear resumption information before we dispatch */
+        on_resume = L->on_resume;
+        on_resume_ptr = L->on_resume_ptr;
+        L->on_resume_ptr = NULL;
+        L->on_resume = NULL;
+
+        status = on_resume(L, on_resume_ptr);
+
+        if (status == LUA_YIELD) {
+          /* suspend/resume protocol is to discard yielded values */
+          lua_settop(L, top);
+          return LUA_YIELD;
+        }
+        if (status != 0) {
+          return status;
+        }
+
+        nargs = lua_gettop(L) - top;
+      }
+
+      L->baseCcalls = ++L->nCcalls;
+      status = luaD_rawrunprotected(L, resume, L->top - nargs);
+      if (status != 0) {  /* error? */
+        L->status = cast_byte(status);  /* mark thread as `dead' */
+        luaD_seterrorobj(L, status, L->top);
+        L->ci->top = L->top;
+
+        if (status == LUA_YIELD && L->on_suspend) {
+          /* suspend/resume protocol is to discard yielded values */
+          lua_settop(L, top);
+        }
+      }
+      else {
+        lua_assert(L->nCcalls == L->baseCcalls);
+        status = L->status;
+
+        if (L->on_suspend) {
+          /* suspend/resume protocol is to indicate the number of
+           * returned values as a positive integer */
+          status = lua_gettop(L) - (top - (nargs + 1));
+        }
+      }
+      --L->nCcalls;
     }
-    --L->nCcalls;
-  }
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
