@@ -982,7 +982,11 @@ static void *collector(void *ptr)
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
+#ifdef CLOCK_MONOTONIC
     clock_gettime(CLOCK_MONOTONIC, &deadline);
+#else
+    deadline.tv_sec = time(NULL);
+#endif
     deadline.tv_sec += 10;
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
@@ -1092,7 +1096,9 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
   pthread_key_create(&g->tls_key, tls_dtor);
 
   pthread_condattr_init(&cattr);
+#ifdef CLOCK_MONOTONIC
   pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+#endif
   pthread_cond_init(&g->gc_cond, &cattr);
   pthread_condattr_destroy(&cattr);
 
