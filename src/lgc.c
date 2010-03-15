@@ -491,7 +491,6 @@ static void mark_object(global_State *g, GCheader *o)
             StkId sk;
             UpVal *uv;
 
-            /* FIXME: lock */
             lua_lock(th);
             mark_value(g, &th->l_gt);
             mark_value(g, &th->env);
@@ -1106,7 +1105,6 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
   g->white = 1;
   g->alloc = alloc;
   g->allocdata = ud;
-//  g->memerr = luaS_newliteral(L, MEMERRMSG); FIXME
 
   init_list(&g->to_finalize);
   /* we are the original object on the heap */
