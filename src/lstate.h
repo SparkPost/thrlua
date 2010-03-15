@@ -137,13 +137,6 @@ struct global_State {
   struct Table *mt[NUM_TAGS];  /* metatables for basic types */
   TString *tmname[TM_N];  /* array with tag-method names */
 
-  lu_byte gcstate;  /* state of garbage collector */
-  lu_mem GCthreshold;
-  lu_mem totalbytes;  /* number of bytes currently allocated */
-  lu_mem estimate;  /* an estimate of number of bytes actually in use */
-  lu_mem gcdept;  /* how much GC is `behind schedule' */
-  int gcpause;  /* size of pause between successive GCs */
-  int gcstepmul;  /* GC `granularity' */
   struct lua_State *mainthread;
 };
 

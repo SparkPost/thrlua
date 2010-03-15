@@ -48,7 +48,6 @@ static void f_luaopen (lua_State *L, void *ud) {
   sethvalue(L, registry(L), luaH_new(L, 0, 2));  /* registry */
   luaT_init(L);
   luaX_init(L);
-  g->GCthreshold = 4*g->totalbytes;
 }
 
 

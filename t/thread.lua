@@ -1,6 +1,6 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('Test.More');
-plan(9);
+plan(10);
 
 local counter = 0;
 local m = thread.mutex();
@@ -16,6 +16,9 @@ function dostuff(t)
 end
 
 local t = thread.create(function (t)
+  --[[ We deliberately attempt to unlock a mutex that we don't
+  --   own.  Expect to see one such error in the DRD output
+  --]]
   error_like(function()
       local r = m:unlock();
       if r == true then
@@ -25,6 +28,7 @@ local t = thread.create(function (t)
     end, "failed to unlock mutex", "unlock an unowned mutex");
   is(type(t), "userdata", "thread sees thread userdata");
   is(m:lock(), true, "got mutex from main thread");
+  is(m:unlock(), true, "unlocked mutex in other thread");
   dostuff("other");
 end);
 

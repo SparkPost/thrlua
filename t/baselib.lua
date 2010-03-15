@@ -30,8 +30,8 @@ is(tonumber('lemon'), nil);
 is(tonumber('10 '), 10);
 is(tonumber('10 foo'), nil);
 
-cmp_ok(gcinfo(), '>', 0);
-cmp_ok(collectgarbage('count'), '>', 0);
+cmp_ok(gcinfo(), '>=', 0);
+cmp_ok(collectgarbage('count'), '>=', 0);
 is(type(collectgarbage('step')), 'boolean');
 
 f = loadfile('t/baselib.lua');

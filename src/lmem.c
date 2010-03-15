@@ -84,10 +84,6 @@ void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
   if (block == NULL && nsize > 0)
     luaD_throw(L, LUA_ERRMEM);
   lua_assert((nsize == 0) == (block == NULL));
-  if (L) {
-    global_State *g = G(L);
-    g->totalbytes = (g->totalbytes - osize) + nsize;
-  }
   return block;
 }
 
