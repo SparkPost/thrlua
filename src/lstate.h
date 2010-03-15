@@ -105,6 +105,8 @@ typedef struct thr_State {
   struct gc_log_buffer *log_buf;
 
   struct global_State *g;
+  /* if not nil, encapsulates os-thread local storage */
+  TValue tls;
 
 } thr_State;
 

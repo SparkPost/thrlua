@@ -33,6 +33,29 @@ static void freestack (global_State *g, lua_State *L1) {
   luaM_freearrayG(g, L1->stack, L1->stacksize, TValue);
 }
 
+static int do_tls_access(lua_State *L)
+{
+  size_t len;
+  const char *key = luaL_checklstring(L, 2, &len);
+
+  if (!strcmp(key, "_TLS")) {
+    if (!ttistable(&L->tls)) {
+      sethvalue(L, &L->tls, luaH_new(L, 0, 2));
+    }
+    lua_pushvalue(L, LUA_TLSINDEX);
+    return 1;
+  }
+  if (!strcmp(key, "_OSTLS")) {
+    thr_State *pt = get_per_thread(G(L));
+    if (!ttistable(&pt->tls)) {
+      sethvalue(L, &pt->tls, luaH_new(L, 0, 2));
+    }
+    lua_pushvalue(L, LUA_OSTLSINDEX);
+    return 1;
+  }
+  lua_pushnil(L);
+  return 1;
+}
 
 /*
 ** open parts that may cause memory-allocation errors
@@ -48,6 +71,12 @@ static void f_luaopen (lua_State *L, void *ud) {
   sethvalue(L, registry(L), luaH_new(L, 0, 2));  /* registry */
   luaT_init(L);
   luaX_init(L);
+
+  /* wire up _TLS and _OSTLS */
+  luaL_newmetatable(L, "_G.TLS");
+  lua_pushcclosure2(L, "_G.__index:TLS", do_tls_access, 0);
+  lua_setfield(L, -2, "__index");
+  lua_setmetatable(L, LUA_GLOBALSINDEX);
 }
 
 

@@ -1,11 +1,20 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('Test.More');
-plan(10);
+plan(20);
 
 local counter = 0;
 local m = thread.mutex();
 
 is(m:lock(), true, "main thread owns mutex");
+
+is(type(_TLS), "table", "_TLS is present as a table");
+is(type(_OSTLS), "table", "_OSTLS is present as a table");
+
+_TLS.n = "main";
+is(_TLS.n, "main", "main thread sees main in _TLS");
+
+_OSTLS.n = "main";
+is(_OSTLS.n, "main", "main thread sees main in _OSTLS");
 
 function dostuff(t)
   for i = 0, 10 do
@@ -16,6 +25,17 @@ function dostuff(t)
 end
 
 local t = thread.create(function (t)
+  isnt(_TLS.n, "main", "other thread doesn't see main in _TLS");
+  _TLS.n = "other";
+  isnt(_OSTLS.n, "main", "other thread doesn't see main in _OSTLS");
+  _OSTLS.n = "other";
+
+  local co = coroutine.create(function ()
+    is(_TLS.n, nil, "coroutine sees no value in _TLS");
+    is(_OSTLS.n, "other", "coroutine sees other in _OSTLS");
+  end);
+  coroutine.resume(co);
+
   --[[ We deliberately attempt to unlock a mutex that we don't
   --   own.  Expect to see one such error in the DRD output
   --]]
@@ -39,3 +59,5 @@ is(t:join(), true, "joined thread");
 is(type(t), "userdata", "got a thread userdata");
 is(counter, 11, "main sees counter value 11");
 
+is(_TLS.n, "main", "_TLS is still set to main");
+is(_OSTLS.n, "main", "_OSTLS is still set to main");

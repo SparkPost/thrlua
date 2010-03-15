@@ -791,6 +791,9 @@ static unsigned int collect(global_State *g)
     }
     pthread_mutex_unlock(&pt->handshake);
 
+    /* make sure the os-level tls data is considered */
+    mark_value(g, &pt->tls);
+
     /* its string table is also considered a root, but when we
      * are exiting, we want to clear it out */
     pthread_mutex_lock(&pt->strt.lock);
