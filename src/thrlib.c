@@ -23,7 +23,7 @@ static void *thrlib_thread_func(void *arg)
 {
   struct thrlib_thread *th = arg;
 
-  lua_call(th->L, 1, 0);
+  lua_pcall(th->L, 1, 0, 0);
 
   scpt_atomic_dec(&th->L->gch.ref);
   return 0;
