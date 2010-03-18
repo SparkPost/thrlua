@@ -1083,18 +1083,23 @@ thr_State *luaC_init_pt(global_State *g)
   return pt;
 }
 
-global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
+global_State *luaC_newglobal(struct lua_StateParams *p)
 {
   global_State *g;
   pthread_condattr_t cattr;
   pthread_mutexattr_t mattr;
 
-  g = alloc(ud, NULL, 0, sizeof(*g));
+  g = p->allocfunc(p->allocdata, NULL, 0, sizeof(*g));
   if (!g) {
     return NULL;
   }
   memset(g, 0, sizeof(*g));
   g->gch.tt = LUA_TGLOBAL;
+  g->alloc = p->allocfunc;
+  g->allocdata = p->allocdata;
+  g->extraspace = p->extraspace;
+  g->on_state_create = p->on_state_create;
+  g->on_state_finalize = p->on_state_finalize;
  
   pthread_key_create(&g->tls_key, tls_dtor);
 
@@ -1113,9 +1118,6 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
   g->black = 0;
   /* color is implicitly black as we are initialized to zero */
   g->white = 1;
-  g->alloc = alloc;
-  g->allocdata = ud;
-
   init_list(&g->to_finalize);
   /* we are the original object on the heap */
   init_list(&g->the_heap);
@@ -1125,6 +1127,8 @@ global_State *luaC_newglobal(lua_Alloc alloc, void *ud)
 
   return g;
 }
+
+int LUAI_EXTRASPACE = 0;
 
 void *luaC_newobj(global_State *g, lu_byte tt)
 {
@@ -1145,7 +1149,15 @@ void *luaC_newobj(global_State *g, lu_byte tt)
     NEWIMPL(LUA_TUPVAL, UpVal);
     NEWIMPL(LUA_TPROTO, Proto);
     NEWIMPL(LUA_TTABLE, Table);
-    NEWIMPL(LUA_TTHREAD, lua_State);
+    case LUA_TTHREAD:
+      pthread_mutex_lock(&pt->handshake);
+      o = luaM_reallocG(g, NULL, 0, sizeof(lua_State) + g->extraspace);
+      memset(o, 0, sizeof(lua_State) + g->extraspace);
+      o->tt = LUA_TTHREAD;
+      o->marked = pt->alloc_color;
+      append_list(&pt->olist, o);
+      pthread_mutex_unlock(&pt->handshake);
+      break;
     case LUA_TGLOBAL:
     default:
       lua_assert(0);

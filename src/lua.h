@@ -115,6 +115,25 @@ LUA_API void lua_initialize(void);
 ** state manipulation
 */
 LUA_API lua_State *(lua_newstate) (lua_Alloc f, void *ud);
+
+struct lua_StateParams {
+  /** specify the allocator */
+  lua_Alloc allocfunc;
+  /** specify the allocator data */
+  void *allocdata;
+  /** size of additional space to allocate after each lua_State.
+   * An application can use lua_get_extra to obtain a pointer to this
+   * extra space */
+  unsigned int extraspace;
+  /** called when each lua_State is allocated */
+  void (*on_state_create)(lua_State *L);
+  /** called when each lua_State is finalized */
+  void (*on_state_finalize)(lua_State *L);
+};
+
+LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p);
+#define lua_get_extra(L) (void*)(L+1)
+
 LUA_API void       (lua_close) (lua_State *L);
 LUA_API lua_State *(lua_newthread) (lua_State *L);
 LUA_API lua_State *(lua_newthreadref)(lua_State *L);

@@ -140,6 +140,14 @@ struct global_State {
   TString *tmname[TM_N];  /* array with tag-method names */
 
   struct lua_State *mainthread;
+  /** size of additional space to allocate after each lua_State.
+   * An application can use lua_get_extra to obtain a pointer to this
+   * extra space */
+  unsigned int extraspace;
+  /** called when each lua_State is allocated */
+  void (*on_state_create)(lua_State *L);
+  /** called when each lua_State is finalized */
+  void (*on_state_finalize)(lua_State *L);
 };
 
 LUAI_FUNC thr_State *luaC_init_pt(global_State *g);

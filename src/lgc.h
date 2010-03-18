@@ -114,7 +114,7 @@ LUAI_FUNC void luaC_writebarrierov(global_State *g, GCheader *object,
 
 LUAI_FUNC void *luaC_newobj(global_State *g, lu_byte tt);
 LUAI_FUNC void *luaC_newobjv(global_State *g, lu_byte tt, size_t size);
-LUAI_FUNC global_State *luaC_newglobal(lua_Alloc alloc, void *ud);
+LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 
 #define luaC_checkGC(L) do { ; } while (0)
 

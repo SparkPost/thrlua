@@ -77,6 +77,10 @@ static void f_luaopen (lua_State *L, void *ud) {
   lua_pushcclosure2(L, "_G.__index:TLS", do_tls_access, 0);
   lua_setfield(L, -2, "__index");
   lua_setmetatable(L, LUA_GLOBALSINDEX);
+
+  if (G(L)->on_state_create) {
+    G(L)->on_state_create(L);
+  }
 }
 
 
@@ -122,11 +126,17 @@ lua_State *luaE_newthread (lua_State *L) {
   L1->basehookcount = L->basehookcount;
   L1->hook = L->hook;
   resethookcount(L1);
+  if (G(L1)->on_state_create) {
+    G(L1)->on_state_create(L1);
+  }
   return L1;
 }
 
 
 void luaE_freethread (global_State *g, lua_State *L1) {
+  if (g->on_state_finalize) {
+    g->on_state_finalize(L1);
+  }
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(g, L1);
@@ -136,11 +146,21 @@ void luaE_freethread (global_State *g, lua_State *L1) {
 
 
 LUA_API lua_State *lua_newstate (lua_Alloc falloc, void *fud) {
+  struct lua_StateParams p;
+
+  memset(&p, 0, sizeof(p));
+  p.allocfunc = falloc;
+  p.allocdata = fud;
+  return lua_newglobalstate(&p);
+}
+
+LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
+{
   int i;
   lua_State *L;
   global_State *g;
  
-  g = luaC_newglobal(falloc, fud);
+  g = luaC_newglobal(p);
   if (!g) {
     return NULL;
   }
