@@ -146,6 +146,11 @@ LUA_API lua_State *lua_newthread (lua_State *L)
   return L1;
 }
 
+LUA_API void *(lua_get_extra)(lua_State *L)
+{
+  return L + 1;
+}
+
 LUA_API void lua_delrefthread(lua_State *L)
 {
   scpt_atomic_dec(&L->gch.ref);

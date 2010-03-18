@@ -132,7 +132,7 @@ struct lua_StateParams {
 };
 
 LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p);
-#define lua_get_extra(L) (void*)(L+1)
+LUA_API void *(lua_get_extra)(lua_State *L);
 
 LUA_API void       (lua_close) (lua_State *L);
 LUA_API lua_State *(lua_newthread) (lua_State *L);
