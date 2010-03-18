@@ -146,7 +146,24 @@ LUA_API lua_State *lua_newthread (lua_State *L)
   return L1;
 }
 
+LUA_API void lua_delrefthread(lua_State *L)
+{
+  scpt_atomic_dec(&L->gch.ref);
+}
 
+LUA_API lua_State *lua_newthreadref (lua_State *L)
+{
+  lua_State *L1 = NULL;
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    luaC_checkGC(L);
+    L1 = luaE_newthread(L);
+    scpt_atomic_inc(&L1->gch.ref);
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+  return L1;
+}
 
 /*
 ** basic stack manipulation
