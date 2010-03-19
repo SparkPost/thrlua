@@ -50,6 +50,7 @@ static inline void lua_assert_fail(const char *expr, const char *file, int line)
 #include <locale.h>
 #include <time.h>
 #include <signal.h>
+#include <unistd.h>
 
 #include "lua.h"
 #include "lauxlib.h"

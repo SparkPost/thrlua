@@ -371,7 +371,12 @@ static void loaderror (lua_State *L, const char *filename) {
 static int loader_Lua (lua_State *L) {
   const char *filename;
   const char *name = luaL_checkstring(L, 1);
-  filename = findfile(L, name, "path");
+
+  if (name[0] == '/' && access(name, R_OK) == 0) {
+    filename = name;
+  } else {
+    filename = findfile(L, name, "path");
+  }
   if (filename == NULL) return 1;  /* library not found in this path */
   if (luaL_loadfile(L, filename) != 0)
     loaderror(L, filename);
@@ -655,3 +660,5 @@ LUALIB_API int luaopen_package (lua_State *L) {
   return 1;  /* return 'package' table */
 }
 
+/* vim:ts=2:sw=2:et:
+ */
