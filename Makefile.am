@@ -7,7 +7,7 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la
+cmod_LTLIBRARIES = pcre.la mathx.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -40,6 +40,11 @@ rcluac_LDADD = -lthrlua
 pcre_la_SOURCES = modules/pcre.c
 pcre_la_LDFLAGS = -module @PCRE_LIBS@
 pcre_la_CPPFLAGS = -Isrc @PCRE_CFLAGS@
+
+# mathx
+mathx_la_SOURCES = modules/mathx.c
+mathx_la_LDFLAGS = -module
+mathx_la_CPPFLAGS = -Isrc
 
 EXTRA_DIST = COPYING HISTORY INSTALL README
 
