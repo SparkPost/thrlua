@@ -345,7 +345,6 @@ static int perform_regex(lua_State *thr, int mode)
               } else if (!lua_isstring(thr, -1)) {
                 luaL_error(thr, "invalid replacement value (a %s)",
                     luaL_typename(thr, -1));
-                /* FIXME: leak */
               } else {
                 match = luaL_checklstring(thr, -1, &matchlen);
                 luaL_addlstring(&retbuf, match, matchlen);
