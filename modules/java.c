@@ -18,6 +18,8 @@
 #define LJB_METHODID "javabridge:jmethodID"
 #define LJB_METHOD "javabridge:jmethod"
 
+typedef jint (*jni_create_vm_func)(JavaVM **pvm, void **penv, void *args);
+
 static JavaVM *jvm = NULL;
 static pthread_key_t jthrkey;
 /* for interpreting exceptions */
@@ -376,13 +378,17 @@ nargs, expectedargs, method, cobj);
     /* if we have args to pass in, then we restort to using Method.invoke,
      * as it will follow the java rules for method binding and dispatch */
     jobjectArray args = NULL;
+    jobject nil = (*e)->NewGlobalRef(e, NULL);
+    if (nil == NULL) {
+      throw_jni(L, e);
+    }
 
     if (cobj == NULL) {
       nargs--;
       argoffset++;
     }
 
-    args = (*e)->NewObjectArray(e, nargs, clz_Object, NULL);
+    args = (*e)->NewObjectArray(e, nargs, clz_Object, nil);
     if (args == NULL) {
       throw_jni(L, e);
     }
@@ -428,6 +434,13 @@ nargs, expectedargs, method, cobj);
         printf("param %d is NOT prim\n", i);
       }
 #endif
+    }
+    if (cobj == NULL) {
+      cobj = (*e)->NewGlobalRef(e, NULL);
+      if (cobj == NULL) {
+        throw_jni(L, e);
+        printf("making a NULL reference, but got %p\n", cobj);
+      }
     }
     printf("calling invoke(%p, %d args)\n", cobj, nargs);
     ret = (*e)->CallObjectMethod(e, method, mid_Method_invoke, cobj, args);
@@ -614,23 +627,49 @@ static int jb_new_vm(lua_State *L)
   int i;
   jint res;
   JNIEnv *jenv = NULL;
+  void *lib;
+  const char *jvmname;
+  jni_create_vm_func dl_jni_create_vm = NULL;
 
   if (jvm) {
     luaL_error(L, "Java VM already started");
   }
+
+  /* locate the jvm */
+  if (lua_isstring(L, 1)) {
+    jvmname = lua_tostring(L, 1);
+  } else {
+    jvmname = DEFAULT_JVM;
+
+    /* if unspecified, allow for LD_PRELOAD to have gotten us a jvm */
+    lib = dlopen(NULL, RTLD_LAZY);
+    dl_jni_create_vm = (jni_create_vm_func)dlsym(lib, "JNI_CreateJavaVM");
+  }
+  if (dl_jni_create_vm == NULL) {
+    lib = dlopen(jvmname, RTLD_LAZY);
+    if (!lib) {
+      luaL_error(L, "unable to resolve %s: %s\n", jvmname, dlerror());
+    }
+    dl_jni_create_vm = (jni_create_vm_func)dlsym(lib, "JNI_CreateJavaVM");
+    if (dl_jni_create_vm == NULL) {
+      luaL_error(L, "unable to resolve JNI_CreateJavaVM in %s: %s\n",
+        jvmname, dlerror());
+    }
+  }
+
   pthread_key_create(&jthrkey, detach_jvm);
 
   memset(&args, 0, sizeof(args));
   args.version = JNI_VERSION_1_4;
   args.ignoreUnrecognized = JNI_TRUE;
   /* parameters are passed as option strings to the JVM */
-  args.nOptions = nargs;
-  args.options = calloc(nargs, sizeof(JavaVMOption));
+  args.nOptions = nargs - 1;
+  args.options = calloc(args.nOptions, sizeof(JavaVMOption));
   LUAI_TRY_BLOCK(L) {
-    for (i = 1; i <= nargs; i++) {
-      args.options[i-1].optionString = (char*)luaL_checklstring(L, i, NULL);
+    for (i = 2; i <= nargs; i++) {
+      args.options[i-2].optionString = (char*)luaL_checklstring(L, i, NULL);
     }
-    res = JNI_CreateJavaVM(&jvm, (void**)&jenv, &args);
+    res = dl_jni_create_vm(&jvm, (void**)&jenv, &args);
   } LUAI_TRY_FINALLY(L) {
     free(args.options);
   } LUAI_TRY_END(L);
@@ -713,8 +752,10 @@ int luaopen_javabridge(lua_State *L)
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, methodobj_funcs);
 
-
   luaL_register(L, "javabridge", funcs);
+  lua_pushliteral(L, "DEFAULT_JVM");
+  lua_pushliteral(L, DEFAULT_JVM);
+  lua_settable(L, -3);
   return 1;
 }
 

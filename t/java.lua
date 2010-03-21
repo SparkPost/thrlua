@@ -4,6 +4,7 @@ plan(10);
 require 'javabridge';
 require 'java';
 
+like(javabridge.DEFAULT_JVM, "libjvm", javabridge.DEFAULT_JVM);
 is(javabridge.startVM(), true, "started vm");
 
 error_is(function ()

@@ -51,6 +51,9 @@ static inline void lua_assert_fail(const char *expr, const char *file, int line)
 #include <time.h>
 #include <signal.h>
 #include <unistd.h>
+#if defined(LUA_DL_DLOPEN)
+#include <dlfcn.h>
+#endif
 
 #include "lua.h"
 #include "lauxlib.h"

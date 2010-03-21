@@ -85,19 +85,16 @@ fi
 
 case $host in
 	*-*-linux*)
-		JLIBDIR="/usr/java/latest/lib/$JARCH"
-		JAVA_LIBS="-L$JLIBDIR -R$JLIBDIR -L$JLIBDIR/server -R$JLIBDIR/server \
-			-ljvm -lverify -lzip -ljava"
+		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/java/default/lib/$JARCH/server/libjvm.so", [jvm])
+		JAVA_LIBS=""
 		dnl find latest jdk
 		for jdk in /usr/java/jdk* ; do
 			JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
 		done
 		;;
 	*-*-solaris*)
-		JLIBDIR="/usr/java/jre/lib/$JARCH"
+		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/java/jre/lib/$JARCH/server/libjvm.so", [jvm])
 		JAVA_CFLAGS="-I/usr/java/include -I/usr/java/include/solaris"
-		JAVA_LIBS="-L$JLIBDIR -R$JLIBDIR -L$JLIBDIR/server -R$JLIBDIR/server \
-			-ljvm -lverify -lzip -ljava"
 		;;
 	*-*-darwin*)
 		JAVA_CFLAGS="-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers"
