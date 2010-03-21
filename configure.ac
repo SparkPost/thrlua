@@ -97,6 +97,7 @@ case $host in
 		JAVA_CFLAGS="-I/usr/java/include -I/usr/java/include/solaris"
 		;;
 	*-*-darwin*)
+		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "libjvm is system framework on OS/X Darwin")
 		JAVA_CFLAGS="-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers"
 		JAVA_LIBS="-framework JavaVM"
 		;;
