@@ -1,5 +1,5 @@
 require 'Test.More';
-plan(10);
+plan(11);
 
 require 'javabridge';
 require 'java';
@@ -27,7 +27,11 @@ is(tostring(h:getReturnType()), 'int');
 is(tostring(name:getReturnType()), 'class java.lang.String');
 
 p = java.new('java/util/Properties');
-is(tostring(p), 'java.util.Properties');
+c = p.getClass;
+diag(type(c));
+diag(c);
+is(tostring(p:getClass()), 'class java.util.Properties');
+is(tostring(p), '{}');
 
 
 is(javabridge.stopVM(), true, "stopped vm");

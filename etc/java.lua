@@ -23,7 +23,7 @@ function new(cls, ...)
   end
   local args = {...};
   local ctors = cls:getConstructors();
-  print(#ctors, ctors);
+--  print(#ctors, ctors);
   local thector = nil
   for i = 0, #ctors - 1 do
     local c = ctors[i];
@@ -41,17 +41,20 @@ function new(cls, ...)
     error("could not find a suitable constructor for " .. tostring(cls));
   end
   if Array == nil then
-    Array = javabridge.findClass('java/lang/reflect/Array');
+    Array = javabridge.findClass('java/lang/reflect/Array'):newInstance();
   end
   if Object == nil then
     Object = javabridge.findClass('java/lang/Object');
   end
-  local a = Array.newInstance(nil, Object, #args);
-  print("created", a);
-  for i = 0, #args - 1 do
-    Array.set(a, i, args[i+1])
+  local a = nil;
+  if #args > 0 then
+    a = Array.newInstance(Object, #args);
+    for i = 0, #args - 1 do
+      Array.set(a, i, args[i+1])
+    end
   end
-  return thector:newInstance(a);
+  local r = thector:newInstance(a);
+  return r;
 end
 
 -- vim:ts=2:sw=2:et:

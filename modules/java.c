@@ -15,8 +15,13 @@
 /* userdata that points to a jclass */
 #define LJB_CLASS "javabridge:jclass"
 #define LJB_OBJECT "javabridge:jobject"
-#define LJB_METHODID "javabridge:jmethodID"
 #define LJB_METHOD "javabridge:jmethod"
+#define LJB_METHODS "javabridge:jmethod:match"
+
+struct jni_methodmatch {
+  jobject obj;
+  char name[1];
+};
 
 typedef jint (*jni_create_vm_func)(JavaVM **pvm, void **penv, void *args);
 
@@ -29,15 +34,22 @@ static jclass clz_String = NULL;
 static jmethodID mid_Object_toString;
 static jclass clz_Object = NULL;
 static jclass clz_Double = NULL;
+static jclass clz_Modifier = NULL;
+static jclass clz_Method = NULL;
+static jclass clz_Class = NULL;
 /* for binding methods */
 static jmethodID mid_Class_getMethods = NULL;
+static jmethodID mid_Class_getMethod = NULL;
+static jmethodID mid_Class_getDeclaredMethods = NULL;
 static jmethodID mid_Class_isPrimitive = NULL;
 static jmethodID mid_Method_getName = NULL;
 static jmethodID mid_Method_getParameterTypes = NULL;
 static jmethodID mid_Method_getReturnType = NULL;
 static jmethodID mid_Method_getDeclaringClass = NULL;
+static jmethodID mid_Method_getModifiers = NULL;
 static jmethodID mid_Method_invoke = NULL;
 static jmethodID mid_Double_ctor = NULL;
+static jmethodID mid_Modifier_isStatic = NULL;
 
 static void detach_jvm(void *ptr)
 {
@@ -114,6 +126,38 @@ static void throw_jni(lua_State *L, JNIEnv *e)
   }
 }
 
+static jclass get_class(lua_State *L, JNIEnv *e, const char *name)
+{
+  jclass c = (*e)->FindClass(e, name);
+  if (!c) {
+    throw_jni(L, e);
+  }
+  c = (*e)->NewGlobalRef(e, c);
+  if (!c) {
+    throw_jni(L, e);
+  }
+  return c;
+}
+
+static jmethodID get_method(lua_State *L, JNIEnv *e, jclass clz,
+  const char *name, const char *sig)
+{
+  jmethodID id = (*e)->GetMethodID(e, clz, name, sig);
+  if (id == NULL) {
+    throw_jni(L, e);
+  }
+  return id;
+}
+
+static jmethodID get_static_method(lua_State *L, JNIEnv *e, jclass clz,
+  const char *name, const char *sig)
+{
+  jmethodID id = (*e)->GetStaticMethodID(e, clz, name, sig);
+  if (id == NULL) {
+    throw_jni(L, e);
+  }
+  return id;
+}
 static int jb_index(lua_State *L)
 {
   jobject o = *(jobject*)lua_touserdata(L, 1);
@@ -154,6 +198,10 @@ static int jb_index(lua_State *L)
 
   fname = luaL_checklstring(L, 2, NULL);
   clazz = (*e)->GetObjectClass(e, o);
+  if (clazz == NULL) {
+    throw_jni(L, e);
+  }
+
   fid = (*e)->GetFieldID(e, clazz, fname, "Ljava/lang/Object");
   if (fid) {
     jobject r = (*e)->GetObjectField(e, o, fid);
@@ -175,26 +223,13 @@ static int jb_index(lua_State *L)
   }
   (*e)->ExceptionClear(e);
 
-  if (mid_Class_getMethods == NULL) {
-    mid_Class_getMethods = (*e)->GetMethodID(e, clazz,
-        "getMethods", "()[Ljava/lang/reflect/Method;");
-    if (!mid_Class_getMethods) {
-      throw_jni(L, e);
-    }
-  }
-  if (mid_Class_isPrimitive == NULL) {
-    mid_Class_isPrimitive = (*e)->GetMethodID(e, clazz,
-        "isPrimitive", "()Z");
-    if (!mid_Class_isPrimitive) {
-      throw_jni(L, e);
-    }
-  }
-
   methods = (*e)->CallObjectMethod(e, clazz, mid_Class_getMethods);
   if (methods == NULL) {
     throw_jni(L, e);
   }
   nmethods = (*e)->GetArrayLength(e, methods);
+//  printf("%d methods; looking for %s\n", nmethods, fname);
+
   for (i = 0; i < nmethods; i++) {
     jobject method = (*e)->GetObjectArrayElement(e, methods, i);
     jstring jname;
@@ -202,19 +237,6 @@ static int jb_index(lua_State *L)
 
     if (method == NULL) {
       throw_jni(L, e);
-    }
-    if (mid_Method_getName == NULL) {
-      jclass mclass = (*e)->GetObjectClass(e, method);
-      mid_Method_getName = (*e)->GetMethodID(e, mclass,
-          "getName", "()Ljava/lang/String;");
-
-      mid_Method_invoke = (*e)->GetMethodID(e, method, "invoke",
-        "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
-
-      (*e)->DeleteLocalRef(e, mclass);
-      if (!mid_Method_getName) {
-        throw_jni(L, e);
-      }
     }
     jname = (*e)->CallObjectMethod(e, method, mid_Method_getName);
     if (jname == NULL) {
@@ -225,6 +247,7 @@ static int jb_index(lua_State *L)
     if (name == NULL) {
       throw_jni(L, e);
     }
+//    printf("   %s?\n", name);
     if (!strcmp(name, fname)) {
       matches++;
       lastmethod = method;
@@ -247,7 +270,14 @@ static int jb_index(lua_State *L)
     lua_setmetatable(L, -2);
     return 1;
   } else if (matches) {
-    luaL_error(L, "multiple methods with the name %s were found", fname);
+    struct jni_methodmatch *mmatch;
+
+    mmatch = lua_newuserdata(L, sizeof(*mmatch) + strlen(fname));
+    strcpy(mmatch->name, fname);
+    mmatch->obj = (*e)->NewGlobalRef(e, o);
+    luaL_getmetatable(L, LJB_METHODS);
+    lua_setmetatable(L, -2);
+    return 1;
   } else {
     lua_pushnil(L);
     return 1;
@@ -258,38 +288,18 @@ static int jb_index(lua_State *L)
   return 0;
 }
 
-static int jb_call_methodid(lua_State *L)
+static int gc_methodmatch(lua_State *L)
 {
-  jmethodID m = *(jmethodID*)lua_touserdata(L, 1);
+  struct jni_methodmatch *m = luaL_checkudata(L, 1, LJB_METHODS);
   JNIEnv *e = get_jni(L);
-  int nargs = lua_gettop(L) - 2;
-  jobject cobj;
-  jobject ret;
+  
+  (*e)->DeleteGlobalRef(e, m->obj);
+  return 0;
+}
 
-  luaL_checktype(L, 2, LUA_TUSERDATA);
-  cobj = *(jobject*)lua_touserdata(L, 2);
-
-printf("call invoked; there are %d args (method=%p obj=%p)\n", nargs, m, cobj);
-
-  ret = (*e)->CallObjectMethod(e, cobj, m);
-
-  if (ret == NULL) {
-    throw_jni(L, e);
-    lua_pushnil(L);
-  } else {
-    jobject *robj;
-
-    ret = (*e)->NewGlobalRef(e, ret);
-    if (ret == NULL) {
-      throw_jni(L, e);
-    }
-    robj = (jobject*)lua_newuserdata(L, sizeof(*robj));
-    *robj = ret;
-    luaL_getmetatable(L, LJB_OBJECT);
-    lua_setmetatable(L, -2);
-    return 1;
-  }
-
+static int jb_call_methodmatch(lua_State *L)
+{
+  printf("\n *** NEED TO RESOLVE !\n");
   return 0;
 }
 
@@ -297,45 +307,34 @@ static int jb_call_methodobj(lua_State *L)
 {
   jobject method = *(jobject*)lua_touserdata(L, 1);
   JNIEnv *e = get_jni(L);
-  int nargs = lua_gettop(L) - 2;
-  int argoffset = 3;
-  jobject cobj;
+  /* number of args (not including "self"; the method object) */
+  int nargs = lua_gettop(L) - 1;
+  /* index of first argument to the method */
+  int argoffset = 2;
   jobject ret;
   jobject ptypes;
   int expectedargs, i;
   jmethodID mid;
   jobject rettype;
+  int isstatic;
+  jint mod;
+  jobjectArray args = NULL;
+  jobject cobj;
 
-  if (!lua_isnil(L, 2)) {
-    luaL_checktype(L, 2, LUA_TUSERDATA);
-    cobj = *(jobject*)lua_touserdata(L, 2);
+ 
+  mod = (*e)->CallIntMethod(e, method, mid_Method_getModifiers);
+  throw_jni(L, e);
+
+  isstatic = (*e)->CallStaticBooleanMethod(e, clz_Modifier,
+              mid_Modifier_isStatic, mod) == JNI_TRUE;
+  throw_jni(L, e);
+
+  if (!isstatic) {
+//    printf("NOT STATIC\n");
+    nargs--;
+    argoffset++;
   } else {
-    cobj = NULL;
-    nargs++;
-    argoffset--;
-  }
-
-  if (mid_Method_getParameterTypes == NULL) {
-    jclass mclass = (*e)->GetObjectClass(e, method);
-
-    mid_Method_getParameterTypes = (*e)->GetMethodID(e, mclass,
-        "getParameterTypes", "()[Ljava/lang/Class;");
-    if (!mid_Method_getParameterTypes) {
-      throw_jni(L, e);
-    }
-
-    mid_Method_getReturnType = (*e)->GetMethodID(e, mclass,
-        "getReturnType", "()Ljava/lang/Class;");
-    if (!mid_Method_getReturnType) {
-      throw_jni(L, e);
-    }
-    
-    mid_Method_getDeclaringClass = (*e)->GetMethodID(e, mclass,
-        "getDeclaringClass", "()Ljava/lang/Class;");
-    if (!mid_Method_getDeclaringClass) {
-      throw_jni(L, e);
-    }
-    (*e)->DeleteLocalRef(e, mclass);
+//    printf("STATIC\n");
   }
 
   ptypes = (*e)->CallObjectMethod(e, method, mid_Method_getParameterTypes);
@@ -371,101 +370,56 @@ static int jb_call_methodobj(lua_State *L)
     throw_jni(L, e);
   }
 
-printf("call invoked; there are %d args; expected %d (method=%p obj=%p)\n",
-nargs, expectedargs, method, cobj);
+//printf("call invoked; there are %d args; expected %d (method=%p)\n", nargs, expectedargs, method);
 
-  if (nargs) {
-    /* if we have args to pass in, then we restort to using Method.invoke,
-     * as it will follow the java rules for method binding and dispatch */
-    jobjectArray args = NULL;
-    jobject nil = (*e)->NewGlobalRef(e, NULL);
-    if (nil == NULL) {
-      throw_jni(L, e);
-    }
+  /* if we have args to pass in, then we resort to using Method.invoke,
+  * as it will follow the java rules for method binding and dispatch */
 
-    if (cobj == NULL) {
-      nargs--;
-      argoffset++;
-    }
-
-    args = (*e)->NewObjectArray(e, nargs, clz_Object, nil);
-    if (args == NULL) {
-      throw_jni(L, e);
-    }
-
-    for (i = 0; i < nargs; i++) {
-      int tt;
-      jobject val;
-
-      tt = lua_type(L, argoffset + i);
-      printf("param %d is %s\n", i, lua_typename(L, tt));
-      switch (tt) {
-        case LUA_TNIL:
-          /* already initialized to nil */
-          break;
-        case LUA_TNUMBER:
-          val = (*e)->NewObject(e, clz_Double, mid_Double_ctor,
-                  (double)lua_tonumber(L, argoffset + i));
-          (*e)->SetObjectArrayElement(e, args, i, val);
-          break;
-
-        case LUA_TUSERDATA:
-          /* FIXME: assert that it is a java object */
-          val = *(jobject*)lua_touserdata(L, argoffset + i);
-          (*e)->SetObjectArrayElement(e, args, i, val);
-          break;
-
-        default:
-          luaL_error(L, "no handler for %s\n", lua_typename(L, tt));
-      }
-#if 0
-      jobject pval;
-      jboolean prim;
-
-      pval = (*e)->GetObjectArrayElement(e, ptypes, i);
-      if (pval == NULL) {
-        throw_jni(L, e);
-      }
-      prim = (*e)->CallBooleanMethod(e, pval, mid_Class_isPrimitive);
-      throw_jni(L, e);
-      if (prim == JNI_TRUE) {
-        printf("param %d is a primitive\n", i);
-      } else {
-        printf("param %d is NOT prim\n", i);
-      }
-#endif
-    }
-    if (cobj == NULL) {
-      cobj = (*e)->NewGlobalRef(e, NULL);
-      if (cobj == NULL) {
-        throw_jni(L, e);
-        printf("making a NULL reference, but got %p\n", cobj);
-      }
-    }
-    printf("calling invoke(%p, %d args)\n", cobj, nargs);
-    ret = (*e)->CallObjectMethod(e, method, mid_Method_invoke, cobj, args);
+  if (isstatic) {
+    cobj = NULL;
   } else {
-    mid = (*e)->FromReflectedMethod(e, method);
-    if (mid == NULL) {
-      throw_jni(L, e);
-    }
-    fflush(stdout);
-
-    if (cobj) {
-      ret = (*e)->CallObjectMethod(e, cobj, mid);
+    if (lua_isnil(L, 2)) {
+      cobj = NULL;
     } else {
-      jobject clazz = (*e)->CallObjectMethod(e, method,
-          mid_Method_getDeclaringClass);
-      if (clazz == NULL) {
-        throw_jni(L, e);
-      }
-      ret = (*e)->CallStaticObjectMethod(e, clazz, mid);
-      if (ret == NULL) {
-        throw_jni(L, e);
-      }
-      (*e)->DeleteLocalRef(e, clazz);
+      luaL_checktype(L, 2, LUA_TUSERDATA); /* FIXME: assert java object */
+      cobj = *(jobject*)lua_touserdata(L, 2);
     }
   }
+  args = (*e)->NewObjectArray(e, nargs, clz_Object, NULL);
+//  printf("Allocating array of %d args\n", nargs);
+  if (args == NULL) {
+    throw_jni(L, e);
+  }
+
+  for (i = 0; i < nargs; i++) {
+    int tt;
+    jobject val;
+
+    tt = lua_type(L, argoffset + i);
+//    printf("param %d at pos %d is %s\n", i, argoffset + i, lua_typename(L, tt));
+    switch (tt) {
+      case LUA_TNIL:
+        /* already initialized to nil */
+        break;
+      case LUA_TNUMBER:
+        val = (*e)->NewObject(e, clz_Double, mid_Double_ctor,
+            (double)lua_tonumber(L, argoffset + i));
+        (*e)->SetObjectArrayElement(e, args, i, val);
+        break;
+
+      case LUA_TUSERDATA:
+        /* FIXME: assert that it is a java object */
+        val = *(jobject*)lua_touserdata(L, argoffset + i);
+        (*e)->SetObjectArrayElement(e, args, i, val);
+        break;
+
+      default:
+        luaL_error(L, "no handler for %s\n", lua_typename(L, tt));
+    }
+  }
+ 
+//  printf("calling invoke(%p, %d args)\n", cobj, nargs);
+  ret = (*e)->CallObjectMethod(e, method, mid_Method_invoke, cobj, args);
 
   if (ret == NULL) {
     throw_jni(L, e);
@@ -494,15 +448,7 @@ static int jb_find_class(lua_State *L)
   jclass clazz;
   jclass *cp;
 
-  clazz = (*e)->FindClass(e, name);
-
-  if (clazz == NULL) {
-    throw_jni(L, e);
-    lua_pushnil(L);
-    return 1;
-  }
-  clazz = (*e)->NewGlobalRef(e, clazz);
-  throw_jni(L, e);
+  clazz = get_class(L, e, name);
 
   cp = lua_newuserdata(L, sizeof(*cp));
   *cp = clazz;
@@ -606,16 +552,17 @@ static const luaL_reg obj_funcs[] = {
   { NULL, NULL }
 };
 
-static const luaL_reg methodid_funcs[] = {
-  { "__call", jb_call_methodid },
-  { NULL, NULL }
-};
-
 static const luaL_reg methodobj_funcs[] = {
   { "__index", jb_index },
   { "__tostring", jb_tostring },
   { "__gc", gc_jni },
   { "__call", jb_call_methodobj },
+  { NULL, NULL }
+};
+
+static const luaL_reg methodmatch_funcs[] = {
+  { "__gc", gc_methodmatch },
+  { "__call", jb_call_methodmatch },
   { NULL, NULL }
 };
 
@@ -679,32 +626,48 @@ static int jb_new_vm(lua_State *L)
 
     pthread_setspecific(jthrkey, jenv);
 
-    clz_Throwable = (*jenv)->FindClass(jenv, "java/lang/Throwable");
-    if (!clz_Throwable) {
-      luaL_error(L, "Unable to locate class java/lang/Throwable");
-    }
-    clz_Throwable = (*jenv)->NewGlobalRef(jenv, clz_Throwable);
-    clz_Object = (*jenv)->FindClass(jenv, "java/lang/Object");
-    clz_Object = (*jenv)->NewGlobalRef(jenv, clz_Object);
-    clz_Double = (*jenv)->FindClass(jenv, "java/lang/Double");
-    clz_Double = (*jenv)->NewGlobalRef(jenv, clz_Double);
-    mid_Double_ctor = (*jenv)->GetMethodID(jenv, clz_Double,
-      "<init>", "(D)V");
-    if (!mid_Double_ctor) {
-      throw_jni(L, jenv);
-    }
-
-    mid_Object_toString = (*jenv)->GetMethodID(jenv, clz_Object,
+    /* get these resolved first, as they are used in exception processing */
+    clz_Object = get_class(L, jenv, "java/lang/Object");
+    mid_Object_toString = get_method(L, jenv, clz_Object,
       "toString", "()Ljava/lang/String;");
-    if (!mid_Object_toString) {
-      luaL_error(L, "Unable to locate java/lang/Object::toString");
-    }
 
-    clz_String = (*jenv)->FindClass(jenv, "java/lang/String");
-    if (!clz_String) {
-      luaL_error(L, "Unable to locate class java/lang/String");
-    }
-    clz_String = (*jenv)->NewGlobalRef(jenv, clz_String);
+    clz_Throwable = get_class(L, jenv, "java/lang/Throwable");
+
+    clz_Double = get_class(L, jenv, "java/lang/Double");
+    clz_String = get_class(L, jenv, "java/lang/String");
+    clz_Method = get_class(L, jenv, "java/lang/reflect/Method");
+    clz_Modifier = get_class(L, jenv, "java/lang/reflect/Modifier");
+    clz_Class = get_class(L, jenv, "java/lang/Class");
+
+    mid_Class_getMethods = get_method(L, jenv, clz_Class,
+        "getMethods", "()[Ljava/lang/reflect/Method;");
+    mid_Class_getMethod = get_method(L, jenv, clz_Class,
+        "getMethod",
+        "(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;");
+    mid_Class_getDeclaredMethods = get_method(L, jenv, clz_Class,
+        "getDeclaredMethods", "()[Ljava/lang/reflect/Method;");
+    mid_Class_isPrimitive = get_method(L, jenv, clz_Class,
+        "isPrimitive", "()Z");
+
+    mid_Modifier_isStatic = get_static_method(L, jenv, clz_Modifier,
+        "isStatic", "(I)Z");
+
+    mid_Method_getName = get_method(L, jenv, clz_Method,
+        "getName", "()Ljava/lang/String;");
+    mid_Method_invoke = get_method(L, jenv, clz_Method,
+        "invoke",
+        "(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;");
+    mid_Method_getParameterTypes = get_method(L, jenv, clz_Method,
+        "getParameterTypes", "()[Ljava/lang/Class;");
+    mid_Method_getReturnType = get_method(L, jenv, clz_Method,
+        "getReturnType", "()Ljava/lang/Class;");
+    mid_Method_getDeclaringClass = get_method(L, jenv, clz_Method,
+        "getDeclaringClass", "()Ljava/lang/Class;");
+    mid_Method_getModifiers = get_method(L, jenv, clz_Method,
+        "getModifiers", "()I");
+
+    mid_Double_ctor = get_method(L, jenv, clz_Double,
+      "<init>", "(D)V");
 
     lua_pushboolean(L, 1);
     return 1;
@@ -742,15 +705,15 @@ int luaopen_javabridge(lua_State *L)
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, obj_funcs);
 
-  luaL_newmetatable(L, LJB_METHODID);
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -2, "__index");
-  luaL_register(L, NULL, methodid_funcs);
-
   luaL_newmetatable(L, LJB_METHOD);
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, methodobj_funcs);
+
+  luaL_newmetatable(L, LJB_METHODS);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_register(L, NULL, methodmatch_funcs);
 
   luaL_register(L, "javabridge", funcs);
   lua_pushliteral(L, "DEFAULT_JVM");
