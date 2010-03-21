@@ -71,7 +71,44 @@ if test "$use_readline" != "1" ; then
 	done
 fi
 
+if test -x /usr/bin/optisa ; then
+	JARCH=`/usr/bin/optisa amd64 sparcv9 i386 sparcv8`
+else
+	JARCH=`uname -i 2>/dev/null`
+	if test -z "$JARCH" ; then
+		JARCH=`uname -p`
+	fi
+fi
+if test "$JARCH" == "x86_64" ; then
+	JARCH="amd64"
+fi
+
+case $host in
+	*-*-linux*)
+		JLIBDIR="/usr/java/latest/lib/$JARCH"
+		JAVA_LIBS="-L$JLIBDIR -R$JLIBDIR -L$JLIBDIR/server -R$JLIBDIR/server \
+			-ljvm -lverify -lzip -ljava"
+		dnl find latest jdk
+		for jdk in /usr/java/jdk* ; do
+			JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
+		done
+		;;
+	*-*-solaris*)
+		JLIBDIR="/usr/java/jre/lib/$JARCH"
+		JAVA_CFLAGS="-I/usr/java/include -I/usr/java/include/solaris"
+		JAVA_LIBS="-L$JLIBDIR -R$JLIBDIR -L$JLIBDIR/server -R$JLIBDIR/server \
+			-ljvm -lverify -lzip -ljava"
+		;;
+	*-*-darwin*)
+		JAVA_CFLAGS="-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers"
+		JAVA_LIBS="-framework JavaVM"
+		;;
+esac
+AC_SUBST(JAVA_CFLAGS)
+AC_SUBST(JAVA_LIBS)
+
 AC_CONFIG_HEADERS([rcluaconfig.h])
 AC_CONFIG_FILES([Makefile etc/rclua.pc])
 AC_OUTPUT
 
+dnl vim:ts=2:sw=2:

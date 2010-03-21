@@ -7,7 +7,7 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la mathx.la
+cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -45,6 +45,11 @@ pcre_la_CPPFLAGS = -Isrc @PCRE_CFLAGS@
 mathx_la_SOURCES = modules/mathx.c
 mathx_la_LDFLAGS = -module
 mathx_la_CPPFLAGS = -Isrc
+
+# javabridge
+javabridge_la_SOURCES = modules/java.c
+javabridge_la_LDFLAGS = -module @JAVA_LIBS@
+javabridge_la_CPPFLAGS = -Isrc @JAVA_CFLAGS@
 
 EXTRA_DIST = COPYING HISTORY INSTALL README
 
