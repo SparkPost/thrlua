@@ -33,6 +33,9 @@ diag(c);
 is(tostring(p:getClass()), 'class java.util.Properties');
 is(tostring(p), '{}');
 
+l = java.new('java/lang/Double', 2.5);
+is(tostring(l), '2.5');
+
 
 is(javabridge.stopVM(), true, "stopped vm");
 
