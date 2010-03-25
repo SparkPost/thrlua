@@ -1,5 +1,5 @@
 require 'Test.More';
-plan(11);
+plan(15);
 
 require 'javabridge';
 require 'java';
@@ -7,7 +7,7 @@ require 'java';
 like(javabridge.DEFAULT_JVM, "libjvm", javabridge.DEFAULT_JVM);
 is(javabridge.startVM(), true, "started vm");
 
-error_is(function ()
+error_like(function ()
 	javabridge.findClass("an invalid class name");
 end, "java.lang.NoClassDefFoundError: an invalid class name");
 

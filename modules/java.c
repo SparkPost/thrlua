@@ -266,7 +266,7 @@ static int jb_index(lua_State *L)
     }
     if (!strcmp(name, fname)) {
       matches++;
-    printf("   %s (%d)\n", name, matches);
+//    printf("   %s (%d)\n", name, matches);
       lastmethod = method;
     } else {
       (*e)->DeleteLocalRef(e, method);
@@ -323,10 +323,10 @@ static int do_call_method(lua_State *L, JNIEnv *e,
   jobject cobj;
   int argoffset = lua_gettop(L) - nargs + 1;
  
-  printf("argoffset=%d nargs=%d\n", argoffset, nargs);
+//  printf("argoffset=%d nargs=%d\n", argoffset, nargs);
 
   args = (*e)->NewObjectArray(e, nargs, clz_Object, NULL);
-  printf("Allocating array of %d args\n", nargs);
+//  printf("Allocating array of %d args\n", nargs);
   if (args == NULL) {
     throw_jni(L, e);
   }
@@ -336,7 +336,7 @@ static int do_call_method(lua_State *L, JNIEnv *e,
     jobject val;
 
     tt = lua_type(L, argoffset + i);
-    printf("param %d at pos %d is %s\n", i, argoffset + i, lua_typename(L, tt));
+//    printf("param %d at pos %d is %s\n", i, argoffset + i, lua_typename(L, tt));
     switch (tt) {
       case LUA_TNIL:
         /* already initialized to nil */
@@ -357,7 +357,7 @@ static int do_call_method(lua_State *L, JNIEnv *e,
         luaL_error(L, "no handler for %s\n", lua_typename(L, tt));
     }
   }
- {
+ if (0) {
   jstring jname;
   const char *name;
 
@@ -374,7 +374,7 @@ static int do_call_method(lua_State *L, JNIEnv *e,
     (*e)->ReleaseStringUTFChars(e, jname, name);
     (*e)->DeleteLocalRef(e, jname);
  }
-  printf("calling invoke(%p, %d args)\n", cobj, nargs);
+//  printf("calling invoke(%p, %d args)\n", cobj, nargs);
   ret = (*e)->CallObjectMethod(e, method, mid_Method_invoke, selfptr, args);
 
   if (ret == NULL) {
@@ -390,7 +390,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushboolean(L, b == JNI_TRUE);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" BOOL ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Byte)) {
@@ -400,7 +399,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushinteger(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" BYTE ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Short)) {
@@ -410,7 +408,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushinteger(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" SHORT ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Int)) {
@@ -420,7 +417,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushinteger(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" INT ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Long)) {
@@ -430,7 +426,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushinteger(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" LONG ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Float)) {
@@ -440,7 +435,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushnumber(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" FLOAT ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Double)) {
@@ -450,7 +444,6 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushnumber(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" DOUBLE ret\n");
       return 1;
     }
     if ((*e)->IsInstanceOf(e, ret, clz_Char)) {
@@ -460,13 +453,7 @@ static int do_call_method(lua_State *L, JNIEnv *e,
 
       lua_pushinteger(L, b);
       (*e)->DeleteLocalRef(e, ret);
-      printf(" CHAR ret\n");
       return 1;
-    }
-    if ((*e)->IsInstanceOf(e, ret, clz_String)) {
-      printf(" STRING ret\n");
-    } else {
-      printf(" OBJ ret\n");
     }
 
     ret = (*e)->NewGlobalRef(e, ret);
@@ -499,7 +486,7 @@ static int jb_call_methodmatch(lua_State *L)
   clz = (*e)->GetObjectClass(e, m->obj);
 
   args = (*e)->NewObjectArray(e, nargs, clz_Object, NULL);
-  printf("Allocating array of %d args\n", nargs);
+//  printf("Allocating array of %d args\n", nargs);
   if (args == NULL) {
     throw_jni(L, e);
   }
@@ -514,7 +501,7 @@ static int jb_call_methodmatch(lua_State *L)
     jobject val;
 
     tt = lua_type(L, argoffset + i);
-    printf("param %d at pos %d is %s\n", i, argoffset + i, lua_typename(L, tt));
+//    printf("param %d at pos %d is %s\n", i, argoffset + i, lua_typename(L, tt));
     switch (tt) {
       case LUA_TNIL:
         (*e)->SetObjectArrayElement(e, args, i, clz_Object);
