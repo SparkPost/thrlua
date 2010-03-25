@@ -2,6 +2,6 @@
 LD_LIBRARY_PATH=.libs
 DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
 RCLUA_CPATH='.libs/?.so'
-RCLUA_PATH='./?.lua;./etc/?.lua'
+RCLUA_PATH='./?.lua;./etc/?.lua;./etc/?/init.lua'
 export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
 exec gdb --args .libs/rclua $*
