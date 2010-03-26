@@ -375,7 +375,7 @@ static void resume (lua_State *L, void *ud) {
       return;
   }
   else {  /* resuming from previous yield */
-    lua_assert(L->status == LUA_YIELD);
+    lua_assert(L->status == LUA_YIELD || L->status == LUA_SUSPEND);
     L->status = 0;
     if (!f_isLua(ci)) {  /* `common' yield? */
       /* finish interrupted execution of `OP_CALL' */
@@ -415,10 +415,14 @@ int lua_suspend(lua_State *L, lua_ResumeFunc func, void *ptr)
     }
     L->on_resume = func;
     L->on_resume_ptr = ptr;
+    if (L->nCcalls > L->baseCcalls)
+      luaG_runerror(L, "attempt to suspend across metamethod/C-call boundary");
+    L->base = L->top;  /* protect stack slots below */
+    L->status = LUA_SUSPEND;
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
-  return lua_yield(L, 0);
+  return -2;
 }
 
 void lua_set_suspender(lua_State *L,
@@ -463,7 +467,8 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
 
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
-    if (L->status != LUA_YIELD && (L->status != 0 || L->ci != L->base_ci)) {
+    if (L->status != LUA_YIELD && L->status != LUA_SUSPEND
+        && (L->status != 0 || L->ci != L->base_ci)) {
       reserr = "cannot resume non-suspended coroutine";
     } else if (L->nCcalls >= LUAI_MAXCCALLS) {
       reserr = "C stack overflow";
@@ -487,16 +492,12 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
 
         status = on_resume(L, on_resume_ptr);
 
-        if (status == LUA_YIELD) {
-          /* suspend/resume protocol is to discard yielded values */
-          lua_settop(L, top);
-          return LUA_YIELD;
+        if (status < 0) {
+          resume_error(L, "cannot suspend or yield from a resume handler");
         }
-        if (status != 0) {
-          return status;
-        }
-
-        nargs = lua_gettop(L) - top;
+        nargs = status;
+      } else if (L->status == LUA_SUSPEND) {
+        nargs = 0;
       }
 
       L->baseCcalls = ++L->nCcalls;
@@ -505,21 +506,10 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
         L->status = cast_byte(status);  /* mark thread as `dead' */
         luaD_seterrorobj(L, status, L->top);
         L->ci->top = L->top;
-
-        if (status == LUA_YIELD && L->on_suspend) {
-          /* suspend/resume protocol is to discard yielded values */
-          lua_settop(L, top);
-        }
       }
       else {
         lua_assert(L->nCcalls == L->baseCcalls);
         status = L->status;
-
-        if (L->on_suspend) {
-          /* suspend/resume protocol is to indicate the number of
-           * returned values as a positive integer */
-          status = lua_gettop(L) - (top - (nargs + 1));
-        }
       }
       --L->nCcalls;
     }
