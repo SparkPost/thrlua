@@ -39,10 +39,16 @@ static TValue *index2adr (lua_State *L, int idx) {
     case LUA_REGISTRYINDEX:
       return registry(L);
     case LUA_TLSINDEX:
+      if (!ttistable(&L->tls)) {
+        sethvalue(L, &L->tls, luaH_new(L, 0, 2));
+      }
       return &L->tls;
     case LUA_OSTLSINDEX:
     {
       thr_State *pt = get_per_thread(G(L));
+      if (!ttistable(&pt->tls)) {
+        sethvalue(L, &pt->tls, luaH_new(L, 0, 2));
+      }
       return &pt->tls;
     }
     case LUA_ENVIRONINDEX: {
