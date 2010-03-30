@@ -979,18 +979,21 @@ void luaC_fullgc (lua_State *L)
 static void *collector(void *ptr)
 {
   global_State *g = ptr;
+#ifdef ANNOTATE_THREAD_NAME
+  char threadname[32];
+
+  snprintf(threadname, sizeof(threadname), "lua gc g=%p", g);
+  ANNOTATE_THREAD_NAME(threadname);
+#endif
+  luaC_init_pt(g);
 
   while (!g->exiting) {
     struct timespec deadline;
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
-#ifdef CLOCK_MONOTONIC
-    clock_gettime(CLOCK_MONOTONIC, &deadline);
-#else
-    deadline.tv_sec = time(NULL);
-#endif
-    deadline.tv_sec += 10;
+    deadline.tv_sec = time(NULL) + 10;
+
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
     if (ret == 0 || ret == ETIMEDOUT) {
@@ -1104,9 +1107,6 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   pthread_key_create(&g->tls_key, tls_dtor);
 
   pthread_condattr_init(&cattr);
-#ifdef CLOCK_MONOTONIC
-  pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
-#endif
   pthread_cond_init(&g->gc_cond, &cattr);
   pthread_condattr_destroy(&cattr);
 
@@ -1190,7 +1190,7 @@ void *luaC_newobjv(global_State *g, lu_byte tt, size_t size)
       break
     NEWIMPL(LUA_TFUNCTION, Closure);
     NEWIMPL(LUA_TSTRING, TString);
-    NEWIMPL(LUA_TUSERDATA, TString);
+    NEWIMPL(LUA_TUSERDATA, Udata);
     default:
       lua_assert(0);
       abort();

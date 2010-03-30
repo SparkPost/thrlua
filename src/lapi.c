@@ -1107,7 +1107,7 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         break;
 
       case LUA_GCCOLLECT:
-        luaC_fullgc(L);
+        //luaC_fullgc(L);
         break;
       default:
         res = -1;  /* invalid option */

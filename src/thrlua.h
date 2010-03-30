@@ -20,6 +20,7 @@
 #if HAVE__OPT_MSYS_3RDPARTY_INCLUDE_VALGRIND_VALGRIND_H
 #include </opt/msys/3rdParty/include/valgrind/memcheck.h>
 #include </opt/msys/3rdParty/include/valgrind/valgrind.h>
+#include </opt/msys/3rdParty/include/valgrind/drd.h>
 #define HAVE_VALGRIND 1
 #endif
 

@@ -7,7 +7,12 @@ AM_PROG_CC_C_O
 
 AC_DEFINE(LUA_USE_POSIX, 1, [Use POSIX functions])
 AC_DEFINE(LUA_USE_DLOPEN, 1, [Use dlopen for loading modules])
-AC_DEFINE_UNQUOTED(LUA_ROOT, "$prefix/", [Installation prefix])
+
+if test "$prefix" == "NONE" ; then
+	AC_DEFINE_UNQUOTED(LUA_ROOT, "/opt/msys/3rdParty/", [Installation prefix])
+else
+	AC_DEFINE_UNQUOTED(LUA_ROOT, "$prefix/", [Installation prefix])
+fi
 
 AC_DEFINE(LUA_VERMAJORMINOR, "5.1", [First two version number octets])
 AC_SUBST(PACKAGE_VERMAJORMINOR, 5.1)
