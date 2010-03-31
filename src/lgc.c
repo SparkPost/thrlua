@@ -992,7 +992,7 @@ static void *collector(void *ptr)
     int ret;
 
     memset(&deadline, 0, sizeof(deadline));
-    deadline.tv_sec = time(NULL) + 10;
+    deadline.tv_sec = time(NULL) + 1;
 
     pthread_mutex_lock(&g->collector_lock);
     ret = pthread_cond_timedwait(&g->gc_cond, &g->collector_lock, &deadline);
