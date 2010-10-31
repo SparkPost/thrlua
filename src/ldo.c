@@ -490,7 +490,12 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
         L->on_resume_ptr = NULL;
         L->on_resume = NULL;
 
-        status = on_resume(L, on_resume_ptr);
+        lua_unlock(L);
+        LUAI_TRY_BLOCK(L) {
+          status = on_resume(L, on_resume_ptr);
+        } LUAI_TRY_FINALLY(L) {
+          lua_lock(L);
+        } LUAI_TRY_END(L);
 
         if (status < 0) {
           resume_error(L, "cannot suspend or yield from a resume handler");

@@ -39,17 +39,11 @@ static int do_tls_access(lua_State *L)
   const char *key = luaL_checklstring(L, 2, &len);
 
   if (!strcmp(key, "_TLS")) {
-    if (!ttistable(&L->tls)) {
-      sethvalue(L, &L->tls, luaH_new(L, 0, 2));
-    }
     lua_pushvalue(L, LUA_TLSINDEX);
     return 1;
   }
   if (!strcmp(key, "_OSTLS")) {
     thr_State *pt = get_per_thread(G(L));
-    if (!ttistable(&pt->tls)) {
-      sethvalue(L, &pt->tls, luaH_new(L, 0, 2));
-    }
     lua_pushvalue(L, LUA_OSTLSINDEX);
     return 1;
   }
