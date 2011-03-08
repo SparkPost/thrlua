@@ -1,0 +1,430 @@
+Garbage Collector
+=================
+
+The collector mechanism in threaded lua is a hybrid generational and tri-color
+mark and don't sweep algorithm.
+
+The initial lua_State created by lua_newstate is associated with a heap with
+an id of 0.  It is known as the "Global Heap".
+
+Each coroutine lua_State is created with its own heap with a distinct heap id.
+
+When objects are allocated, they are allocated against the heap associated
+with the current lua_State; the owning heap id is tagged in the object header.
+
+Each object is tracked by the collector from two perspectives:
+
+ * Reachability within its owning (local) heap
+ * Reachability from external heaps
+
+An object is considered to be in one of the following states from the local
+heap perspective:
+
+ * Black: known to be reachable. If an aggregate object, all directly
+          referenced objects are either black or grey.
+ * Grey:  known to be reachable.  A non-aggregate can never be Grey; it
+          transitions directly to black.  A grey object needs to be completely
+          traced to ensure that its reachability is propagated to its
+          referenced members; when this is done, the object can transition to
+          black status.
+ * Finalize:  known to be garbage, but has a finalizer that needs to be run
+              before it can be reclaimed.
+ * White: known to be garbage and can be reclaimed
+
+To track references from external heaps, we have the notion of an external
+reference status.  The mutator recognizes when the l-value and r-value in an
+assignment are from different heaps and sets an "x-ref" bit on the r-value.
+
+The "x-ref" bit promotes the interpretation of White status of an object to
+Grey status, preventing it from being detected as garbage during a local
+collection.
+
+Local Collection
+================
+
+A local collection is scoped to a given lua_State.  Based on the infant
+mortality principle, most garbage is found in newly created objects.  In
+coroutine-heavy workloads, where a new coroutine is created and used for a
+short batch of work, the global state of the system is rarely garbage.  On
+that basis, garbage collection will be most effective if we scope it to a
+given lua_State and allow this collection to occur without blocking the
+operation of other lua_States.
+
+The three actors in a local collection are:
+
+ * The allocator - creates objects and associates them with the local heap
+ * The mutator - a write barrier that maintains tracability state
+ * The collector - processes state to identify garbage
+
+The local heap has a color indicator associated with it; this member is called
+"black".  Initially, black is set to 0.  The heap also has a set of 4 list
+heads, one of each of the states: Black, Grey, Finalize and White.
+
+The allocator creates new objects, setting the heap id to that of the current
+heap, setting the status flag to the value of black and linking it into the
+Black list of objects.
+
+The mutator intercepts all assignment operations; if the l-value and r-value
+are from different heaps (object heapids are different), then the r-value has
+its x-ref bit set.  If the r-value belongs to the local heap and is white, it
+is greyed.  This is incremental marking.
+
+Greying an object means unlinking it from its current list and inspecting its
+status.  Only objects on the White or Finalize lists can be greyed.
+
+Only ONE of the following points is executed when Greying; non-local objects
+are not set Grey (we don't have a lock on the owning lists):
+
+ * If the object is owned by a different heap, set its x-ref status.
+   Note that we will not trace through to external objects in a local
+   collection; we will only set its x-ref status.
+ * if it is an aggregate object type, it is marked grey and
+   linked into the Grey list.
+ * if it is a non-aggregate object type, it is marked black and
+   linked into the Black list.
+
+The collector is invoked when a local collection is initiated.  Its purpose is
+to identify all objects in the local heap that are definitely garbage.
+
+It does this by walking the list of grey objects; for each Grey object, its
+contents are traced and greyed (this is the marking phase).  When the Grey
+list is empty, we known that all of the objects on the White list are
+definitely garbage from the perspective of the local heap.
+
+When the collector is invoked:
+ * Grey each object reachable from the stack and other roots in the lua_State
+ * While the Grey list is not empty:
+   * for each object on the Grey list:
+     * Grey each of the objects that it references
+     * Blacken the object
+
+When the Grey list is empty, we can perform the sweep phase.  The sweep
+walks the white list:
+
+ * if the object is pinned by a non-zero refcount from C:
+   * it is greyed.
+   * continue with next object.
+ * if the object is marked x-ref:
+   * it is greyed.
+   * continue with next object.
+ * if the object has a finalizer and is not yet finalized
+   * put the object on the Finalize list
+   * continue with next object
+
+If the Grey list is no-longer empty, we may opt to trace the grey objects
+or stop the current sweep cycle.  In order to progress to the second stage of
+the sweep, the Grey list must be empty.
+
+With an empty Grey list:
+
+ * For each object on the Finalize list:
+   * mark it finalized and grey
+   * invoke its finalizer
+   * we may opt to stop the sweep at this point if we wish
+
+With an empty Grey and empty Finalize list:
+
+ * For each object on the White list:
+   * free it
+
+With an empty white list:
+
+ * invert the meaning of the "black" status in the local heap.
+   This has the effect of marking all black objects as white for the next
+   collection.
+
+Global Collection
+=================
+
+Since there is no incremental mechanism to clear the x-ref status, once an
+object is x-ref'd, it will remain that way and won't be collected by the local
+collection mechanism--since we flag x-ref for any and all external refs, we
+can't determine when the object is no longer x-ref'd.
+
+To manage this, we have the concept of a Global Collection procedure, which is
+described below.  Before we go into that, let's describe how we track the
+x-ref status:
+
+Initially, the xref status is tracked by a two-bit field:
+  00  !xref
+  01  xref
+  10  unknown
+  11  unknown
+
+When we talk about flipping the sense of the x-ref bit below, we mean
+switching between the above and the follow representation of the xref bits:
+  00  unknown
+  01  unknown
+  10  !xref
+  11  xref
+
+This trick means that we can avoid walking all objects twice in the procedure
+below.
+
+When a global collection is triggered, its goal is to definitively set or
+clear the x-ref status bits on all objects across all heaps.  This requires
+coordination with all the other heaps, and thus will block all coroutines
+until the status is determined.
+
+For each lua_State
+  * stop the allocator, collector and mutator
+
+Flip the sense of the x-ref status as described above; now all objects have an
+indeterminate xref status.  Important: we can't combine the stopping portion
+with the steps below because we need to guarantee that all coroutines are
+stopped before we can holistically process the overall heap.
+
+For each lua_State
+ * For each object in the Black, White, Finalize and Grey lists:
+   * if the xref status is unknown, set it to !xref
+   * if the object is an aggregate type, for each directly referenced object:
+     * if the target heapid != object heapid, set the target object status to
+       "xref"
+
+This causes all objects on all heaps to have an accurate xref status; there
+should be no objects with an unknown xref status at this point.
+
+For each lua_State
+  * restart the allocator, collector and mutator
+
+* Perform a full local collection on the global heap
+
+We don't need to perform the local collection step on the other heaps, as they
+will locally collect themselves at an appropriate time anyway.  Conversely,
+we must perform a full local collection on the global heap as we can't
+guarantee that it will be triggered again in a timely fashion.
+
+
+Heap Destruction
+================
+
+When a lua_State is finalized the following steps are taken:
+
+* Run a full local collection cycle
+* If any objects remain in the heap:
+  * lock the global heap, preventing a global collection
+  * for each remaining object in the local heap:
+    * change the owning thread id to the global heap
+    * Grey it from the perspective of the global heap
+  * unlock the global heap
+
+This causes the global heap to inherit any outstanding objects and will
+collect them as part of a subsequent global collection.
+
+
+Weak Tables
+===========
+
+From Programming in Lua:
+
+  Weak tables are the mechanism that you use to tell Lua that a reference
+  should not prevent the reclamation of an object. A weak reference is a
+  reference to an object that is not considered by the garbage collector. If
+  all references pointing to an object are weak, the object is collected and
+  somehow these weak references are deleted. Lua implements weak references as
+  weak tables: A weak table is a table where all references are weak. That
+  means that, if an object is only held inside weak tables, Lua will collect
+  the object eventually.
+
+This means that our behavior needs to be modified:
+
+* When Greying a weak table, instead of Greying the contents, we record the
+  fact that we saw a weak table and Blacken the table. (Note: weak tables
+  can be set to be weak on keys, values or both.)
+
+When processing the White set of objects (when Finalize and Grey are empty),
+we introduce a step that walks all noted weak tables:
+
+For each table in the Weak list:
+  For each value in the table:
+    * If the value is in the White list, clear the value from the current weak
+      table.
+  For each key in the table:
+    * If the key is weak and is in the White list, clear the key and value
+      from the current weak table.
+
+x-ref and weak tables:
+
+If the target of a weak reference belongs to a non-local heap, then it is
+treated as a strong reference.
+
+
+Triggering Collections
+======================
+
+In the VM, luaC_checkGC is called at key locations where we might want to
+trigger a local collection.
+
+luaC_checkGC will trigger a call to luaC_step if the amount of allocated
+memory in the local heap is above a GCthreshold.
+
+Lua uses two tunables to affect this process:
+  pause: assessed between complete collection cycles; it is a percentage
+         multiplier that computes the memory limit threshold based on
+         the current approximate non-garbage memory usage:
+          thresh = estimated / 100 * pause
+  stepmul: computes a number of bytes to reclaim on each step:
+          lim = 1024 / 100 * stepmul
+          each time luaC_step is invoked, it will reinvoke the collection
+          steps until it has reclaimed lim bytes or until a cycle completes
+
+luaC_step will cause the local collector to move through a series of phases:
+
+ - paused: no local collection in progress.
+           mark the roots and move to propagate phase.
+           step is complete until called again.
+ - propagate:
+    if there are grey objects, Blacken the first one and complete this step.
+    else: move to the reference phase and perform one iteration
+    (NOTE: since this phase reclaims zero memory, it can be completed and move
+    to the next)
+ - reference:
+    for each white object:
+      if pinned ref or x-ref, Grey it.
+      else if has finalizer and is !finalized, put on Finalize list
+    if there are grey objects, set phase to propagate and complete this step.
+    else move to finalize phase and complete this step
+    (NOTE: since this phase reclaims zero memory, it can be completed and move
+    to the next)
+ - finalize:
+    for each Finalize object
+      mark it finalized and Grey it.
+      prevent a recursive step from being triggered
+      invoke its finalizer
+      remove recursive step protection
+      set phase to propagate and goto propagate handling (for the newly Greyed
+      finalized object and objects it touched during finalization)
+    Now there are no more Finalize objects, and no more Grey objects; set
+    phase to reclaim and proceed.
+ - reclaim:
+    for each weak table:
+      remove weak refs to objects in the White list
+    for each string in string table:
+      remove refs to strings in the White list
+    for each White object:
+      free it
+    set phase to paused
+
+luaC_fullgc will trigger a global collection to fix up x-ref status (in turn
+triggering a local collection on the global heap), and then cause the local
+collector to move through all of the above phases until it reaches paused
+state.
+
+Thread Safety and Locking
+=========================
+
+Threaded lua needs to provide the following thread safety guarantee to the
+scripts that it runs:
+
+ - Objects that are visible in multiple threads must be traversable and
+   mutable without causing a crash.
+ - Concurrent traversal need not have consistent results, so long as no
+   invalid references are made as a result.  eg: two threads iterating
+   a table may use the same iteration state and can potentially see half the
+   available data in each thread.  Whether this is true or not depends upon
+   the implementation of the table traversal.  The key point is that
+   concurrent threads of execution must still use a mutex to coordinate their
+   access for consistency.
+
+Garbage collection needs to coordinate across lua_States and thus will need to
+use locking when multiple threads are in use.
+
+The key points to coordinate are:
+
+ - Allocator: must allocate new objects using the current black status for the
+   owning heap, store in the Black list for the owning heap, and set the
+   current !xref status for the global lua_State
+
+ - Mutator: must be able to safely Grey r-values that belong to the same heap
+   as the l-values, or set the current xref status when the owners are
+   different.  Must not perform either of these steps until a global
+   collection cycle is complete.
+
+ - Local Collector: must not change the status of any objects while a global
+   collection cycle is running.
+
+ - Global Collector: must not trace objects or change x-ref status while any
+   Allocator, Mutator or Local Collector are running.
+
+ - Mutable and Aggregate objects: must employ a locking mechanism to allow
+   concurrent scripts to interrogate/traverse their values, and to allow
+   concurrent tracing by Local and Global Collectors
+
+ - GC tracing must not cause deadlocks (particularly if GC is triggered while
+   another thread is traversing an aggregate object).
+
+   - Must not initiate GC a local collection if the current lua_State is
+     traversing an object
+   - Must not yield to a global collection if the current lua_State is
+     traversing an object
+   - in other words, the systemic part of the traversal must not allocate or
+     mutate.
+
+With the above in mind, each lua_State will have an associated lock, and the
+various components will use it as follows:
+
+Golden rule: always lock the local lua_State before looking at others
+
+ Allocator(local, type):
+    obj = new_object(type)
+    obj->heapid = local->heapid;
+    lock(local);
+    obj->black = local->black;
+    obj->xref = local->global->notxref;
+    enlist(lock->Black, obj);
+    unlock(local);
+    return obj;
+
+ WriteBarrier(local, lvalue, rvalue):
+    lock(local);
+    if (rvalue->heapid != local->heapid) {
+      rheap = get_heap_by_id(rvalue->heapid);
+      lock(rheap);
+    } else {
+      rheap = local;
+    }
+    if (lvalue->heapid == rvalue->heapid) {
+      make_grey(rheap, rvalue);
+    } else {
+      rvalue->xref = rheap->global->isxref;
+    }
+    if (rheap != local)
+      unlock(rheap);
+    unlock(local)
+
+  LocalCollectionStep(local):
+    lock(local);
+    perform_step(local);
+    unlock(local);
+
+  GlobalCollection(local):
+    lock(local);
+    if (local->global != local) {
+      if (!trylock(local->global)) {
+        // avoid deadlock
+        unlock(local);
+        return;
+      }
+    }
+    for each lua state: L
+      if L != global && L != local: lock(L);
+    flip_xref()
+    trace_xref();
+    for each lua state: L
+      if L != global && L != local: unlock(L);
+    do_local_collection(global);
+    if global != local
+      unlock(global)
+    unlock(local)
+
+Thread Local Storage
+====================
+
+Threaded Lua provides two classes of thread-local storage.
+
+ - _OSTLS, a table keyed to the current OS thread.
+ - _TLS, a table keyed to the currently executing lua_State
+
+
+
+# vim:ts=2:sw=2:et:tw=78:
