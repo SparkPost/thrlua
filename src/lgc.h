@@ -91,7 +91,6 @@
 
 #define luaC_objbarriert(L,t,o)  \
    { if (iswhite(obj2gco(o)) && isblack(obj2gco(t))) luaC_barrierback(L,t); }
-#endif
 
 LUAI_FUNC size_t luaC_separateudata (lua_State *L, int all);
 LUAI_FUNC void luaC_callGCTM (lua_State *L);
@@ -102,21 +101,21 @@ LUAI_FUNC void luaC_link (lua_State *L, GCheader *o, lu_byte tt);
 LUAI_FUNC void luaC_linkupval (lua_State *L, UpVal *uv);
 LUAI_FUNC void luaC_barrierf (lua_State *L, GCheader *o, GCheader *v);
 LUAI_FUNC void luaC_barrierback (lua_State *L, Table *t);
+#endif
 
 /** the write barrier is used for assignments made to properties of
  * heap objects, not stack items */
-LUAI_FUNC void luaC_writebarrier(global_State *g, GCheader *object,
+LUAI_FUNC void luaC_writebarrier(lua_State *L, GCheader *object,
   GCheader **lvalue, GCheader *rvalue);
-LUAI_FUNC void luaC_writebarriervv(global_State *g, GCheader *object,
+LUAI_FUNC void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue);
-LUAI_FUNC void luaC_writebarrierov(global_State *g, GCheader *object,
+LUAI_FUNC void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader **lvalue, const TValue *rvalue);
 
-LUAI_FUNC void *luaC_newobj(global_State *g, lu_byte tt);
-LUAI_FUNC void *luaC_newobjv(global_State *g, lu_byte tt, size_t size);
+LUAI_FUNC void *luaC_newobj(lua_State *L, lu_byte tt);
+LUAI_FUNC void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size);
 LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
-
-#define luaC_checkGC(L) do { ; } while (0)
+LUAI_FUNC void luaC_checkGC(lua_State *L);
 
 #endif
 /* vim:ts=2:sw=2:et:

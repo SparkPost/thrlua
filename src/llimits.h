@@ -92,12 +92,6 @@ typedef uint32_t Instruction;
 #define LUA_MINBUFFER	32
 #endif
 
-
-#ifndef lua_lock
-#define lua_lock(L)     pthread_mutex_lock(&L->lock)
-#define lua_unlock(L)   pthread_mutex_unlock(&L->lock)
-#endif
-
 #ifndef luai_threadyield
 #define luai_threadyield(L)     {lua_unlock(L); lua_lock(L);}
 #endif

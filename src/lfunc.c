@@ -10,8 +10,7 @@
 #include "thrlua.h"
 
 Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = luaC_newobjv(G(L), LUA_TFUNCTION, sizeCclosure(nelems));
-//  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
+  Closure *c = luaC_newobjv(L, LUA_TFUNCTION, sizeCclosure(nelems));
   c->c.isC = 1;
   c->c.env = &e->gch;
   c->c.nupvalues = cast_byte(nelems);
@@ -20,8 +19,7 @@ Closure *luaF_newCclosure (lua_State *L, int nelems, Table *e) {
 
 
 Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
-  Closure *c = luaC_newobjv(G(L), LUA_TFUNCTION, sizeLclosure(nelems));
-//  luaC_link(L, obj2gco(c), LUA_TFUNCTION);
+  Closure *c = luaC_newobjv(L, LUA_TFUNCTION, sizeLclosure(nelems));
   c->l.isC = 0;
   c->l.env = &e->gch;
   c->l.nupvalues = cast_byte(nelems);
@@ -31,7 +29,7 @@ Closure *luaF_newLclosure (lua_State *L, int nelems, Table *e) {
 
 
 UpVal *luaF_newupval (lua_State *L) {
-  UpVal *uv = luaC_newobj(G(L), LUA_TUPVAL);
+  UpVal *uv = luaC_newobj(L, LUA_TUPVAL);
   uv->v = &uv->u.value;
   setnilvalue(uv->v);
   return uv;
@@ -93,7 +91,7 @@ printf("Looking for upval level %p\n", level);
 printf("Need to create, p is %p %s\n", p, p == &L->openupval ? "sentinel" : "upval");
 #endif
   /* not found: create a new one */
-  uv = luaC_newobj(G(L), LUA_TUPVAL);
+  uv = luaC_newobj(L, LUA_TUPVAL);
   uv->v = level;  /* current value lives in the stack */
 
   lua_assert(p != NULL);
@@ -152,7 +150,7 @@ void luaF_close (lua_State *L, StkId level) {
     unlinkupval(uv);
 
     /* copy value into the upval itself */
-    luaC_writebarriervv(G(L), &uv->gch, &uv->u.value, uv->v);
+    luaC_writebarriervv(L, &uv->gch, &uv->u.value, uv->v);
     uv->v = &uv->u.value;  /* now current value lives here */
 //      setobj(L, &uv->u.value, uv->v);
 //      luaC_linkupval(L, uv);  /* link upvalue into `gcroot' list */
@@ -164,27 +162,7 @@ void luaF_close (lua_State *L, StkId level) {
 
 
 Proto *luaF_newproto (lua_State *L) {
-  Proto *f = luaC_newobj(G(L), LUA_TPROTO);
-//  luaC_link(L, obj2gco(f), LUA_TPROTO);
-  f->k = NULL;
-  f->sizek = 0;
-  f->p = NULL;
-  f->sizep = 0;
-  f->code = NULL;
-  f->sizecode = 0;
-  f->sizelineinfo = 0;
-  f->sizeupvalues = 0;
-  f->nups = 0;
-  f->upvalues = NULL;
-  f->numparams = 0;
-  f->is_vararg = 0;
-  f->maxstacksize = 0;
-  f->lineinfo = NULL;
-  f->sizelocvars = 0;
-  f->locvars = NULL;
-  f->linedefined = 0;
-  f->lastlinedefined = 0;
-  f->source = NULL;
+  Proto *f = luaC_newobj(L, LUA_TPROTO);
   return f;
 }
 

@@ -58,10 +58,16 @@ static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
 */
 typedef struct GCheader {
   struct GCheader *next, *prev;
-  struct GCheader **logptr;
+  /** if pinned from C, count of number of pins */
   scpt_atomic_t ref;
+  /** the owning heap id */
+  scpt_atomic_t owner;
+  /** object type: LUA_TXXX */
   lu_byte tt;
+  /** finalized, black, white, grey etc. */
   lu_byte marked;
+  /** external reference status */
+  lu_byte xref;
 } GCheader;
 
 /*

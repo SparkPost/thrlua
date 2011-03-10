@@ -22,27 +22,33 @@
 #include </opt/msys/3rdParty/include/valgrind/valgrind.h>
 #include </opt/msys/3rdParty/include/valgrind/drd.h>
 #define HAVE_VALGRIND 1
+#elif HAVE__USR_LOCAL_INCLUDE_VALGRIND_VALGRIND_H
+#include <valgrind/memcheck.h>
+#include <valgrind/valgrind.h>
+#include <valgrind/drd.h>
+#define HAVE_VALGRIND 1
 #endif
 
 #if LUA_ASSERTIONS && HAVE_VALGRIND
-static inline void lua_assert_fail(const char *expr, const char *file, int line)
-{
-  VALGRIND_PRINTF_BACKTRACE("Assertion %s failed\n", expr);
-  fprintf(stderr, "Assertion %s failed at %s:%d\n", expr, file, line);
-  abort();
-}
+struct GCheader;
+LUAI_FUNC void lua_assert_fail(const char *expr, struct GCheader *obj, const char *file, int line);
 
-# define lua_assert(expr)	\
-  ((expr)							   	\
-   ? (void) (0)						\
-   : (lua_assert_fail (#expr, __FILE__, __LINE__), \
+
+
+# define lua_assert_obj(expr, __obj) \
+  ((expr)                           \
+   ? (void) (0)                     \
+   : (lua_assert_fail (#expr, __obj, __FILE__, __LINE__), \
       (void) (0)))
 
+# define lua_assert(expr)	lua_assert_obj(expr, 0)
 
 #elif LUA_ASSERTIONS
 # define lua_assert assert
+# define lua_assert_obj(expr, __obj) assert(expr)
 #else
 # define lua_assert(expr)
+# define lua_assert_obj(expr, __obj)
 #endif
 
 
@@ -106,53 +112,61 @@ static inline void setbvalue(TValue *obj, int b)
   obj->tt = LUA_TBOOLEAN;
 }
 
+#if 0
+static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
+{
+  obj1->value = obj2->value;
+  obj1->tt = obj2->tt;
+  checkliveness(G(L), obj1);
+}
+#endif
+
+static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
+{
+  luaC_writebarriervv(L, &L->gch, obj1, obj2);
+  checkliveness(G(L), obj1);
+}
+
 static inline void setsvalue(lua_State *L, TValue *obj, TString *str)
 {
-  obj->value.gc = &str->tsv.gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &str->tsv.gch);
   obj->tt = LUA_TSTRING;
   checkliveness(G(L), obj);
 }
 
 static inline void setuvalue(lua_State *L, TValue *obj, Udata *ud)
 {
-  obj->value.gc = &ud->uv.gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &ud->uv.gch);
   obj->tt = LUA_TUSERDATA;
   checkliveness(G(L), obj);
 }
 
 static inline void setthvalue(lua_State *L, TValue *obj, lua_State *thr)
 {
-  obj->value.gc = &thr->gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &thr->gch);
   obj->tt = LUA_TTHREAD;
   checkliveness(G(L), obj);
 }
 
 static inline void setclvalue(lua_State *L, TValue *obj, Closure *cl)
 {
-  obj->value.gc = &cl->gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &cl->gch);
   obj->tt = LUA_TFUNCTION;
   checkliveness(G(L), obj);
 }
 
 static inline void sethvalue(lua_State *L, TValue *obj, Table *t)
 {
-  obj->value.gc = &t->gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &t->gch);
   obj->tt = LUA_TTABLE;
   checkliveness(G(L), obj);
 }
 
 static inline void setptvalue(lua_State *L, TValue *obj, Proto *p)
 {
-  obj->value.gc = &p->gch;
+  luaC_writebarrier(L, &L->gch, &obj->value.gc, &p->gch);
   obj->tt = LUA_TPROTO;
   checkliveness(G(L), obj);
-}
-
-static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
-{
-  obj1->value = obj2->value;
-  obj1->tt = obj2->tt;
-  checkliveness(G(L), obj1);
 }
 
 /*
@@ -161,7 +175,6 @@ static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
 
 /* from stack to (same) stack */
 #define setobjs2s	setobj
-/* to stack (not from same stack) */
 #define setobj2s	setobj
 #define setsvalue2s	setsvalue
 #define sethvalue2s	sethvalue
@@ -176,7 +189,7 @@ static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
 
 static inline void setttype(TValue *obj, lu_byte tt)
 {
-#if HAVE_VALGRIND
+#if HAVE_VALGRIND && 0
   VALGRIND_PRINTF_BACKTRACE("changing type on value %p from %s to %s\n",
     obj, lua_typename(NULL, ttype(obj)), lua_typename(NULL, tt));
 #endif

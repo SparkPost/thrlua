@@ -45,11 +45,13 @@ static TValue *index2adr (lua_State *L, int idx) {
       return &L->tls;
     case LUA_OSTLSINDEX:
     {
-      thr_State *pt = get_per_thread(G(L));
-      if (!ttistable(&pt->tls)) {
-        sethvalue(L, &pt->tls, luaH_new(L, 0, 2));
+      global_State *g = G(L);
+
+      /* create the overall OS TLS table */
+      if (!ttistable(&g->ostls)) {
+        sethvalue(L, &g->ostls, luaH_new(L, 0, 2));
       }
-      return &pt->tls;
+      return &g->ostls;
     }
     case LUA_ENVIRONINDEX: {
       Closure *func = curr_func(L);
@@ -251,7 +253,7 @@ LUA_API void lua_replace (lua_State *L, int idx)
     if (idx == LUA_ENVIRONINDEX) {
       Closure *func = curr_func(L);
       api_check(L, ttistable(L->top - 1)); 
-      luaC_writebarrierov(G(L), &func->gch,
+      luaC_writebarrierov(L, &func->gch,
           &func->c.env, L->top - 1);
       //func->c.env = hvalue(L->top - 1);
       //luaC_barrier(L, func, L->top - 1);
@@ -260,7 +262,7 @@ LUA_API void lua_replace (lua_State *L, int idx)
       if (idx < LUA_GLOBALSINDEX) {
         /* function upvalue? */
         //      luaC_barrier(L, curr_func(L), L->top - 1);
-        luaC_writebarriervv(G(L), &curr_func(L)->gch, o, L->top - 1);
+        luaC_writebarriervv(L, &curr_func(L)->gch, o, L->top - 1);
       } else {
         setobj(L, o, L->top - 1);
       }
@@ -429,11 +431,11 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
       size_t n;
       Table *table = hvalue(o);
 
-      luaH_rdlock(G(L), table);
+      luaH_rdlock(L, table);
       LUAI_TRY_BLOCK(L) {
         n = luaH_getn(table);
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(G(L), table);
+        luaH_unlock(L, table);
       } LUAI_TRY_END(L);
       return n;
     }
@@ -594,7 +596,7 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
     cl->c.fname = name;
     L->top -= n;
     while (n--) {
-      luaC_writebarriervv(G(L), &cl->gch, &cl->c.upvalue[n], L->top+n);
+      luaC_writebarriervv(L, &cl->gch, &cl->c.upvalue[n], L->top+n);
       //    setobj2n(L, &cl->c.upvalue[n], L->top+n);
     }
     setclvalue(L, L->top, cl);
@@ -684,10 +686,10 @@ LUA_API void lua_rawget (lua_State *L, int idx) {
     t = index2adr(L, idx);
     api_check(L, ttistable(t));
     table = hvalue(t);
-    luaH_rdlock(G(L), table);
+    luaH_rdlock(L, table);
     setobj2s(L, L->top - 1, luaH_get(table, L->top - 1));
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(G(L), table);
+    if (table) luaH_unlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -702,11 +704,11 @@ LUA_API void lua_rawgeti (lua_State *L, int idx, int n) {
     o = index2adr(L, idx);
     api_check(L, ttistable(o));
     table = hvalue(o);
-    luaH_rdlock(G(L), table);
+    luaH_rdlock(L, table);
     setobj2s(L, L->top, luaH_getnum(table, n));
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(G(L), table);
+    if (table) luaH_unlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -831,12 +833,12 @@ LUA_API void lua_rawset (lua_State *L, int idx) {
     t = index2adr(L, idx);
     api_check(L, ttistable(t));
     table = hvalue(t);
-    luaH_wrlock(G(L), table);
+    luaH_wrlock(L, table);
     p = luaH_set(L, table, L->top-2);
-    luaC_writebarriervv(G(L), &table->gch, p, L->top - 1);
+    luaC_writebarriervv(L, &table->gch, p, L->top - 1);
     L->top -= 2;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(G(L), table);
+    if (table) luaH_unlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -853,12 +855,12 @@ LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
     o = index2adr(L, idx);
     api_check(L, ttistable(o));
     table = hvalue(o);
-    luaH_wrlock(G(L), table);
+    luaH_wrlock(L, table);
     p = luaH_setnum(L, table, n);
-    luaC_writebarriervv(G(L), &table->gch, p, L->top - 1);
+    luaC_writebarriervv(L, &table->gch, p, L->top - 1);
     L->top--;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(G(L), table);
+    if (table) luaH_unlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -884,13 +886,13 @@ LUA_API int lua_setmetatable (lua_State *L, int objindex) {
         {
           Table *h;
           h = hvalue(obj);
-          luaC_writebarrier(G(L), &h->gch, &h->metatable, &mt->gch);
+          luaC_writebarrier(L, &h->gch, &h->metatable, &mt->gch);
           break;
         }
       case LUA_TUSERDATA:
         {
           Udata *ud = rawuvalue(obj);
-          luaC_writebarrier(G(L), &ud->uv.gch, &ud->uv.metatable, &mt->gch);
+          luaC_writebarrier(L, &ud->uv.gch, &ud->uv.metatable, &mt->gch);
           break;
         }
       default:
@@ -916,15 +918,15 @@ LUA_API int lua_setfenv (lua_State *L, int idx) {
     api_check(L, ttistable(L->top - 1));
     switch (ttype(o)) {
       case LUA_TFUNCTION:
-        luaC_writebarrierov(G(L), &clvalue(o)->gch,
+        luaC_writebarrierov(L, &clvalue(o)->gch,
             &clvalue(o)->c.env, L->top - 1);
         break;
       case LUA_TUSERDATA:
-        luaC_writebarrierov(G(L), &uvalue(o)->gch,
+        luaC_writebarrierov(L, &uvalue(o)->gch,
             &uvalue(o)->env, L->top - 1);
         break;
       case LUA_TTHREAD:
-        luaC_writebarriervv(G(L), &thvalue(o)->gch,
+        luaC_writebarriervv(L, &thvalue(o)->gch,
             gt(thvalue(o)), L->top - 1);
         break;
       default:
@@ -1107,7 +1109,7 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         break;
 
       case LUA_GCCOLLECT:
-        //luaC_fullgc(L);
+        luaC_fullgc(L);
         break;
       default:
         res = -1;  /* invalid option */
@@ -1147,7 +1149,7 @@ LUA_API int lua_next (lua_State *L, int idx) {
     t = index2adr(L, idx);
     api_check(L, ttistable(t));
     table = hvalue(t);
-    luaH_rdlock(G(L), table);
+    luaH_rdlock(L, table);
     more = luaH_next(L, table, L->top - 1);
     if (more) {
       api_incr_top(L);
@@ -1155,7 +1157,7 @@ LUA_API int lua_next (lua_State *L, int idx) {
     else  /* no more elements */
       L->top -= 1;  /* remove key */
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(G(L), table);
+    if (table) luaH_unlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
   return more;
@@ -1248,7 +1250,7 @@ LUA_API const char *lua_setupvalue (lua_State *L, int funcindex, int n) {
     name = aux_upvalue(fi, n, &val, &f);
     if (name) {
       L->top--;
-      luaC_writebarriervv(G(L), &f->gch, val, L->top);
+      luaC_writebarriervv(L, &f->gch, val, L->top);
       //    setobj(L, val, L->top);
       //    luaC_barrier(L, clvalue(fi), L->top);
     }

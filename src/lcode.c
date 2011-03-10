@@ -218,7 +218,7 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
   int oldsize = f->sizek;
   int retval;
 
-  luaH_wrlock(G(L), fs->h);
+  luaH_wrlock(L, fs->h);
   LUAI_TRY_BLOCK(L) {
     idx = luaH_set(L, fs->h, k);
     if (ttisnumber(idx)) {
@@ -230,11 +230,11 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
       luaM_growvector(L, f->k, fs->nk, f->sizek, TValue,
           MAXARG_Bx, "constant table overflow");
       while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
-      luaC_writebarriervv(G(L), &f->gch, &f->k[fs->nk], v);
+      luaC_writebarriervv(L, &f->gch, &f->k[fs->nk], v);
       retval = fs->nk++;
     }
   } LUAI_TRY_FINALLY(L) {
-    luaH_unlock(G(L), fs->h);
+    luaH_unlock(L, fs->h);
   } LUAI_TRY_END(L);
   return retval;
 }

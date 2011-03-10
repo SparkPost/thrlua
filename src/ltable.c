@@ -345,7 +345,7 @@ static void rehash (lua_State *L, Table *t, const TValue *ek) {
 
 Table *luaH_new (lua_State *L, int narray, int nhash) {
   int r;
-  Table *t = luaC_newobj(G(L), LUA_TTABLE);
+  Table *t = luaC_newobj(L, LUA_TTABLE);
   do {
     r = pthread_rwlock_init(&t->lock, NULL);
   } while (r == EAGAIN || r == EINTR);
@@ -354,13 +354,7 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
       errno, strerror(errno));
   }
 
-//  luaC_link(L, obj2gco(t), LUA_TTABLE);
-  t->metatable = NULL;
   t->flags = cast_byte(~0);
-  /* temporary values (kept only if some malloc fails) */
-  t->array = NULL;
-  t->sizearray = 0;
-  t->lsizenode = 0;
   t->node = cast(Node *, dummynode);
   setarrayvector(L, t, narray);
   setnodevector(L, t, nhash);
@@ -420,7 +414,7 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
       mp = n;
     }
   }
-  luaC_writebarriervv(G(L), &t->gch, key2tval(mp), key);
+  luaC_writebarriervv(L, &t->gch, key2tval(mp), key);
 //  gkey(mp)->value = key->value;
 //  gkey(mp)->tt = key->tt;
 //  luaC_barriert(L, t, key);
@@ -582,59 +576,44 @@ int luaH_getn (Table *t) {
 }
 
 /* block until a write lock is obtained */
-void luaH_wrlock(global_State *g, Table *t)
+void luaH_wrlock(lua_State *L, Table *t)
 {
   int r;
   do {
     r = pthread_rwlock_wrlock(&t->lock);
   } while (r == EINTR || r == EAGAIN);
   if (r) {
-#if FIXME
+    lua_assert(r == 0);
     luaL_error(L, "table wrlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-#else
-    fprintf(stderr, "table wrlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-    abort();
-#endif
+      r, strerror(r));
   }
 }
 
 /* block until a read lock is obtained */
-void luaH_rdlock(global_State *g, Table *t)
+void luaH_rdlock(lua_State *L, Table *t)
 {
   int r;
   do {
     r = pthread_rwlock_rdlock(&t->lock);
   } while (r == EINTR || r == EAGAIN);
   if (r) {
-#if FIXME
+    lua_assert(r == 0);
     luaL_error(L, "table rdlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-#else
-    fprintf(stderr, "table rdlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-    abort();
-#endif
+      r, strerror(r));
   }
 }
 
 /* release a lock */
-void luaH_unlock(global_State *g, Table *t)
+void luaH_unlock(lua_State *L, Table *t)
 {
   int r;
   do {
     r = pthread_rwlock_unlock(&t->lock);
   } while (r == EINTR || r == EAGAIN);
   if (r) {
-#if FIXME
+    lua_assert(r == 0);
     luaL_error(L, "table unlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-#else
-    fprintf(stderr, "table unlock failed with errno %d: %s\n",
-      errno, strerror(errno));
-    abort();
-#endif
+      r, strerror(r));
   }
 }
 

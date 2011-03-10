@@ -22,7 +22,7 @@
 #define LUA_VERSION	"rcLua 5.1"
 #define LUA_RELEASE	"rcLua 5.1.4"
 #define LUA_VERSION_NUM	501
-#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2010 Message Systems, Inc"
+#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2011 Message Systems, Inc"
 #define LUA_AUTHORS 	"R. Ierusalimschy, L. H. de Figueiredo & W. Celes"
 
 
@@ -465,10 +465,16 @@ LUA_API void lua_set_suspender(lua_State *L,
  */
 LUA_API int lua_arrange_resume(lua_State *L);
 
+/** prevent access to this lua_State from another thread.
+ * blocks until access is obtained */
+LUA_API void lua_lock(lua_State *L);
+
+/** release one level of lock from this lua_State */
+LUA_API void lua_unlock(lua_State *L);
 
 /******************************************************************************
 * Copyright (C) 1994-2008 Lua.org, PUC-Rio.  All rights reserved.
-* Copyright (C) 2008-2010 Message Systems, Inc.
+* Copyright (C) 2008-2011 Message Systems, Inc.
 *
 * Permission is hereby granted, free of charge, to any person obtaining
 * a copy of this software and associated documentation files (the

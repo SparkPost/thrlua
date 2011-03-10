@@ -27,6 +27,7 @@ AC_ARG_ENABLE(coverage,
 )
 AC_CHECK_HEADERS([ \
 /opt/msys/3rdParty/include/valgrind/valgrind.h \
+/usr/local/include/valgrind/valgrind.h \
 ])
 
 PCRE_LIBS=`pcre-config --libs`

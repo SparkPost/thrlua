@@ -95,7 +95,7 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
       const TValue *res;
       int done;
 
-      luaH_rdlock(G(L), h);
+      luaH_rdlock(L, h);
       LUAI_TRY_BLOCK(L) {
         res = luaH_get(h, key); /* do a primitive get */
         if (!ttisnil(res) ||  /* result is no nil? */
@@ -109,7 +109,7 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
           done = 0;
         }
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(G(L), h);
+        luaH_unlock(L, h);
       } LUAI_TRY_END(L);
       if (done) {
         return;
@@ -138,20 +138,20 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
       TValue *oldval;
       int done;
 
-      luaH_wrlock(G(L), h);
+      luaH_wrlock(L, h);
       LUAI_TRY_BLOCK(L) {
         oldval = luaH_set(L, h, key); /* do a primitive set */
         if (!ttisnil(oldval) ||  /* result is no nil? */
             (tm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX)) == NULL) {
           /* or no TM? */
-          luaC_writebarriervv(G(L), &h->gch, oldval, val);
+          luaC_writebarriervv(L, &h->gch, oldval, val);
           done = 1;
         } else {
           /* else will try the tag method */
           done = 0;
         }
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(G(L), h);
+        luaH_unlock(L, h);
       } LUAI_TRY_END(L);
       if (done) {
         return;
@@ -309,7 +309,6 @@ void luaV_concat (lua_State *L, int total, int last) {
       size_t tl = tsvalue(top-1)->len;
       char *buffer;
       int i;
-      thr_State *pt = get_per_thread(G(L));
 
       /* collect total length */
       for (n = 1; n < total && tostring(L, top-n-1); n++) {
@@ -317,7 +316,7 @@ void luaV_concat (lua_State *L, int total, int last) {
         if (l >= MAX_SIZET - tl) luaG_runerror(L, "string length overflow");
         tl += l;
       }
-      buffer = luaZ_openspace(L, &pt->buff, tl);
+      buffer = luaZ_openspace(L, &L->buff, tl);
       tl = 0;
       for (i=n; i>0; i--) {  /* concat all strings */
         size_t l = tsvalue(top-i)->len;
@@ -326,10 +325,10 @@ void luaV_concat (lua_State *L, int total, int last) {
       }
       setsvalue2s(L, top-n, luaS_newlstr(L, buffer, tl));
       /* check size of buffer */
-      if (luaZ_sizebuffer(&pt->buff) > LUA_MINBUFFER*2) {
+      if (luaZ_sizebuffer(&L->buff) > LUA_MINBUFFER*2) {
         /* buffer is too big */
-        size_t newsize = luaZ_sizebuffer(&pt->buff) / 2;
-        luaZ_resizebuffer(G(L), &pt->buff, newsize);
+        size_t newsize = luaZ_sizebuffer(&L->buff) / 2;
+        luaZ_resizebuffer(G(L), &L->buff, newsize);
       }
     }
     total -= n-1;  /* got `n' strings to create 1 new */
@@ -517,7 +516,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       }
       case OP_SETUPVAL: {
         UpVal *uv = cl->upvals[GETARG_B(i)];
-        luaC_writebarriervv(G(L), &uv->gch, uv->v, ra);
+        luaC_writebarriervv(L, &uv->gch, uv->v, ra);
 //        setobj(L, uv->v, ra);
 //        luaC_barrier(L, uv, ra);
         continue;
@@ -623,11 +622,11 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         switch (ttype(rb)) {
           case LUA_TTABLE: {
             Table *t = hvalue(rb);
-            luaH_rdlock(G(L), t);
+            luaH_rdlock(L, t);
             LUAI_TRY_BLOCK(L) {
               setnvalue(ra, cast_num(luaH_getn(t)));
             } LUAI_TRY_FINALLY(L) {
-              luaH_unlock(G(L), t);
+              luaH_unlock(L, t);
             } LUAI_TRY_END(L);
             break;
           }
@@ -820,17 +819,17 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         runtime_check(L, ttistable(ra));
         h = hvalue(ra);
         last = ((c-1)*LFIELDS_PER_FLUSH) + n;
-        luaH_wrlock(G(L), h);
+        luaH_wrlock(L, h);
         LUAI_TRY_BLOCK(L) {
           if (last > h->sizearray)  /* needs more space? */
             luaH_resizearray(L, h, last);  /* pre-alloc it at once */
           for (; n > 0; n--) {
             TValue *val = ra+n;
             TValue *src = luaH_setnum(L, h, last--);
-            luaC_writebarriervv(G(L), &h->gch, src, val);
+            luaC_writebarriervv(L, &h->gch, src, val);
           }
         } LUAI_TRY_FINALLY(L) {
-          luaH_unlock(G(L), h);
+          luaH_unlock(L, h);
         } LUAI_TRY_END(L);
         continue;
       }

@@ -28,11 +28,11 @@ LUAI_FUNC int luaH_next (lua_State *L, Table *t, StkId key);
 LUAI_FUNC int luaH_getn (Table *t);
 
 /* block until a write lock is obtained */
-LUAI_FUNC void luaH_wrlock(global_State *g, Table *t);
+LUAI_FUNC void luaH_wrlock(lua_State *L, Table *t);
 /* block until a read lock is obtained */
-LUAI_FUNC void luaH_rdlock(global_State *g, Table *t);
+LUAI_FUNC void luaH_rdlock(lua_State *L, Table *t);
 /* release a lock */
-LUAI_FUNC void luaH_unlock(global_State *g, Table *t);
+LUAI_FUNC void luaH_unlock(lua_State *L, Table *t);
 
 
 

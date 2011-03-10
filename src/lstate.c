@@ -9,6 +9,32 @@
 
 #include "thrlua.h"
 
+void lua_lock(lua_State *L)
+{
+  int r;
+
+  do {
+    r = pthread_mutex_lock(&L->lock);
+  } while (r == EINTR || r == EAGAIN);
+
+  if (r) {
+    luaL_error(L, "lua_lock(%p) failed with errno %d: %s\n",
+      L, r, strerror(r));
+  }
+}
+
+void lua_unlock(lua_State *L)
+{
+  int r;
+  do {
+    r = pthread_mutex_unlock(&L->lock);
+  } while (r == EINTR || r == EAGAIN);
+  if (r) {
+    luaL_error(L, "lua_unlock(%p) failed with errno %d: %s\n",
+      L, r, strerror(r));
+  }
+}
+
 static void stack_init (lua_State *L1, lua_State *L) {
   /* initialize CallInfo array */
   L1->base_ci = luaM_newvector(L, BASIC_CI_SIZE, CallInfo);
@@ -43,12 +69,45 @@ static int do_tls_access(lua_State *L)
     return 1;
   }
   if (!strcmp(key, "_OSTLS")) {
-    thr_State *pt = get_per_thread(G(L));
+    global_State *g = G(L);
+    thr_State *pt = luaC_get_per_thread();
+
+    lua_checkstack(L, 3);
+
+    /* push table of per os-thread data */
     lua_pushvalue(L, LUA_OSTLSINDEX);
+    lua_assert(lua_type(L, -1) == LUA_TTABLE);
+
+    /* each OS thread is keyed by a lightudata(pt) */
+    /* push the key */
+    lua_pushlightuserdata(L, pt);
+    lua_rawget(L, -2);
+
+    if (lua_isnil(L, -1)) {
+      lua_newtable(L);
+      /* copy table to store in g->ostls */
+      lua_pushlightuserdata(L, pt);
+      lua_pushvalue(L, -2);
+      lua_rawset(L, LUA_OSTLSINDEX);
+      /* this leaves the new table on the top of stack */
+    } /* else: existing table is on top of stack */
+
+    lua_assert(lua_type(L, -1) == LUA_TTABLE);
+
     return 1;
   }
   lua_pushnil(L);
   return 1;
+}
+
+static void stringtable_init(lua_State *L)
+{
+  global_State *g = G(L);
+
+  L->strt.hash = g->alloc(g->allocdata, NULL, 0,
+                    MINSTRTABSIZE * sizeof(struct stringtable_node*));
+  memset(L->strt.hash, 0, MINSTRTABSIZE * sizeof(struct stringtable_node*));
+  L->strt.size = MINSTRTABSIZE;
 }
 
 /*
@@ -58,6 +117,8 @@ static void f_luaopen (lua_State *L, void *ud) {
   global_State *g = G(L);
   UNUSED(ud);
   stack_init(L, L);  /* init stack */
+
+  stringtable_init(L);
   sethvalue(L, gt(L), luaH_new(L, 0, 2));  /* table of globals */
   setobj2n(L, &g->l_globals, gt(L));
   g->memerr = luaS_newliteral(L, MEMERRMSG);
@@ -65,6 +126,7 @@ static void f_luaopen (lua_State *L, void *ud) {
   sethvalue(L, registry(L), luaH_new(L, 0, 2));  /* registry */
   luaT_init(L);
   luaX_init(L);
+  luaZ_initbuffer(g, &L->buff);
 
   /* wire up _TLS and _OSTLS */
   luaL_newmetatable(L, "_G.TLS");
@@ -89,9 +151,12 @@ static void preinit_state (lua_State *L, global_State *g)
   setnilvalue(gt(L));
 
   pthread_mutexattr_init(&mattr);
-  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_ERRORCHECK);
+  pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&L->lock, &mattr);
   pthread_mutexattr_destroy(&mattr);
+
+  L->Black = &L->B0;
+  L->White = &L->B1;
 }
 
 
@@ -99,20 +164,12 @@ static void close_state (lua_State *L) {
   global_State *g = G(L);
   luaF_close(L, L->stack);  /* close all upvalues for this thread */
   freestack(G(L), L);
+  luaZ_freebuffer(g, &L->buff);
   luaM_freememG(G(L), L, sizeof(*L));
 }
 
-lua_State *luaE_newthreadG(global_State *g)
-{
-  lua_State *L1 = luaC_newobj(g, LUA_TTHREAD);
-  preinit_state(L1, g);
-  stack_init(L1, L1);  /* init stack */
-  setobj2n(L1, gt(L1), &g->l_globals);  /* share table of globals */
-  return L1;
-}
-
 lua_State *luaE_newthread (lua_State *L) {
-  lua_State *L1 = luaC_newobj(G(L), LUA_TTHREAD);
+  lua_State *L1 = luaC_newobj(L, LUA_TTHREAD);
   preinit_state(L1, G(L));
   stack_init(L1, L);  /* init stack */
   setobj2n(L, gt(L1), gt(L));  /* share table of globals */
@@ -120,10 +177,27 @@ lua_State *luaE_newthread (lua_State *L) {
   L1->basehookcount = L->basehookcount;
   L1->hook = L->hook;
   resethookcount(L1);
+  stringtable_init(L1);
+  luaZ_initbuffer(G(L), &L1->buff);
   if (G(L1)->on_state_create) {
     G(L1)->on_state_create(L1);
   }
   return L1;
+}
+
+void luaE_flush_stringtable(lua_State *L)
+{
+  int i;
+
+  for (i = 0; i < L->strt.size; i++) {
+    struct stringtable_node *n;
+
+    while (L->strt.hash[i]) {
+      n = L->strt.hash[i];
+      L->strt.hash[i] = n->next;
+      luaM_freemem(L, n, sizeof(*n));
+    }
+  }
 }
 
 
@@ -134,7 +208,10 @@ void luaE_freethread (global_State *g, lua_State *L1) {
   luaF_close(L1, L1->stack);  /* close all upvalues for this thread */
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(g, L1);
+  luaE_flush_stringtable(L1);
+  luaM_reallocG(g, L1->strt.hash, L1->strt.size * sizeof(struct stringtable_node*), 0);
   pthread_mutex_destroy(&L1->lock);
+  luaZ_freebuffer(g, &L1->buff);
   luaM_freememG(g, L1, sizeof(lua_State));
 }
 
@@ -158,11 +235,14 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
   if (!g) {
     return NULL;
   }
-  L = luaC_newobj(g, LUA_TTHREAD);
+  L = luaM_reallocG(g, NULL, 0, sizeof(*L) + g->extraspace);
   if (L == NULL) {
     /* FIXME: leak */
     return NULL;
   }
+  memset(L, 0, sizeof(*L) + g->extraspace);
+  L->gch.tt = LUA_TTHREAD;
+  /* L->black is implicitly 0, so this object is implicitly black */
   scpt_atomic_inc(&L->gch.ref);
   preinit_state(L, g);
   g->mainthread = L;

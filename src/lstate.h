@@ -34,8 +34,8 @@ struct stringtable_node {
   struct stringtable_node *next;
 };
 
+// Lock: containing lua_State
 typedef struct stringtable {
-  pthread_mutex_t lock;
   struct stringtable_node **hash;
   uint32_t nuse;  /* number of elements */
   uint32_t size;
@@ -61,53 +61,16 @@ typedef struct CallInfo {
 #define f_isLua(ci)	(!ci_func(ci)->c.isC)
 #define isLua(ci)	(ttisfunction((ci)->func) && f_isLua(ci))
 
-/* some helpers to maintain and operate on object stacks.
- * These are used to maintain the marking stack, the weak table
- * stack and the root stack.
- * We cache memory for these to avoid churn and fragmentation */
-struct gc_stack {
-  GCheader **obj;
-  unsigned int alloc, items;
-};
-
-/* The gc log buffer differs from the gc_stack in that we can't
- * realloc the buffer.  Since we can't predict the total amount
- * of space we'll need for the log buffer, we allocate a minimum
- * of 128 entries (or more if we're logging a larger object).
- * If when we log a new item there is not enough room, we'll
- * allocate a new buffer and chain it together.  The chain is
- * reclaimed at the end of a collection cycle */
-struct gc_log_buffer {
-  struct gc_log_buffer *next;
-  unsigned int items;
-  unsigned int alloc;
-  GCheader *obj[1];
-};
-
-/** State used for each OS thread */
+/** State used for each OS thread.
+ * Allocated via malloc when first required, stored in thread-local-storage.
+ * The TLS destructor will dispose of the contents.
+ * When accessing _OSTLS, the key to the global->tls table (to locate the
+ * table of per-OS-thread values) is computed via lua_pushlightuserdata(thr_State).
+ * The contents of thr_State are opaque to the collector; do not reference
+ * collectable objects from here.
+ */
 typedef struct thr_State {
-  /* kept in a list for collection purposes */
-  struct thr_State *next, *prev;
-  pthread_mutex_t handshake;
-
-  /* head of thread-local heap */
-  GCheader olist;
-  unsigned int trace;
-  unsigned int snoop;
-  unsigned int alloc_color;
-
-  /** temporary buffer for string concatentation */
-  Mbuffer buff;
-  /** string table for thread-local string interning */
-  stringtable strt;
-
-  struct gc_stack snoop_buf;
-  struct gc_log_buffer *log_buf;
-
-  struct global_State *g;
-  /* if not nil, encapsulates os-thread local storage */
-  TValue tls;
-
+  int dummy;
 } thr_State;
 
 /*
@@ -116,21 +79,15 @@ typedef struct thr_State {
 struct global_State {
   GCheader gch;
 
-  pthread_key_t tls_key;
-  pthread_cond_t gc_cond;
-  pthread_t collector_thread;
-  pthread_mutex_t collector_lock;
-  GCheader the_heap;
-  GCheader to_finalize;
-  struct gc_stack
-    weak_set,
-    mark_set;
-  thr_State *all_threads;
-  lu_byte black;
-  lu_byte white;
+  /** xref bits are safe to read so long as you have locked at least one
+   * lua_State */
+  lu_byte isxref;
+  lu_byte notxref;
+
   lua_Alloc alloc;
   void *allocdata;
   int exiting;
+  scpt_atomic_t nextheapid;
 
   TString *memerr;
   TValue l_registry;
@@ -138,6 +95,10 @@ struct global_State {
   lua_CFunction panic;  /* to be called in unprotected errors */
   struct Table *mt[NUM_TAGS];  /* metatables for basic types */
   TString *tmname[TM_N];  /* array with tag-method names */
+
+  /* if not nil, encapsulates os-thread local storage. Keys are the udata
+   * associated with thr_States */
+  TValue ostls;
 
   struct lua_State *mainthread;
   /** size of additional space to allocate after each lua_State.
@@ -150,24 +111,34 @@ struct global_State {
   void (*on_state_finalize)(lua_State *L);
 };
 
-LUAI_FUNC thr_State *luaC_init_pt(global_State *g);
-static inline thr_State *get_per_thread(global_State *g)
-{
-  thr_State *pt = pthread_getspecific(g->tls_key);
-  if (pt == NULL) {
-    return luaC_init_pt(g);
-  }
-  return pt;
-}
-
-
+LUAI_FUNC thr_State *luaC_get_per_thread(void);
 
 /*
 ** `per thread' state
 */
 struct lua_State {
   GCheader gch;
+
+  scpt_atomic_t heapid;
+
   lu_byte status;
+  int in_gc;
+
+  /** the current value of black */
+  lu_byte black;
+
+  /** list of objects with white status */
+  GCheader *White;
+  /** list of objects with black status */
+  GCheader *Black;
+  GCheader B0, B1;
+  /** list of objects with grey status */
+  GCheader Grey;
+  /** list of white objects pending finalization */
+  GCheader Finalize;
+  /** list of Black tables with weak references */
+  GCheader Weak;
+
   pthread_mutex_t lock;
   StkId top;  /* first free slot in the stack */
   StkId base;  /* base of current function */
@@ -192,6 +163,12 @@ struct lua_State {
   UpVal openupval;  /* list of open upvalues in this stack */
   struct lua_longjmp *errorJmp;  /* current error recover point */
   ptrdiff_t errfunc;  /* current error handling function (stack index) */
+
+  /** string table for thread-local string interning */
+  stringtable strt;
+
+  /** temporary buffer for string concatentation */
+  Mbuffer buff;
 
   /* for suspend/resume */
   int (*on_suspend)(lua_State *thr, void *ptr);
@@ -226,6 +203,7 @@ struct lua_State {
 
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
 LUAI_FUNC void luaE_freethread (global_State *g, lua_State *L1);
+LUAI_FUNC void luaE_flush_stringtable(lua_State *L);
 LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
 
 #endif
