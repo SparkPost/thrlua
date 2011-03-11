@@ -35,10 +35,9 @@ is(tostring(p), '{}');
 
 todo("multi-method dispatch not yet complete", 1);
 pcall(function ()
-l = java.new('java/lang/Double', 2.5);
-is(tostring(l), '2.5');
+	l = java.new('java/lang/Double', 2.5);
+	is(tostring(l), '2.5');
 end);
-
 
 is(javabridge.stopVM(), true, "stopped vm");
 

@@ -851,10 +851,12 @@ static int jb_new_vm(lua_State *L)
 
 static int jb_stop_vm(lua_State *L)
 {
+#if 0 /* seems unsafe to do this, so don't do it */
   if (jvm) {
     (*jvm)->DestroyJavaVM(jvm);
     jvm = NULL;
   }
+#endif
   lua_pushboolean(L, 1);
   return 1;
 }
