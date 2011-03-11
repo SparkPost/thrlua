@@ -9,6 +9,10 @@
 #define DEBUG_ALLOC 0
 
 #include "thrlua.h"
+#include <semaphore.h>
+
+# define SIG_SUSPEND SIGUSR1
+# define SIG_RESUME  SIGUSR2
 
 #define BLACKBIT    (1<<0)
 #define WEAKKEYBIT  (1<<1)
@@ -174,7 +178,7 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
 static void blacken_object(lua_State *L, GCheader *o)
 {
   int i;
-    
+
   lua_assert((o->marked & FREEDBIT) == 0);
   lua_assert(o->owner == L->heapid);
   o->marked = (o->marked & ~BLACKBIT) | L->black;
@@ -360,7 +364,7 @@ static void blacken_object(lua_State *L, GCheader *o)
       fprintf(stderr, "marking for tt=%d is not implemented\n", o->tt);
       abort();
   }
-      
+
   append_list(L->Black, o);
 }
 
@@ -389,10 +393,188 @@ void luaC_fullgc (lua_State *L)
 
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
 static pthread_key_t tls_key;
+static pthread_mutex_t all_threads_lock = PTHREAD_MUTEX_INITIALIZER;
+static thr_State *all_threads = NULL;
+#if LUA_OS_DARWIN
+static sem_t *world_sem = NULL;
+#else
+static sem_t world_sem_inst;
+static sem_t *world_sem = world_sem_inst;
+#endif
+static sigset_t suspend_handler_mask;
+
+static void thread_suspend_requested(int sig)
+{
+  int save = errno;
+  thr_State *pt;
+
+  pt = pthread_getspecific(tls_key);
+
+  pt->wake = 0;
+
+  /* signal the thread that is doing the global collection that we
+   * are considered stopped */
+  sem_post(world_sem);
+
+  while (1) {
+    sigsuspend(&suspend_handler_mask);
+    if (pt->wake) {
+      break;
+    }
+  }
+
+  /* signal the thread that is doing the global collection that we
+   * are considered started */
+  sem_post(world_sem);
+
+  errno = save;
+}
+
+static void thread_resume_requested(int sig)
+{
+  thr_State *pt;
+  int save = errno;
+
+  pt = pthread_getspecific(tls_key);
+  pt->wake = 1;
+
+  errno = save;
+}
+
+/* caller MUST hold all_threads_lock */
+static void signal_all_threads(int sig)
+{
+  thr_State *pt;
+  pthread_t me = pthread_self();
+  int nthreads = 0;
+  int r, i;
+
+  for (pt = all_threads; pt; pt = pt->next) {
+    if (pthread_equal(me, pt->tid)) {
+      /* can't stop myself */
+      continue;
+    }
+    nthreads++;
+    r = pthread_kill(pt->tid, sig);
+    if (r == ESRCH) {
+      nthreads--;
+    } else if (r) {
+      fprintf(stderr, "signal_all_threads: pthread_kill %s\n", strerror(r));
+      abort();
+    }
+  }
+
+  /* wait for them all to check in */
+  for (i = 0; i < nthreads; i++) {
+    do {
+      r = sem_wait(world_sem);
+      if (r == 0) {
+        break;
+      }
+      if (r != EINTR) {
+        fprintf(stderr, "signal_all_threads: sem_wait: %s\n", strerror(r));
+        abort();
+      }
+    } while (1);
+  }
+}
+
+static void stop_world(void)
+{
+  pthread_mutex_lock(&all_threads_lock);
+  signal_all_threads(SIG_SUSPEND);
+
+  /* returning holding the all_threads_lock; caller MUST call
+   * start_world to release it */
+}
+
+static void start_world(void)
+{
+  /* entered holding the all_threads_lock */
+
+  signal_all_threads(SIG_RESUME);
+
+  pthread_mutex_unlock(&all_threads_lock);
+}
+
+static void thread_exited(void *p)
+{
+  thr_State *thr = p;
+
+  pthread_mutex_lock(&all_threads_lock);
+  if (all_threads == thr) {
+    all_threads = thr->next;
+  }
+  if (thr->next) {
+    thr->next->prev = thr->prev;
+  }
+  if (thr->prev) {
+    thr->prev->next = thr->next;
+  }
+  pthread_mutex_unlock(&all_threads_lock);
+  free(thr);
+}
 
 static void make_tls_key(void)
 {
-  pthread_key_create(&tls_key, free);
+  struct sigaction act;
+
+#if LUA_OS_DARWIN
+  /* Darwin only has named semaphores */
+  {
+    char name[32];
+    time_t now;
+    int i;
+
+    time(&now);
+    for (i = 0; i < 100; i++) {
+      snprintf(name, sizeof(name), "thrlua-%d-%d-%d", now, getpid(), i);
+
+      world_sem = sem_open(name, O_CREAT|O_EXCL, 0700, 0);
+      if (world_sem) {
+        break;
+      }
+      if (errno == EEXIST) {
+        continue;
+      }
+      fprintf(stderr, "failed to init semaphore: %s\n", strerror(errno));
+      abort();
+    }
+    if (!world_sem) {
+      fprintf(stderr, "failed to init semaphore: %s\n", strerror(errno));
+      abort();
+    }
+    sem_unlink(name);
+  }
+#else
+  if (sem_init(&world_sem, 0, 0) != 0) {
+    fprintf(stderr, "failed to init semaphore: %s\n", strerror(errno));
+    abort();
+  }
+#endif
+
+  memset(&act, 0, sizeof(act));
+  act.sa_flags = SA_RESTART;
+  sigfillset(&act.sa_mask);
+
+  act.sa_handler = thread_suspend_requested;
+  if (sigaction(SIG_SUSPEND, &act, NULL) != 0) {
+    fprintf(stderr, "failed to prepare thread suspend handler: %s\n",
+      strerror(errno));
+    abort();
+  }
+
+  act.sa_handler = thread_resume_requested;
+  if (sigaction(SIG_RESUME, &act, NULL) != 0) {
+    fprintf(stderr, "failed to prepare thread resume handler: %s\n",
+      strerror(errno));
+    abort();
+  }
+
+  sigfillset(&suspend_handler_mask);
+  sigdelset(&suspend_handler_mask, SIG_RESUME);
+
+  pthread_key_create(&tls_key, thread_exited);
 }
 
 thr_State *luaC_get_per_thread(void)
@@ -404,6 +586,14 @@ thr_State *luaC_get_per_thread(void)
   if (pt == NULL) {
     pt = calloc(1, sizeof(*pt));
     pthread_setspecific(tls_key, pt);
+    pt->tid = pthread_self();
+    pthread_mutex_lock(&all_threads_lock);
+    pt->next = all_threads;
+    if (pt->next) {
+      pt->next->prev = pt;
+    }
+    all_threads = pt;
+    pthread_mutex_unlock(&all_threads_lock);
   }
   return pt;
 }
@@ -426,7 +616,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->on_state_create = p->on_state_create;
   g->on_state_finalize = p->on_state_finalize;
   g->isxref = 1; /* g->notxref is implicitly set to 0 by memset above */
- 
+
   return g;
 }
 
@@ -545,7 +735,7 @@ static void move_matching_objects_to(lua_State *L, GCheader *src, GCheader *targ
   while (next != src) {
     o = next;
     next = o->next;
-    
+
     lua_assert(o->owner == L->heapid);
 
     if (func(L, o)) {
@@ -697,7 +887,7 @@ static void check_references(lua_State *L)
   while (next != L->White) {
     o = next;
     next = o->next;
-      
+
     lua_assert(!is_black(L, o));
     lua_assert(o->owner == L->heapid);
 
@@ -782,6 +972,7 @@ static void local_collection(lua_State *L)
   if (L->in_gc) {
     return; // happens during finalizers
   }
+  stop_world();
   L->in_gc = 1;
 
   prep_list(&L->B0);
@@ -831,6 +1022,7 @@ static void local_collection(lua_State *L)
 //  if (L->heapid > 0) walk_gch_list(G(L), L->White, "live objects after collection");
 
   L->in_gc = 0;
+  start_world();
 }
 
 void luaC_checkGC(lua_State *L)
@@ -847,7 +1039,7 @@ LUA_API void lua_close (lua_State *L)
   GCheader *o, *n;
   Table *reg;
   unsigned int udata;
-  
+
   /* only the main thread can be closed */
   lua_assert(L == G(L)->mainthread);
 

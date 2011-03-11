@@ -69,9 +69,15 @@ typedef struct CallInfo {
  * The contents of thr_State are opaque to the collector; do not reference
  * collectable objects from here.
  */
-typedef struct thr_State {
-  int dummy;
-} thr_State;
+struct thr_State {
+  /* so we can find all threads that have run lua */
+  struct thr_State *prev, *next;
+  /* so that we can stop this thread later */
+  pthread_t tid;
+  /* so that a suspended thread knows to wake up */
+  volatile int wake;
+};
+typedef struct thr_State thr_State;
 
 /*
 ** `global state', shared by all threads of this state
