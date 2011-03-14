@@ -5,7 +5,7 @@ if test `uname` == "Darwin" ; then
 else
   libtoolize --automake
 fi
-autoheader
 aclocal 
+autoheader
 automake --add-missing --foreign
 autoconf

@@ -13,6 +13,11 @@ void lua_lock(lua_State *L)
 {
   int r;
 
+  /* when entering an interpreter, ensure that the current thread
+   * is added to the list of those that will be stopped when we
+   * need to stop the world */
+  luaC_get_per_thread();
+
   do {
     r = pthread_mutex_lock(&L->lock);
   } while (r == EINTR || r == EAGAIN);
@@ -179,6 +184,12 @@ lua_State *luaE_newthread (lua_State *L) {
   resethookcount(L1);
   stringtable_init(L1);
   luaZ_initbuffer(G(L), &L1->buff);
+
+  lua_lock(G(L)->mainthread);
+  L1->prev = G(L)->mainthread;
+  G(L)->mainthread->next = L1;
+  lua_unlock(G(L)->mainthread);
+
   if (G(L1)->on_state_create) {
     G(L1)->on_state_create(L1);
   }

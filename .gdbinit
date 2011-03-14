@@ -1,6 +1,8 @@
 # vim:ts=2:sw=2:et:
 
 handle SIGPIPE nostop
+handle SIGUSR1 nostop
+handle SIGUSR2 nostop
 handle SIG32 nostop
 
 set $LUA_TNONE = -1

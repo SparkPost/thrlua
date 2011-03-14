@@ -19,6 +19,7 @@
 #define WEAKVALBIT  (1<<2)
 #define FREEDBIT    (1<<7)
 
+
 static inline int is_black(lua_State *L, GCheader *obj)
 {
   return ((obj->marked & BLACKBIT) == L->black);
@@ -93,10 +94,21 @@ static void removeentry(Node *n)
     setttype(key2tval(n), LUA_TDEADKEY);  /* dead key; remove it */
 }
 
-static inline void set_xref(lua_State *L, GCheader *lval, GCheader *rval)
+static inline int is_unknown_xref(lua_State *L, GCheader *o)
+{
+  if ((G(L)->isxref & 3) == 1) {
+    return (o->xref & 2) == 2;
+  }
+  return (o->xref & 2) == 0;
+}
+
+static inline void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
+  int force)
 {
   if (lval->owner != rval->owner) {
     rval->xref = G(L)->isxref;
+  } else if (force && is_unknown_xref(L, rval)) {
+    rval->xref = G(L)->notxref;
   }
 }
 
@@ -127,14 +139,23 @@ static inline void mark_object(lua_State *L, GCheader *obj)
   lua_assert(is_black(L, obj));
 }
 
-static inline void mark_value(lua_State *L, TValue *val)
+typedef void (*objfunc_t)(lua_State *, GCheader *, GCheader *);
+static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc);
+
+static inline void traverse_obj(lua_State *L, GCheader *obj, GCheader *rval,
+  objfunc_t objfunc)
+{
+  objfunc(L, obj, rval);
+}
+
+static inline void traverse_value(lua_State *L, GCheader *obj, TValue *val,
+  objfunc_t objfunc)
 {
   checkconsistency(val);
   if (iscollectable(val)) {
-    mark_object(L, gcvalue(val));
+    traverse_obj(L, obj, gcvalue(val), objfunc);
   }
 }
-
 
 void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader **lvalue, const TValue *rvalue)
@@ -142,7 +163,7 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader *ro = gcvalue(rvalue);
 
   if (ro) {
-    set_xref(L, object, ro);
+    set_xref(L, object, ro, 0);
     mark_object(L, ro);
   }
 
@@ -156,7 +177,7 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
   GCheader *ro = iscollectable(rvalue) ? gcvalue(rvalue) : NULL;
 
   if (ro) {
-    set_xref(L, object, ro);
+    set_xref(L, object, ro, 0);
     mark_object(L, ro);
   }
 
@@ -168,20 +189,17 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
   GCheader **lvalue, GCheader *rvalue)
 {
   if (rvalue) {
-    set_xref(L, object, rvalue);
+    set_xref(L, object, rvalue, 0);
     mark_object(L, rvalue);
   }
 
   *lvalue = rvalue;
 }
 
-static void blacken_object(lua_State *L, GCheader *o)
+
+static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
 {
   int i;
-
-  lua_assert((o->marked & FREEDBIT) == 0);
-  lua_assert(o->owner == L->heapid);
-  o->marked = (o->marked & ~BLACKBIT) | L->black;
 
   switch (o->tt) {
     case LUA_TSTRING:
@@ -192,17 +210,17 @@ static void blacken_object(lua_State *L, GCheader *o)
       {
         Udata *ud = rawgco2u(o);
         if (ud->uv.metatable) {
-          mark_object(L, (GCheader*)ud->uv.metatable);
+          traverse_obj(L, o, (GCheader*)ud->uv.metatable, objfunc);
         }
         if (ud->uv.env) {
-          mark_object(L, (GCheader*)ud->uv.env);
+          traverse_obj(L, o, (GCheader*)ud->uv.env, objfunc);
         }
         break;
       }
     case LUA_TUPVAL:
       {
         UpVal *uv = gco2uv(o);
-        mark_value(L, uv->v);
+        traverse_value(L, o, uv->v, objfunc);
         break;
       }
     case LUA_TTABLE:
@@ -211,9 +229,9 @@ static void blacken_object(lua_State *L, GCheader *o)
         int weakkey = 0, weakvalue = 0;
         const TValue *mode;
 
-        luaH_rdlock(L, h); /* FIXME: deadlock a possibility */
+        luaH_rdlock(L, h);
         if (h->metatable) {
-          mark_object(L, h->metatable);
+          traverse_obj(L, o, h->metatable, objfunc);
         }
         mode = gfasttm(G(L), gch2h(h->metatable), TM_MODE);
         if (mode && ttisstring(mode)) {
@@ -223,7 +241,7 @@ static void blacken_object(lua_State *L, GCheader *o)
         if (!weakvalue) {
           i = h->sizearray;
           while (i--) {
-            mark_value(L, &h->array[i]);
+            traverse_value(L, o, &h->array[i], objfunc);
           }
         }
         i = sizenode(h);
@@ -237,15 +255,15 @@ static void blacken_object(lua_State *L, GCheader *o)
           } else {
             lua_assert(!ttisnil(gkey(n)));
             if (!weakvalue) {
-              mark_value(L, gval(n));
+              traverse_value(L, o, gval(n), objfunc);
             }
             if (!weakkey && iscollectable(gkey(n))) {
-              mark_object(L, gcvalue(gkey(n)));
+              traverse_obj(L, o, gcvalue(gkey(n)), objfunc);
             }
           }
         }
         luaH_unlock(L, h);
-        if (weakkey || weakvalue) {
+        if (weakkey || weakvalue) { // FIXME
           /* instead of falling through to moving this to the Black list, put
            * it on the weak list */
           append_list(&L->Weak, o);
@@ -260,17 +278,16 @@ static void blacken_object(lua_State *L, GCheader *o)
         Closure *cl = gco2cl(o);
 
         if (cl->c.isC) {
-          mark_object(L, cl->c.env);
+          traverse_obj(L, o, cl->c.env, objfunc);
           for (i = 0; i < cl->c.nupvalues; i++) {
-            mark_value(L, &cl->c.upvalue[i]);
+            traverse_value(L, o, &cl->c.upvalue[i], objfunc);
           }
         } else {
-//          VALGRIND_PRINTF_BACKTRACE("tracing function %p proto %p\n", o, cl->l.p);
           lua_assert(cl->l.nupvalues == cl->l.p->nups);
-          mark_object(L, &cl->l.p->gch);
-          mark_object(L, cl->l.env);
+          traverse_obj(L, o, &cl->l.p->gch, objfunc);
+          traverse_obj(L, o, cl->l.env, objfunc);
           for (i = 0; i < cl->l.nupvalues; i++) {
-            mark_object(L, &cl->l.upvals[i]->gch);
+            traverse_obj(L, o, &cl->l.upvals[i]->gch, objfunc);
           }
         }
         break;
@@ -282,13 +299,13 @@ static void blacken_object(lua_State *L, GCheader *o)
         UpVal *uv;
         CallInfo *ci;
 
-        lua_lock(th); // FIXME: traversal deadlock?
-        mark_value(L, &th->l_gt);
-        mark_value(L, &th->env);
-        mark_value(L, &th->tls);
+        lua_lock(th);
+        traverse_value(L, o, &th->l_gt, objfunc);
+        traverse_value(L, o, &th->env, objfunc);
+        traverse_value(L, o, &th->tls, objfunc);
         /* the corresponding global state */
         lua_assert(G(L) == th->l_G);
-        mark_object(L, (GCheader*)th->l_G);
+        traverse_obj(L, o, (GCheader*)th->l_G, objfunc);
 
         lim = th->top;
         for (ci = th->base_ci; ci <= th->ci; ci++) {
@@ -298,7 +315,7 @@ static void blacken_object(lua_State *L, GCheader *o)
           }
         }
         for (sk = th->stack; sk < th->top; sk++) {
-          mark_value(L, sk);
+          traverse_value(L, o, sk, objfunc);
         }
         for (; sk <= lim; sk++) {
           setnilvalue(sk); // FIXME: only for local thread?
@@ -306,7 +323,7 @@ static void blacken_object(lua_State *L, GCheader *o)
         /* open upvalues also */
         for (uv = th->openupval.u.l.next;
             uv != &th->openupval; uv = uv->u.l.next) {
-          mark_object(L, (GCheader*)uv);
+          traverse_obj(L, o, (GCheader*)uv, objfunc);
         }
         lua_unlock(th);
         break;
@@ -316,44 +333,44 @@ static void blacken_object(lua_State *L, GCheader *o)
         Proto *f = gco2p(o);
 
         if (f->source) {
-          mark_object(L, &f->source->tsv.gch);
+          traverse_obj(L, o, &f->source->tsv.gch, objfunc);
         }
         for (i = 0; i < f->sizek; i++) {
-          mark_value(L, &f->k[i]);
+          traverse_value(L, o, &f->k[i], objfunc);
         }
         for (i = 0; i < f->sizeupvalues; i++) {
           if (f->upvalues[i]) {
-            mark_object(L, f->upvalues[i]);
+            traverse_obj(L, o, f->upvalues[i], objfunc);
           }
         }
         for (i = 0; i < f->sizep; i++) {
           if (f->p[i]) {
-            mark_object(L, &f->p[i]->gch);
+            traverse_obj(L, o, &f->p[i]->gch, objfunc);
           }
         }
         for (i = 0; i < f->sizelocvars; i++) {
           if (f->locvars[i].varname) {
-            mark_object(L, f->locvars[i].varname);
+            traverse_obj(L, o, f->locvars[i].varname, objfunc);
           }
         }
         break;
       }
     case LUA_TGLOBAL:
-      mark_object(L, &G(L)->memerr->tsv.gch);
+      traverse_obj(L, o, &G(L)->memerr->tsv.gch, objfunc);
       for (i = 0; i < NUM_TAGS; i++) {
         if (G(L)->mt[i]) {
-          mark_object(L, &G(L)->mt[i]->gch);
+          traverse_obj(L, o, &G(L)->mt[i]->gch, objfunc);
         }
       }
       for (i = 0; i < TM_N; i++) {
         if (G(L)->tmname[i]) {
-          mark_object(L, &G(L)->tmname[i]->tsv.gch);
+          traverse_obj(L, o, &G(L)->tmname[i]->tsv.gch, objfunc);
         }
       }
-      mark_value(L, &G(L)->l_registry);
-      mark_value(L, &G(L)->ostls);
-      mark_value(L, &G(L)->l_globals);
-      mark_object(L, &G(L)->mainthread->gch);
+      traverse_value(L, o, &G(L)->l_registry, objfunc);
+      traverse_value(L, o, &G(L)->ostls, objfunc);
+      traverse_value(L, o, &G(L)->l_globals, objfunc);
+      traverse_obj(L, o, &G(L)->mainthread->gch, objfunc);
       break;
 
     default:
@@ -364,8 +381,52 @@ static void blacken_object(lua_State *L, GCheader *o)
       fprintf(stderr, "marking for tt=%d is not implemented\n", o->tt);
       abort();
   }
+}
 
-  append_list(L->Black, o);
+static void grey_object(lua_State *L, GCheader *lval, GCheader *rval)
+{
+  mark_object(L, rval);
+}
+
+static void blacken_object(lua_State *L, GCheader *o)
+{
+  int i;
+
+  lua_assert((o->marked & FREEDBIT) == 0);
+  lua_assert(o->owner == L->heapid);
+  o->marked = (o->marked & ~BLACKBIT) | L->black;
+
+  traverse_object(L, o, grey_object);
+
+  switch (o->tt) {
+    case LUA_TTABLE: /* FIXME: speed up weak table detection */
+      {
+        Table *h = gco2h(o);
+        int weakkey = 0, weakvalue = 0;
+        const TValue *mode;
+
+        luaH_rdlock(L, h); /* FIXME: deadlock a possibility */
+        mode = gfasttm(G(L), gch2h(h->metatable), TM_MODE);
+        if (mode && ttisstring(mode)) {
+          weakkey = (strchr(svalue(mode), 'k') != NULL);
+          weakvalue = (strchr(svalue(mode), 'v') != NULL);
+        }
+
+        luaH_unlock(L, h);
+        if (weakkey || weakvalue) {
+          /* instead of falling through to moving this to the Black list, put
+           * it on the weak list */
+          append_list(&L->Weak, o);
+          break;
+        }
+        /* regular Black list */
+        append_list(L->Black, o);
+        break;
+      }
+    default:
+      append_list(L->Black, o);
+  }
+
 }
 
 static inline int iscollected(lua_State *L, const TValue *val, int iskey)
@@ -399,7 +460,7 @@ static thr_State *all_threads = NULL;
 static sem_t *world_sem = NULL;
 #else
 static sem_t world_sem_inst;
-static sem_t *world_sem = world_sem_inst;
+static sem_t *world_sem = &world_sem_inst;
 #endif
 static sigset_t suspend_handler_mask;
 
@@ -547,7 +608,7 @@ static void make_tls_key(void)
     sem_unlink(name);
   }
 #else
-  if (sem_init(&world_sem, 0, 0) != 0) {
+  if (sem_init(world_sem, 0, 0) != 0) {
     fprintf(stderr, "failed to init semaphore: %s\n", strerror(errno));
     abort();
   }
@@ -646,7 +707,6 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
       lua_State *n;
 
       lua_lock(L);
-      /* FIXME: maintain a separate list of lua_State */
       n = luaM_reallocG(G(L), NULL, 0, sizeof(lua_State) + G(L)->extraspace);
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
@@ -655,6 +715,18 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
       n->gch.marked = 1; /* white wrt. its own list */
       n->gch.xref = G(L)->isxref;
       o = &n->gch;
+
+      /* maintain a separate list of lua_State */
+      pthread_mutex_lock(&all_threads_lock);
+      /* insert after the main thread */
+      n->next = G(L)->mainthread->next;
+      if (n->next) {
+        n->next->prev = n;
+      }
+      n->prev = G(L)->mainthread;
+      n->prev->next = n;
+      pthread_mutex_unlock(&all_threads_lock);
+
       lua_unlock(L);
       break;
     }
@@ -778,6 +850,12 @@ static void reclaim_white(lua_State *L, int final_close)
             VALGRIND_PRINTF("reclaiming C function %s %p\n", c->c.fname, c->c.f);
           } else {
             VALGRIND_PRINTF("reclaiming lua function %p proto=%p\n", o, c->l.p);
+          }
+#elif 0
+          if (c->c.isC) {
+            printf("reclaiming C function %s %p\n", c->c.fname, c->c.f);
+          } else {
+            printf("reclaiming lua function %p proto=%p xref=%x (isxref=%x notxref=%x)\n", o, c->l.p, o->xref, G(L)->isxref, G(L)->notxref);
           }
 #endif
           size = (c->c.isC) ? sizeCclosure(c->c.nupvalues) :
@@ -972,7 +1050,6 @@ static void local_collection(lua_State *L)
   if (L->in_gc) {
     return; // happens during finalizers
   }
-  stop_world();
   L->in_gc = 1;
 
   prep_list(&L->B0);
@@ -1022,12 +1099,67 @@ static void local_collection(lua_State *L)
 //  if (L->heapid > 0) walk_gch_list(G(L), L->White, "live objects after collection");
 
   L->in_gc = 0;
+}
+
+static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
+{
+  int recurse = is_unknown_xref(L, rval);
+
+  set_xref(L, lval, rval, 1);
+
+  if (recurse) {
+    traverse_object(L, rval, global_trace_obj);
+  }
+}
+
+static void global_trace(lua_State *L, GCheader *list)
+{
+  GCheader *obj;
+
+  if (list->next == NULL) {
+    return;
+  }
+
+  for (obj = list->next; obj != list; obj = obj->next) {
+    global_trace_obj(L, &L->gch, obj);
+  }
+}
+
+static void global_collection(lua_State *L)
+{
+  lua_State *l;
+
+  stop_world();
+
+  /* flip sense of definitive xref bit */
+  if (G(L)->isxref == 1) {
+    G(L)->isxref = 3;
+    G(L)->notxref = 2;
+  } else {
+    G(L)->isxref = 1;
+    G(L)->notxref = 0;
+  }
+
+  /* now trace all objects and fix the xref bit */
+  for (l = G(L)->mainthread; l; l = l->next) {
+    /* force a trace of the thread itself */
+    l->gch.xref = G(L)->isxref;
+    traverse_object(l, &l->gch, global_trace_obj);
+
+    global_trace(l, &l->Grey);
+    global_trace(l, l->White);
+    global_trace(l, l->Black);
+    global_trace(l, &l->Weak);
+  }
+
   start_world();
 }
 
 void luaC_checkGC(lua_State *L)
 {
+  if (L->heapid) return;
   local_collection(L);
+  global_collection(L);
 }
 
 /* The semantics of lua_close are to free up everything associated

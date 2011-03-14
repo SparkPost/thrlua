@@ -125,6 +125,8 @@ LUAI_FUNC thr_State *luaC_get_per_thread(void);
 struct lua_State {
   GCheader gch;
 
+  struct lua_State *prev, *next;
+
   scpt_atomic_t heapid;
 
   lu_byte status;
