@@ -1,9 +1,12 @@
 # vim:ts=2:sw=2:et:
 
-handle SIGPIPE nostop
-handle SIGUSR1 nostop
-handle SIGUSR2 nostop
+handle SIGPIPE nostop noprint
+handle SIGUSR1 nostop noprint
+handle SIGUSR2 nostop noprint
+handle SIGPWR nostop noprint
+handle SIGXCPU nostop noprint
 handle SIG32 nostop
+# handle SIGSEGV nostop
 
 set $LUA_TNONE = -1
 set $LUA_TNIL = 0

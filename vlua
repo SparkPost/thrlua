@@ -9,4 +9,4 @@ case `uname` in
 	  ;;
 esac
 export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
-exec valgrind --tool=memcheck --leak-check=full $dsymutil --num-callers=48 --track-origins=yes --show-reachable=yes --log-file=/var/tmp/thrlua.log .libs/rclua $*
+exec valgrind --tool=memcheck --vex-iropt-precise-memory-exns=yes --leak-check=full $dsymutil --num-callers=48 --track-origins=yes --show-reachable=yes --log-file=/var/tmp/thrlua.log .libs/rclua $*

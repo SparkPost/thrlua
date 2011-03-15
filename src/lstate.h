@@ -87,8 +87,10 @@ struct global_State {
 
   /** xref bits are safe to read so long as you have locked at least one
    * lua_State */
-  lu_byte isxref;
-  lu_byte notxref;
+  volatile lu_byte isxref;
+  volatile lu_byte notxref;
+  /* if true, the world is stopped */
+  lu_byte stopped;
 
   lua_Alloc alloc;
   void *allocdata;

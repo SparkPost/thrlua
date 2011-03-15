@@ -67,7 +67,7 @@ typedef struct GCheader {
   /** finalized, black, white, grey etc. */
   lu_byte marked;
   /** external reference status */
-  lu_byte xref;
+  volatile lu_byte xref;
 } GCheader;
 
 /*
