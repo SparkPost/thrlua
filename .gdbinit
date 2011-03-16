@@ -5,6 +5,7 @@ handle SIGUSR1 nostop noprint
 handle SIGUSR2 nostop noprint
 handle SIGPWR nostop noprint
 handle SIGXCPU nostop noprint
+handle SIGINFO nostop noprint
 handle SIG32 nostop
 # handle SIGSEGV nostop
 
