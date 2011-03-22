@@ -114,6 +114,10 @@ esac
 AC_SUBST(JAVA_CFLAGS)
 AC_SUBST(JAVA_LIBS)
 
+cd ck
+./configure && make
+cd ..
+
 AC_CONFIG_HEADERS([rcluaconfig.h])
 AC_CONFIG_FILES([Makefile etc/rclua.pc])
 AC_OUTPUT

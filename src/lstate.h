@@ -76,6 +76,8 @@ struct thr_State {
   pthread_t tid;
   /* so that a suspended thread knows to wake up */
   volatile int wake;
+  /* so that we can avoid deadlock during thread destruction */
+  volatile int dead;
 };
 typedef struct thr_State thr_State;
 

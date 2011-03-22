@@ -85,10 +85,9 @@ typedef union {
 ** Tagged Values
 */
 
-#define TValuefields	Value value; int tt
-
 typedef struct lua_TValue {
-  TValuefields;
+  Value value;
+  int tt;
 } TValue;
 
 typedef TValue *StkId;  /* index to stack elements */
@@ -263,7 +262,8 @@ typedef union Closure {
 
 typedef union TKey {
   struct {
-    TValuefields;
+    Value value;
+    int tt;
     struct Node *next;  /* for chaining */
   } nk;
   TValue tvk;

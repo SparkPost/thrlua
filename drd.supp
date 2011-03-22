@@ -1,0 +1,50 @@
+{
+   <traverse inside collection is ok>
+   drd:ConflictingAccess
+   fun:traverse_object
+   fun:global_collection
+}
+{
+   <traverse value ok>
+   drd:ConflictingAccess
+   fun:traverse_value
+   fun:traverse_object
+   fun:global_collection
+}
+{
+   <list is protected by stop-world>
+   drd:ConflictingAccess
+   fun:global_trace
+   fun:global_collection
+}
+{
+   <reading stopped is not a race>
+   drd:ConflictingAccess
+   fun:is_world_stopped
+}
+{
+   <we deliberately test this case in t/thread.lua>
+   drd:MutexErr
+   fun:pthread_mutex_unlock
+   fun:thrlib_mutex_unlock
+   fun:luaD_precall
+   fun:luaV_execute
+   fun:luaD_call
+   fun:f_call
+   fun:luaD_rawrunprotected
+   fun:luaD_pcall
+   fun:lua_pcall
+   fun:luaB_pcall
+   fun:luaD_precall
+   fun:luaV_execute
+   fun:luaD_call
+   fun:f_call
+   fun:luaD_rawrunprotected
+   fun:luaD_pcall
+   fun:lua_pcall
+   fun:thrlib_thread_func
+   fun:vgDrd_thread_wrapper
+   fun:start_thread
+   fun:clone
+}
+

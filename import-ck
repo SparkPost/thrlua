@@ -1,0 +1,22 @@
+#!/bin/sh
+# vim:ts=2:sw=2:et:
+# This script updates the bundled CK implementation
+CK=$1
+
+if test ! -f "$CK/src/ck_barrier_centralized.c" ; then
+	echo "./import-ck /path/to/ck src dir"
+	exit 1
+fi
+
+if test ! -f src/lgc.c ; then
+  echo "Run me from the root of the thrlua repo"
+  exit 1
+fi
+
+rm -rf ck
+cp -r $CK ck
+rm -r ck/regressions
+rm -rf ck/.git
+rm -f ck/.gitignore
+rm -rf ck/.hg
+

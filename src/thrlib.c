@@ -19,11 +19,48 @@ struct thrlib_thread {
   lua_State *L;
 };
 
+static int traceback(lua_State *L)
+{
+  if (!lua_isstring(L, 1))  {
+    /* 'message' not a string? */
+    printf("TRACEBACK: error is not a string\n");
+    return 1;  /* keep it intact */
+  }
+  lua_getfield(L, LUA_GLOBALSINDEX, "debug");
+  if (!lua_istable(L, -1)) {
+    printf("TRACEBACK: can't find debug lib?\n");
+    lua_pop(L, 1);
+    return 1;
+  }
+  lua_getfield(L, -1, "traceback");
+  if (!lua_isfunction(L, -1)) {
+    printf("TRACEBACK: can't find debug.traceback?\n");
+    lua_pop(L, 2);
+    return 1;
+  }
+  printf("TRACEBACK: should have seen the traceback here?\n");
+  lua_pushvalue(L, 1);  /* pass error message */
+  lua_pushinteger(L, 2);  /* skip this function and traceback */
+  lua_call(L, 2, 1);  /* call debug.traceback */
+  return 1;
+}
+
 static void *thrlib_thread_func(void *arg)
 {
   struct thrlib_thread *th = arg;
+  int st;
 
-  lua_pcall(th->L, 1, 0, 0);
+  /* on entry, stack looks like this:
+   * [1] traceback
+   * [2] closure
+   * [3] closure argument
+   * Therefore, we call pcall with 1 arg and a base of 1 (traceback) */
+
+  st = lua_pcall(th->L, 1, 0, 1);
+  if (st != 0) {
+    printf("thread pcall failed with status %d\n", st);
+    lua_gc(th->L, LUA_GCCOLLECT, 0);
+  }
 
   scpt_atomic_dec(&th->L->gch.ref);
   return 0;
@@ -41,6 +78,9 @@ static int thrlib_create(lua_State *L)
   memset(th, 0, sizeof(*th));
   th->L = lua_newthread(L);
   scpt_atomic_inc(&th->L->gch.ref);
+
+  /* trace function is on the top of the stack */
+  lua_pushcfunction(th->L, traceback);
 
   /* get function parameter on top of stack */
   lua_pushvalue(L, 1);
@@ -233,4 +273,3 @@ LUALIB_API int luaopen_thread(lua_State *L)
 
 /* vim:ts=2:sw=2:et:
  */
-

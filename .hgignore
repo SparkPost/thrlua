@@ -29,6 +29,14 @@ rcluaconfig.h*
 *.gcno
 *.gcda
 *.dSYM
+vg.vg
 lcovhtml
 doc/reference/*.html
 doc/reference/*.css
+ck/Makefile
+ck/build/ck.build
+ck/build/ck.pc
+ck/build/regressions.build
+ck/src/*.o
+ck/src/*.a
+ck/src/*.so

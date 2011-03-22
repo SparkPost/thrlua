@@ -9,4 +9,4 @@ case `uname` in
 	  ;;
 esac
 export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
-exec valgrind --tool=drd $dsymutil --read-var-info=yes --shared-threshold=10 --exclusive-threshold=800 -v --num-callers=48 --log-file=vg.vg .libs/rclua $*
+exec valgrind --tool=drd $dsymutil --suppressions=drd.supp --first-race-only=yes --gen-suppressions=all --read-var-info=yes --shared-threshold=10 --exclusive-threshold=800 -v --num-callers=48 --log-file=vg.vg .libs/rclua $*
