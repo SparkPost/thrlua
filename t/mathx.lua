@@ -41,6 +41,7 @@ is_deeply({f(1)}, {1, 1, 1, 1.1102230246252e-16, 2.2204460492503e-16});
 is_deeply({f(0)}, {-4.9406564584125e-324, 0, 4.9406564584125e-324, 4.9406564584125e-324, 4.9406564584125e-324});
 
 is(math.fmax(1,math.nan,2), 2);
+todo("Solaris max portability issue", 1);
 is(tostring(math.max(math.nan,1,2)), 'nan');
 is(math.fmin(1,math.nan,2), 1);
 is(tostring(math.min(math.nan,1,2)), 'nan');

@@ -95,6 +95,8 @@ is_deeply(l, {'123', 'one', 'two', 'three',
   'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven'},
   "read data via iterator");
 is(o:write("no newline at end"), true, "wrote no newline ending");
+
+todo("Solaris setvbuf portability issue", 2);
 is(o:seek('end', -17), 60, 'wind back');
 is(o:read('*l'), 'no newline at end', 'got final line');
 
