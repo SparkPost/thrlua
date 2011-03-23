@@ -27,10 +27,12 @@
 ** (any reallocation to an equal or smaller size cannot fail!)
 */
 
-static void *default_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
+static void *default_alloc(void *ud, enum lua_memtype objtype, void *ptr,
+  size_t osize, size_t nsize)
 {
   (void)ud;
   (void)osize;
+  (void)objtype;
   if (nsize == 0) {
     free(ptr);
     return NULL;
@@ -40,8 +42,9 @@ static void *default_alloc(void *ud, void *ptr, size_t osize, size_t nsize)
 
 #define MINSIZEARRAY	4
 
-void *luaM_growaux_ (lua_State *L, void *block, int *size, size_t size_elems,
-                     int limit, const char *errormsg) {
+void *luaM_growaux_(lua_State *L, enum lua_memtype objtype, void *block,
+    int *size, size_t size_elems, int limit, const char *errormsg)
+{
   void *newblock;
   int newsize;
   if (*size >= limit/2) {  /* cannot double it? */
@@ -54,7 +57,7 @@ void *luaM_growaux_ (lua_State *L, void *block, int *size, size_t size_elems,
     if (newsize < MINSIZEARRAY)
       newsize = MINSIZEARRAY;  /* minimum size */
   }
-  newblock = luaM_reallocv(L, block, *size, newsize, size_elems);
+  newblock = luaM_reallocv(L, objtype, block, *size, newsize, size_elems);
   *size = newsize;  /* update only when everything else is OK */
   return newblock;
 }
@@ -70,15 +73,18 @@ void *luaM_toobig (lua_State *L) {
 /*
 ** generic allocation routine.
 */
-void *luaM_realloc_ (lua_State *L, void *block, size_t osize, size_t nsize) {
+void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype, void *block,
+  size_t osize, size_t nsize)
+{
   lua_assert((osize == 0) == (block == NULL));
-  block = (*G(L)->alloc)(G(L)->allocdata, block, osize, nsize);
+  block = (*G(L)->alloc)(G(L)->allocdata, objtype, block, osize, nsize);
   if (block == NULL && nsize > 0)
     luaD_throw(L, LUA_ERRMEM);
   lua_assert((nsize == 0) == (block == NULL));
   return block;
 }
 
+#if 0
 LUA_API lua_Alloc lua_getallocf (lua_State *L, void **ud)
 {
   if (ud) *ud = G(L)->allocdata;
@@ -89,11 +95,12 @@ LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 {
   luaG_runerror(L, "it is not safe to change the allocator");
 }
+#endif
 
-void *luaM_reallocG(global_State *g, void *block,
-  size_t oldsize, size_t size)
+void *luaM_reallocG(global_State *g, enum lua_memtype objtype,
+  void *block, size_t oldsize, size_t size)
 {
-  return g->alloc(g->allocdata, block, oldsize, size);
+  return g->alloc(g->allocdata, objtype, block, oldsize, size);
 }
 
 static int panic (lua_State *L)
@@ -110,9 +117,15 @@ static int panic (lua_State *L)
   return 0;
 }
 
-
 LUALIB_API lua_State *luaL_newstate (void) {
-  lua_State *L = lua_newstate(default_alloc, NULL);
+  struct lua_StateParams p;
+  lua_State *L;
+
+  memset(&p, 0, sizeof(p));
+  p.allocfunc = default_alloc;
+
+  L = lua_newglobalstate(&p);
+
   if (L) lua_atpanic(L, &panic);
   return L;
 }

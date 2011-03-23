@@ -32,7 +32,7 @@ typedef struct Mbuffer {
 
 
 #define luaZ_resizebuffer(g, buff, size) \
-	(luaM_reallocvectorG(g, (buff)->buffer, (buff)->buffsize, size, char), \
+	(luaM_reallocvectorG(g, LUA_MEM_ZBUF, (buff)->buffer, (buff)->buffsize, size, char), \
 	(buff)->buffsize = size)
 
 #define luaZ_freebuffer(g, buff)	luaZ_resizebuffer(g, buff, 0)

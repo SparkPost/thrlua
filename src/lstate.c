@@ -42,12 +42,12 @@ void lua_unlock(lua_State *L)
 
 static void stack_init (lua_State *L1, lua_State *L) {
   /* initialize CallInfo array */
-  L1->base_ci = luaM_newvector(L, BASIC_CI_SIZE, CallInfo);
+  L1->base_ci = luaM_newvector(L, LUA_MEM_CALLINFO, BASIC_CI_SIZE, CallInfo);
   L1->ci = L1->base_ci;
   L1->size_ci = BASIC_CI_SIZE;
   L1->end_ci = L1->base_ci + L1->size_ci - 1;
   /* initialize stack array */
-  L1->stack = luaM_newvector(L, BASIC_STACK_SIZE + EXTRA_STACK, TValue);
+  L1->stack = luaM_newvector(L, LUA_MEM_STACK, BASIC_STACK_SIZE + EXTRA_STACK, TValue);
   L1->stacksize = BASIC_STACK_SIZE + EXTRA_STACK;
   L1->top = L1->stack;
   L1->stack_last = L1->stack+(L1->stacksize - EXTRA_STACK)-1;
@@ -60,8 +60,8 @@ static void stack_init (lua_State *L1, lua_State *L) {
 
 
 static void freestack (global_State *g, lua_State *L1) {
-  luaM_freearrayG(g, L1->base_ci, L1->size_ci, CallInfo);
-  luaM_freearrayG(g, L1->stack, L1->stacksize, TValue);
+  luaM_freearrayG(g, LUA_MEM_CALLINFO, L1->base_ci, L1->size_ci, CallInfo);
+  luaM_freearrayG(g, LUA_MEM_STACK, L1->stack, L1->stacksize, TValue);
 }
 
 static int do_tls_access(lua_State *L)
@@ -109,7 +109,7 @@ static void stringtable_init(lua_State *L)
 {
   global_State *g = G(L);
 
-  L->strt.hash = g->alloc(g->allocdata, NULL, 0,
+  L->strt.hash = g->alloc(g->allocdata, LUA_MEM_STRING_TABLE, NULL, 0,
                     MINSTRTABSIZE * sizeof(struct stringtable_node*));
   memset(L->strt.hash, 0, MINSTRTABSIZE * sizeof(struct stringtable_node*));
   L->strt.size = MINSTRTABSIZE;
@@ -170,7 +170,7 @@ static void close_state (lua_State *L) {
   luaF_close(L, L->stack);  /* close all upvalues for this thread */
   freestack(G(L), L);
   luaZ_freebuffer(g, &L->buff);
-  luaM_freememG(G(L), L, sizeof(*L));
+  luaM_freememG(G(L), LUA_MEM_THREAD, L, sizeof(*L));
 }
 
 lua_State *luaE_newthread (lua_State *L) {
@@ -206,7 +206,7 @@ void luaE_flush_stringtable(lua_State *L)
     while (L->strt.hash[i]) {
       n = L->strt.hash[i];
       L->strt.hash[i] = n->next;
-      luaM_freemem(L, n, sizeof(*n));
+      luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
     }
   }
 }
@@ -220,13 +220,14 @@ void luaE_freethread (global_State *g, lua_State *L1) {
   lua_assert(L1->openupval.u.l.next == &L1->openupval);
   freestack(g, L1);
   luaE_flush_stringtable(L1);
-  luaM_reallocG(g, L1->strt.hash, L1->strt.size * sizeof(struct stringtable_node*), 0);
+  luaM_reallocG(g, LUA_MEM_STRING_TABLE, L1->strt.hash,
+    L1->strt.size * sizeof(struct stringtable_node*), 0);
   pthread_mutex_destroy(&L1->lock);
   luaZ_freebuffer(g, &L1->buff);
-  luaM_freememG(g, L1, sizeof(lua_State));
+  luaM_freememG(g, LUA_MEM_THREAD, L1, sizeof(lua_State));
 }
 
-
+#if 0
 LUA_API lua_State *lua_newstate (lua_Alloc falloc, void *fud) {
   struct lua_StateParams p;
 
@@ -235,6 +236,7 @@ LUA_API lua_State *lua_newstate (lua_Alloc falloc, void *fud) {
   p.allocdata = fud;
   return lua_newglobalstate(&p);
 }
+#endif
 
 LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
 {
@@ -246,7 +248,7 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
   if (!g) {
     return NULL;
   }
-  L = luaM_reallocG(g, NULL, 0, sizeof(*L) + g->extraspace);
+  L = luaM_reallocG(g, LUA_MEM_THREAD, NULL, 0, sizeof(*L) + g->extraspace);
   if (L == NULL) {
     /* FIXME: leak */
     return NULL;

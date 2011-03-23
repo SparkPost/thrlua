@@ -126,8 +126,8 @@ static int registerlocalvar (LexState *ls, TString *varname) {
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
   int oldsize = f->sizelocvars;
-  luaM_growvector(ls->L, f->locvars, fs->nlocvars, f->sizelocvars,
-                  LocVar, SHRT_MAX, "too many local variables");
+  luaM_growvector(ls->L, LUA_MEM_PROTO_DATA, f->locvars, fs->nlocvars,
+    f->sizelocvars, LocVar, SHRT_MAX, "too many local variables");
   while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL;
   luaC_writebarrier(ls->L, &f->gch,
     &f->locvars[fs->nlocvars].varname, &varname->tsv.gch);
@@ -175,8 +175,8 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   }
   /* new one */
   luaY_checklimit(fs, f->nups + 1, LUAI_MAXUPVALUES, "upvalues");
-  luaM_growvector(fs->L, f->upvalues, f->nups, f->sizeupvalues,
-                  GCheader *, MAX_INT, "");
+  luaM_growvector(fs->L, LUA_MEM_PROTO_DATA, f->upvalues,
+    f->nups, f->sizeupvalues, GCheader *, MAX_INT, "");
   while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL;
   luaC_writebarrier(fs->L, &f->gch,
     &f->upvalues[f->nups], &name->tsv.gch);
@@ -296,7 +296,7 @@ static void pushclosure (LexState *ls, FuncState *func, expdesc *v) {
   Proto *f = fs->f;
   int oldsize = f->sizep;
   int i;
-  luaM_growvector(ls->L, f->p, fs->np, f->sizep, Proto *,
+  luaM_growvector(ls->L, LUA_MEM_PROTO_DATA, f->p, fs->np, f->sizep, Proto *,
                   MAXARG_Bx, "constant table overflow");
   while (oldsize < f->sizep) f->p[oldsize++] = NULL;
   luaC_writebarrier(ls->L, &f->gch, (GCheader**)&f->p[fs->np], &func->f->gch);
@@ -345,17 +345,17 @@ static void close_func (LexState *ls) {
   Proto *f = fs->f;
   removevars(ls, 0);
   luaK_ret(fs, 0, 0);  /* final return */
-  luaM_reallocvector(L, f->code, f->sizecode, fs->pc, Instruction);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->code, f->sizecode, fs->pc, Instruction);
   f->sizecode = fs->pc;
-  luaM_reallocvector(L, f->lineinfo, f->sizelineinfo, fs->pc, int);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->lineinfo, f->sizelineinfo, fs->pc, int);
   f->sizelineinfo = fs->pc;
-  luaM_reallocvector(L, f->k, f->sizek, fs->nk, TValue);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->k, f->sizek, fs->nk, TValue);
   f->sizek = fs->nk;
-  luaM_reallocvector(L, f->p, f->sizep, fs->np, Proto *);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->p, f->sizep, fs->np, Proto *);
   f->sizep = fs->np;
-  luaM_reallocvector(L, f->locvars, f->sizelocvars, fs->nlocvars, LocVar);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->locvars, f->sizelocvars, fs->nlocvars, LocVar);
   f->sizelocvars = fs->nlocvars;
-  luaM_reallocvector(L, f->upvalues, f->sizeupvalues, f->nups, GCheader *);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->upvalues, f->sizeupvalues, f->nups, GCheader *);
   f->sizeupvalues = f->nups;
   lua_assert(luaG_checkcode(f));
   lua_assert(fs->bl == NULL);

@@ -250,7 +250,8 @@ static int numusehash (const Table *t, int *nums, int *pnasize) {
 
 static void setarrayvector (lua_State *L, Table *t, int size) {
   int i;
-  luaM_reallocvector(L, t->array, t->sizearray, size, TValue);
+  luaM_reallocvector(L, LUA_MEM_TABLE_NODES, t->array,
+    t->sizearray, size, TValue);
   for (i=t->sizearray; i<size; i++)
      setnilvalue(&t->array[i]);
   t->sizearray = size;
@@ -269,7 +270,7 @@ static void setnodevector (lua_State *L, Table *t, int size) {
     if (lsize > MAXBITS)
       luaG_runerror(L, "table overflow");
     size = twoto(lsize);
-    t->node = luaM_newvector(L, size, Node);
+    t->node = luaM_newvector(L, LUA_MEM_TABLE_NODES, size, Node);
     for (i=0; i<size; i++) {
       Node *n = gnode(t, i);
       gnext(n) = NULL;
@@ -299,7 +300,7 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
         setobjt2t(L, luaH_setnum(L, t, i+1), &t->array[i]);
     }
     /* shrink array */
-    luaM_reallocvector(L, t->array, oldasize, nasize, TValue);
+    luaM_reallocvector(L, LUA_MEM_TABLE_NODES, t->array, oldasize, nasize, TValue);
   }
   /* re-insert elements from hash part */
   for (i = twoto(oldhsize) - 1; i >= 0; i--) {
@@ -307,8 +308,10 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
     if (!ttisnil(gval(old)))
       setobjt2t(L, luaH_set(L, t, key2tval(old)), gval(old));
   }
-  if (nold != dummynode)
-    luaM_freearray(L, nold, twoto(oldhsize), Node);  /* free old array */
+  if (nold != dummynode) {
+    /* free old array */
+    luaM_freearray(L, LUA_MEM_TABLE_NODES, nold, twoto(oldhsize), Node);
+  }
 }
 
 
@@ -364,10 +367,10 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
 
 void luaH_free (global_State *g, Table *t) {
   if (t->node != dummynode)
-    luaM_freearrayG(g, t->node, sizenode(t), Node);
-  luaM_freearrayG(g, t->array, t->sizearray, TValue);
+    luaM_freearrayG(g, LUA_MEM_TABLE_NODES, t->node, sizenode(t), Node);
+  luaM_freearrayG(g, LUA_MEM_TABLE_NODES, t->array, t->sizearray, TValue);
   pthread_rwlock_destroy(&t->lock);
-  luaM_freeG(g, t);
+  luaM_freeG(g, LUA_MEM_TABLE, t);
 }
 
 

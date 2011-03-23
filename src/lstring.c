@@ -15,7 +15,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
   struct stringtable_node **newhash;
   int i;
 
-  newhash = luaM_reallocG(g, NULL, 0,
+  newhash = luaM_reallocG(g, LUA_MEM_STRING_TABLE, NULL, 0,
               newsize * sizeof(struct stringtable_node *));
   memset(newhash, 0, newsize * sizeof(struct stringtable_node*));
 
@@ -32,7 +32,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
       p = next;
     }
   }
-  luaM_reallocG(g, tb->hash, 
+  luaM_reallocG(g, LUA_MEM_STRING_TABLE, tb->hash, 
     tb->size * sizeof(struct stringtable_node *), 0);
   tb->size = newsize;
   tb->hash = newhash;
@@ -56,7 +56,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
 
   tb = &L->strt;
 
-  n = luaM_malloc(L, sizeof(*n)); /* FIXME: slab candidate */
+  n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
   n->str = ts;
 
   h = lmod(h, tb->size);

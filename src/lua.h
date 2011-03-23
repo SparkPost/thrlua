@@ -70,8 +70,29 @@ typedef int (*lua_Writer) (lua_State *L, const void* p, size_t sz, void* ud);
 /*
 ** prototype for memory-allocation functions
 */
-typedef void * (*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
+#if 0
+typedef void *(*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
+#endif
 
+enum lua_memtype {
+  LUA_MEM_STRING,
+  LUA_MEM_STRING_TABLE,
+  LUA_MEM_STRING_TABLE_NODE,
+  LUA_MEM_TABLE,
+  LUA_MEM_TABLE_NODES,
+  LUA_MEM_USERDATA,
+  LUA_MEM_FUNCTION,
+  LUA_MEM_GLOBAL_STATE,
+  LUA_MEM_THREAD,
+  LUA_MEM_ZBUF,
+  LUA_MEM_STACK,
+  LUA_MEM_CALLINFO,
+  LUA_MEM_UPVAL,
+  LUA_MEM_PROTO,
+  LUA_MEM_PROTO_DATA,
+};
+
+typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype, void *ptr, size_t osize, size_t nsize);
 
 /*
 ** basic types
@@ -112,14 +133,16 @@ typedef LUA_INTEGER lua_Integer;
 LUA_API void lua_initialize(void);
 
 
+#if 0
 /*
 ** state manipulation
 */
 LUA_API lua_State *(lua_newstate) (lua_Alloc f, void *ud);
+#endif
 
 struct lua_StateParams {
   /** specify the allocator */
-  lua_Alloc allocfunc;
+  lua_Alloc2 allocfunc;
   /** specify the allocator data */
   void *allocdata;
   /** size of additional space to allocate after each lua_State.
@@ -270,8 +293,10 @@ LUA_API int   (lua_next) (lua_State *L, int idx);
 
 LUA_API void  (lua_concat) (lua_State *L, int n);
 
+#if 0
 LUA_API lua_Alloc (lua_getallocf) (lua_State *L, void **ud);
 LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud);
+#endif
 
 
 

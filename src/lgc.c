@@ -755,7 +755,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   pthread_condattr_t cattr;
   pthread_mutexattr_t mattr;
 
-  g = p->allocfunc(p->allocdata, NULL, 0, sizeof(*g));
+  g = p->allocfunc(p->allocdata, LUA_MEM_GLOBAL_STATE, NULL, 0, sizeof(*g));
   if (!g) {
     return NULL;
   }
@@ -779,10 +779,10 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
   GCheader *o;
 
   switch (tt) {
-#define NEWIMPL(a, b) \
+#define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_reallocG(G(L), NULL, 0, sizeof(b)); \
+      o = luaM_reallocG(G(L), objtype, NULL, 0, sizeof(b)); \
       memset(o, 0, sizeof(b)); \
       o->owner = L->heapid; \
       o->tt = a; \
@@ -790,15 +790,15 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
       mark_object(L, o); \
       lua_unlock(L); \
       break
-    NEWIMPL(LUA_TUPVAL, UpVal);
-    NEWIMPL(LUA_TPROTO, Proto);
-    NEWIMPL(LUA_TTABLE, Table);
+    NEWIMPL(LUA_TUPVAL, UpVal, LUA_MEM_UPVAL);
+    NEWIMPL(LUA_TPROTO, Proto, LUA_MEM_PROTO);
+    NEWIMPL(LUA_TTABLE, Table, LUA_MEM_TABLE);
     case LUA_TTHREAD:
     {
       lua_State *n;
 
       lua_lock(L);
-      n = luaM_reallocG(G(L), NULL, 0, sizeof(lua_State) + G(L)->extraspace);
+      n = luaM_reallocG(G(L), LUA_MEM_THREAD, NULL, 0, sizeof(lua_State) + G(L)->extraspace);
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
       n->heapid = ck_pr_faa_32(&G(L)->nextheapid, 1);
@@ -841,10 +841,10 @@ void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size)
 
   switch (tt) {
 #undef NEWIMPL
-#define NEWIMPL(a, b) \
+#define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_reallocG(G(L), NULL, 0, size); \
+      o = luaM_reallocG(G(L), objtype, NULL, 0, size); \
       memset(o, 0, size); \
       o->owner = L->heapid; \
       o->tt = a; \
@@ -852,9 +852,9 @@ void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size)
       mark_object(L, o); \
       lua_unlock(L); \
       break
-    NEWIMPL(LUA_TFUNCTION, Closure);
-    NEWIMPL(LUA_TSTRING, TString);
-    NEWIMPL(LUA_TUSERDATA, Udata);
+    NEWIMPL(LUA_TFUNCTION, Closure, LUA_MEM_FUNCTION);
+    NEWIMPL(LUA_TSTRING, TString, LUA_MEM_STRING);
+    NEWIMPL(LUA_TUSERDATA, Udata, LUA_MEM_USERDATA);
     default:
       lua_assert(0);
       abort();
@@ -956,7 +956,7 @@ static void reclaim_white(lua_State *L, int final_close)
 #endif
           size = (c->c.isC) ? sizeCclosure(c->c.nupvalues) :
             sizeLclosure(c->l.nupvalues);
-          luaM_freememG(G(L), c, size);
+          luaM_freememG(G(L), LUA_MEM_FUNCTION, c, size);
           break;
         }
       case LUA_TUPVAL:
@@ -970,13 +970,13 @@ static void reclaim_white(lua_State *L, int final_close)
         luaE_freethread(G(L), gco2th(o));
         break;
       case LUA_TSTRING:
-        luaM_freememG(G(L), o, sizestring(gco2ts(o)));
+        luaM_freememG(G(L), LUA_MEM_STRING, o, sizestring(gco2ts(o)));
         break;
       case LUA_TGLOBAL:
         /* skip; someone else will clear this out */
         break;
       case LUA_TUSERDATA:
-        luaM_freememG(G(L), o, sizeudata(gco2u(o)));
+        luaM_freememG(G(L), LUA_MEM_USERDATA, o, sizeudata(gco2u(o)));
         break;
 
       default:
@@ -1389,7 +1389,7 @@ LUA_API void lua_close (lua_State *L)
 
   luaE_freethread(G(L), L);
 
-  g->alloc(g->allocdata, g, sizeof(*g), 0);
+  g->alloc(g->allocdata, LUA_MEM_GLOBAL_STATE, g, sizeof(*g), 0);
 }
 
 void lua_assert_fail(const char *expr, GCheader *obj, const char *file, int line)

@@ -94,7 +94,7 @@ struct global_State {
   /* if true, the world is stopped */
   lu_byte stopped;
 
-  lua_Alloc alloc;
+  lua_Alloc2 alloc;
   void *allocdata;
   int exiting;
   scpt_atomic_t nextheapid;

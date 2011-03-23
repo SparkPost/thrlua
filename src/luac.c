@@ -114,9 +114,9 @@ static const Proto* combine(lua_State* L, int n)
   f->source=luaS_newliteral(L,"=(" PROGNAME ")");
   f->maxstacksize=1;
   pc=2*n+1;
-  f->code=luaM_newvector(L,pc,Instruction);
+  f->code = luaM_newvector(L, LUA_MEM_PROTO_DATA, pc, Instruction);
   f->sizecode=pc;
-  f->p=luaM_newvector(L,n,Proto*);
+  f->p = luaM_newvector(L, LUA_MEM_PROTO_DATA, n, Proto*);
   f->sizep=n;
   pc=0;
   for (i=0; i<n; i++)
