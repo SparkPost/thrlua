@@ -470,23 +470,11 @@ static void blacken_object(lua_State *L, GCheader *o)
 
 }
 
-void luaC_fullgc (lua_State *L)
-{
-}
-
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
 static pthread_key_t tls_key;
 static pthread_mutex_t all_threads_lock; /* initialized via pthread_once */
 static scpt_atomic_t num_threads = 0;
 static scpt_atomic_t parked_threads = 0;
-
-/** used by the world-stopper to avoid calling malloc based on the number
- * of threads */
-static pthread_t *thread_list = NULL;
-/** used by the world-stopper to avoid calling malloc based on the number
- * of threads */
-static int all_threads_count = 0;
-
 static thr_State *all_threads = NULL;
 static sigset_t suspend_handler_mask;
 
@@ -577,22 +565,6 @@ static void thread_resume_requested(int sig)
   errno = save;
 }
 
-/* MUST be async signal safe */
-static void wait_for_thread_checkin(const char *label, int nthreads)
-{
-  int i, r;
-
-  if (!strcmp(label, "STOP")) {
-    while (parked_threads < num_threads - 1) {
-      sched_yield();
-    }
-  } else {
-    while (parked_threads) {
-      sched_yield();
-    }
-  }
-}
-
 static void prune_dead_thread_states(void)
 {
   thr_State *pt;
@@ -646,31 +618,22 @@ static int signal_all_threads(int sig)
 }
 
 /* MUST be async signal safe */
-static int stop_all_threads(void)
+static void stop_all_threads(void)
 {
-  thr_State *pt;
-  pthread_t me = pthread_self();
-  int nthreads = 0;
-  int r, i;
-  pthread_t *threads = NULL;
-
   signal_all_threads(LUA_SIG_SUSPEND);
-  wait_for_thread_checkin("STOP", nthreads);
-//  VALGRIND_PRINTF_BACKTRACE("STOP'd %d threads\n", nthreads);
-
-  return nthreads;
+  while (parked_threads < num_threads - 1) {
+    sched_yield();
+  }
 }
 
 /* caller MUST hold all_threads_lock */
 /* MUST be async signal safe */
-static int resume_threads(int nthreads)
+static int resume_threads(void)
 {
-  int r, i;
-
-//  VALGRIND_PRINTF_BACKTRACE("resume %d threads\n", nthreads);
-
   signal_all_threads(LUA_SIG_RESUME);
-  wait_for_thread_checkin("RESUME", nthreads);
+  while (parked_threads) {
+    sched_yield();
+  }
 }
 
 static void thread_exited(void *p)
@@ -719,7 +682,6 @@ static void free_last_global_bits(void)
   if (pt) {
     thread_exited(pt);
   }
-  free(thread_list);
 }
 
 static void make_tls_key(void)
@@ -775,9 +737,6 @@ thr_State *luaC_get_per_thread(void)
     pthread_setspecific(tls_key, pt);
     pt->tid = pthread_self();
     lock_all_threads();
-
-    thread_list = realloc(thread_list,
-      ++all_threads_count * sizeof(pthread_t));
 
     pt->next = all_threads;
     if (pt->next) {
@@ -1206,7 +1165,6 @@ static void sanity_check_mark_status(lua_State *L)
 
 static void local_collection(lua_State *L)
 {
-  if (L->heapid) return;
   if (L->in_gc) {
     return; // happens during finalizers
   }
@@ -1291,13 +1249,12 @@ static void global_trace(lua_State *L, GCheader *list)
 static void global_collection(lua_State *L)
 {
   lua_State *l;
-  int howmany;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads()) {
     return;
   }
-  howmany = stop_all_threads();
+  stop_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("STOP'd threads; setting stopped flag, flipping xref\n");
 
   ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
@@ -1329,7 +1286,7 @@ static void global_collection(lua_State *L)
   G(L)->stopped = 0;
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 
-  resume_threads(howmany);
+  resume_threads();
 
   unlock_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
@@ -1350,6 +1307,12 @@ void luaC_checkGC(lua_State *L)
     return;
   }
 #endif
+  global_collection(L);
+}
+
+void luaC_fullgc (lua_State *L)
+{
+  local_collection(L);
   global_collection(L);
 }
 
