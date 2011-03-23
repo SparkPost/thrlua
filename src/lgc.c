@@ -1332,7 +1332,7 @@ static void global_collection(lua_State *L)
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
 }
 
-#define RANDOM_GC 0
+#define RANDOM_GC 1
 
 void luaC_checkGC(lua_State *L)
 {
@@ -1342,7 +1342,6 @@ void luaC_checkGC(lua_State *L)
   }
 #endif
   local_collection(L);
-return;
 #if RANDOM_GC
   if (drand48() > 0.10) {
     return;
