@@ -1337,7 +1337,7 @@ static void global_collection(lua_State *L)
 void luaC_checkGC(lua_State *L)
 {
 #if RANDOM_GC
-  if (drand48() > 0.02) {
+  if (drand48() > 0.002) {
     return;
   }
 #endif
