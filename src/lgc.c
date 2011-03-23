@@ -954,6 +954,7 @@ static void reclaim_white(lua_State *L, int final_close)
   GCheader *o;
 //  if (L->heapid != 0) walk_gch_list(G(L), L->White, "Will reclaim");
 
+  if (L->White->next == NULL) return;
   while (L->White->next != L->White) {
 
     o = L->White->next;
@@ -1056,8 +1057,10 @@ static void run_finalize(lua_State *L)
       } LUAI_TRY_END(L);
       lua_unlock(L);
     }
-    /* make it black; will be freed next cycle */
-    append_list(L->Black, o);
+    /* make it Grey; will be freed next cycle */
+    o->marked = (o->marked & ~BLACKBIT) | L->black;
+    append_list(&L->Grey, o);
+
   }
 }
 
@@ -1386,7 +1389,6 @@ static void tear_down(lua_State *L)
   if (L->Black->next != L->Black) {
     finalize_all_local(L);
     whitelist_non_root(L);
-    lua_assert(L->Black->next == L->Black);
   }
   /* kill-em-all! */
   reclaim_white(L, 1);
