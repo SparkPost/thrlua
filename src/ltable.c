@@ -415,9 +415,6 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
     }
   }
   luaC_writebarriervv(L, &t->gch, key2tval(mp), key);
-//  gkey(mp)->value = key->value;
-//  gkey(mp)->tt = key->tt;
-//  luaC_barriert(L, t, key);
   lua_assert(ttisnil(gval(mp)));
   return gval(mp);
 }

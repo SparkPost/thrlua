@@ -75,9 +75,9 @@ struct thr_State {
   /* so that we can stop this thread later */
   pthread_t tid;
   /* so that a suspended thread knows to wake up */
-  volatile int wake;
+  unsigned int wake;
   /* so that we can avoid deadlock during thread destruction */
-  volatile int dead;
+  unsigned int dead;
 };
 typedef struct thr_State thr_State;
 
@@ -89,8 +89,8 @@ struct global_State {
 
   /** xref bits are safe to read so long as you have locked at least one
    * lua_State */
-  volatile lu_byte isxref;
-  volatile lu_byte notxref;
+  uint8_t isxref;
+  uint8_t notxref;
   /* if true, the world is stopped */
   lu_byte stopped;
 

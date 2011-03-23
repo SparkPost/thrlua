@@ -9,7 +9,6 @@
 #define DEBUG_ALLOC 0
 
 #include "thrlua.h"
-#include <semaphore.h>
 
 #define USING_DRD 1
 
@@ -32,126 +31,6 @@
 
 static int LUA_SIG_SUSPEND = DEF_LUA_SIG_SUSPEND;
 static int LUA_SIG_RESUME  = DEF_LUA_SIG_RESUME;
-
-/* {{{ darwin semaphore shim */
-#ifdef LUA_OS_DARWIN
-
-# define DEBUG_SEMA 0
-
-/* Darwin has mildly retarded semaphores */
-struct lua_sem_t {
-  pthread_mutex_t lock;
-  pthread_cond_t  cond;
-  unsigned int value;
-};
-
-static int lua_sem_init(struct lua_sem_t *sem, int pshared, unsigned int v)
-{
-  pthread_mutexattr_t m;
-
-  pthread_mutexattr_init(&m);
-  pthread_mutexattr_settype(&m, PTHREAD_MUTEX_ERRORCHECK);
-  if (pthread_mutex_init(&sem->lock, &m)) {
-    pthread_mutexattr_destroy(&m);
-    return -1;
-  }
-  pthread_mutexattr_destroy(&m);
-
-  if (pthread_cond_init(&sem->cond, NULL)) {
-    return -1;
-  }
-  sem->value = v;
-  return 0;
-}
-
-static int lua_sem_post(struct lua_sem_t *sem)
-{
-  int r;
-
-  if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_post\n");
-  r = pthread_mutex_lock(&sem->lock);
-  if (r) {
-    fprintf(stderr, "sem_post lock: %d %s\n", r, strerror(r));
-    abort();
-  }
-  if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_post: locked, signalling cond\n");
-  r = pthread_cond_signal(&sem->cond);
-  if (r) {
-    fprintf(stderr, "sem_post signal: %d %s\n", r, strerror(r));
-    abort();
-  }
-  sem->value++;
-  if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_post: increasing value to %d\n", sem->value);
-
-  r = pthread_mutex_unlock(&sem->lock);
-  if (r) {
-    fprintf(stderr, "sem_post unlock: %d %s\n", r, strerror(r));
-    abort();
-  }
-  return 0;
-}
-
-static int lua_sem_wait(struct lua_sem_t *sem)
-{
-  int r;
-
-  if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_wait\n");
-
-  r = pthread_mutex_lock(&sem->lock);
-  if (r) {
-    fprintf(stderr, "sem_wait lock: %d %s\n", r, strerror(r));
-    abort();
-  }
-
-  do {
-    if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_wait: locked, value=%d\n", sem->value);
-
-    if (sem->value > 0) {
-      sem->value--;
-      r = pthread_mutex_unlock(&sem->lock);
-      if (r) {
-        fprintf(stderr, "sem_wait unlock: %d %s\n", r, strerror(r));
-        abort();
-      }
-      return 0;
-    }
-
-    if (DEBUG_SEMA) VALGRIND_PRINTF_BACKTRACE("sem_wait: waiting on cond\n");
-    r = pthread_cond_wait(&sem->cond, &sem->lock);
-    if (r) {
-      fprintf(stderr, "sem_wait cond_wait: %d %s\n", r, strerror(r));
-      abort();
-    }
-  } while (1);
-}
-
-static int lua_sem_getvalue(struct lua_sem_t *sem, int *value)
-{
-  int r;
-
-  r = pthread_mutex_lock(&sem->lock);
-  if (r) {
-    fprintf(stderr, "sem_post lock: %d %s\n", r, strerror(r));
-    abort();
-  }
-
-  *value = sem->value;
-
-  r = pthread_mutex_unlock(&sem->lock);
-  if (r) {
-    fprintf(stderr, "sem_post unlock: %d %s\n", r, strerror(r));
-    abort();
-  }
-  return 0;
-}
-# define sem_t struct lua_sem_t
-# define sem_init lua_sem_init
-# define sem_post lua_sem_post
-# define sem_wait lua_sem_wait
-# define sem_getvalue lua_sem_getvalue
-
-#endif
-/* }}} */
 
 #define BLACKBIT    (1<<0)
 #define WEAKKEYBIT  (1<<1)
@@ -236,18 +115,18 @@ static void removeentry(Node *n)
 static INLINE int is_unknown_xref(lua_State *L, GCheader *o)
 {
   if ((G(L)->isxref & 3) == 1) {
-    return (o->xref & 2) == 2;
+    return (ck_pr_load_8(&o->xref) & 2) == 2;
   }
-  return (o->xref & 2) == 0;
+  return (ck_pr_load_8(&o->xref) & 2) == 0;
 }
 
 static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   int force)
 {
   if (lval->owner != rval->owner) {
-    rval->xref = G(L)->isxref;
+    ck_pr_store_8(&rval->xref, G(L)->isxref);
   } else if (force && is_unknown_xref(L, rval)) {
-    rval->xref = G(L)->notxref;
+    ck_pr_store_8(&rval->xref, G(L)->notxref);
   }
 }
 
@@ -255,7 +134,7 @@ static INLINE void mark_object(lua_State *L, GCheader *obj)
 {
   if (L->heapid != obj->owner) {
     /* external reference */
-    obj->xref = G(L)->isxref;
+    ck_pr_store_8(&obj->xref, G(L)->isxref);
     return;
   }
 
@@ -400,11 +279,11 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         if (h->metatable) {
           traverse_obj(L, o, h->metatable, objfunc);
         }
+        o->marked &= ~(WEAKKEYBIT|WEAKVALBIT);
         mode = gfasttm(G(L), gch2h(h->metatable), TM_MODE);
         if (mode && ttisstring(mode)) {
           weakkey = (strchr(svalue(mode), 'k') != NULL);
           weakvalue = (strchr(svalue(mode), 'v') != NULL);
-          o->marked &= ~(WEAKKEYBIT|WEAKVALBIT);
           if (weakkey) o->marked |= WEAKKEYBIT;
           if (weakvalue) o->marked |= WEAKVALBIT;
         }
@@ -468,7 +347,7 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         traverse_value(L, o, &th->tls, objfunc);
         /* the corresponding global state */
         lua_assert(G(L) == th->l_G);
-        traverse_obj(L, o, (GCheader*)th->l_G, objfunc);
+        traverse_obj(L, o, &th->l_G->gch, objfunc);
 
         lim = th->top;
         for (ci = th->base_ci; ci <= th->ci; ci++) {
@@ -598,8 +477,8 @@ void luaC_fullgc (lua_State *L)
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
 static pthread_key_t tls_key;
 static pthread_mutex_t all_threads_lock; /* initialized via pthread_once */
-static volatile scpt_atomic_t num_threads = 0;
-static volatile scpt_atomic_t parked_threads = 0;
+static scpt_atomic_t num_threads = 0;
+static scpt_atomic_t parked_threads = 0;
 
 /** used by the world-stopper to avoid calling malloc based on the number
  * of threads */
@@ -609,8 +488,6 @@ static pthread_t *thread_list = NULL;
 static int all_threads_count = 0;
 
 static thr_State *all_threads = NULL;
-static sem_t world_sem_inst;
-static sem_t *world_sem = &world_sem_inst;
 static sigset_t suspend_handler_mask;
 
 static INLINE void lock_all_threads(void)
@@ -666,14 +543,13 @@ static void thread_suspend_requested(int sig)
     return;
   }
 
-  pt->wake = 0;
-  scpt_atomic_inc(&parked_threads);
+  ck_pr_store_uint(&pt->wake, 0);
+  ck_pr_inc_32(&parked_threads);
 
   /* signal the thread that is doing the global collection that we
    * are considered stopped */
-//  r = sem_post(world_sem);
 //  VALGRIND_PRINTF_BACKTRACE("suspend requested\n");
-  while (!pt->wake) {
+  while (!ck_pr_load_uint(&pt->wake)) {
     sigsuspend(&suspend_handler_mask);
   }
 
@@ -682,9 +558,8 @@ static void thread_suspend_requested(int sig)
    * to start a new global sweep while some of the threads are still
    * waking up; this can result in some weird re-entrancy issues that
    * cause threads to get stuck */
-//  sem_post(world_sem);
 
-  scpt_atomic_dec(&parked_threads);
+  ck_pr_dec_32(&parked_threads);
 //  VALGRIND_PRINTF_BACKTRACE("resumed!\n");
 
   errno = save;
@@ -697,7 +572,7 @@ static void thread_resume_requested(int sig)
   int save = errno;
 
   pt = pthread_getspecific(tls_key);
-  pt->wake = 1;
+  ck_pr_store_uint(&pt->wake, 1);
 
   errno = save;
 }
@@ -716,25 +591,6 @@ static void wait_for_thread_checkin(const char *label, int nthreads)
       sched_yield();
     }
   }
-
-#if 0
-  /* wait for them all to check in */
-  for (i = 0; i < nthreads; i++) {
-    do {
-      VALGRIND_PRINTF_BACKTRACE("%s waiting on thread %d\n", label, i);
-      r = sem_wait(world_sem);
-      VALGRIND_PRINTF_BACKTRACE("%s woke up on thread %d\n", label, i);
-      if (r == 0) {
-        break;
-      }
-      if (errno != EINTR) {
-        fprintf(stderr, "wait_for_thread_checkin: %s sem_wait: %s\n",
-          label, strerror(errno));
-        abort();
-      }
-    } while (1);
-  }
-#endif
 }
 
 static void prune_dead_thread_states(void)
@@ -799,30 +655,6 @@ static int stop_all_threads(void)
   pthread_t *threads = NULL;
 
   signal_all_threads(LUA_SIG_SUSPEND);
-#if 0
-  for (pt = all_threads; pt; pt = pt->next) {
-    if (pt->dead) {
-      continue;
-    }
-    nthreads++;
-  }
-
-  for (i = 0, pt = all_threads; pt; pt = pt->next) {
-    if (pthread_equal(me, pt->tid)) {
-      /* can't stop myself */
-      nthreads--;
-      continue;
-    }
-    r = pthread_kill(pt->tid, LUA_SIG_SUSPEND);
-    if (r == ESRCH) {
-      nthreads--;
-    } else if (r) {
-      fprintf(stderr, "signal_all_threads: pthread_kill %s\n", strerror(r));
-      abort();
-    }
-    thread_list[i++] = pt->tid;
-  }
-#endif
   wait_for_thread_checkin("STOP", nthreads);
 //  VALGRIND_PRINTF_BACKTRACE("STOP'd %d threads\n", nthreads);
 
@@ -838,19 +670,6 @@ static int resume_threads(int nthreads)
 //  VALGRIND_PRINTF_BACKTRACE("resume %d threads\n", nthreads);
 
   signal_all_threads(LUA_SIG_RESUME);
-
-#if 0
-  for (i = 0; i < nthreads; i++) {
-    r = pthread_kill(thread_list[i], LUA_SIG_RESUME);
-    if (r == ESRCH) {
-      nthreads--;
-    } else if (r) {
-      fprintf(stderr, "signal_all_threads: pthread_kill %s\n", strerror(r));
-      abort();
-    }
-  }
-#endif
-
   wait_for_thread_checkin("RESUME", nthreads);
 }
 
@@ -858,7 +677,7 @@ static void thread_exited(void *p)
 {
   thr_State *thr = p;
 
-  scpt_atomic_dec(&num_threads);
+  ck_pr_dec_32(&num_threads);
 
   /* POSIX states that we are only called when p is non-NULL */
   assert(p != NULL);
@@ -876,7 +695,7 @@ static void thread_exited(void *p)
     unlock_all_threads();
     free(thr);
   } else {
-    thr->dead = 1;
+    ck_pr_store_uint(&thr->dead, 1);
   }
 }
 
@@ -914,11 +733,6 @@ static void make_tls_key(void)
   pthread_mutexattr_settype(&m, PTHREAD_MUTEX_ERRORCHECK);
   pthread_mutex_init(&all_threads_lock, &m);
   pthread_mutexattr_destroy(&m);
-
-  if (sem_init(world_sem, 0, 0) != 0) {
-    fprintf(stderr, "failed to init semaphore: %s\n", strerror(errno));
-    abort();
-  }
 
   memset(&act, 0, sizeof(act));
   act.sa_flags = SA_RESTART;
@@ -971,7 +785,7 @@ thr_State *luaC_get_per_thread(void)
     }
     all_threads = pt;
     unlock_all_threads();
-    scpt_atomic_inc(&num_threads);
+    ck_pr_inc_32(&num_threads);
   }
   return pt;
 }
@@ -994,6 +808,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->on_state_create = p->on_state_create;
   g->on_state_finalize = p->on_state_finalize;
   g->isxref = 1; /* g->notxref is implicitly set to 0 by memset above */
+  g->nextheapid = 1;
 
   return g;
 }
@@ -1027,8 +842,9 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
       n = luaM_reallocG(G(L), NULL, 0, sizeof(lua_State) + G(L)->extraspace);
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
-      n->heapid = scpt_atomic_inc(&G(L)->nextheapid);
+      n->heapid = ck_pr_faa_32(&G(L)->nextheapid, 1);
       n->gch.owner = n->heapid;
+      lua_assert(n->heapid != G(L)->nextheapid);
       n->gch.marked = 1; /* white wrt. its own list */
       n->gch.xref = G(L)->isxref;
       o = &n->gch;
@@ -1096,7 +912,7 @@ static int is_finalizable_on_close(lua_State *L, GCheader *o)
 {
   /* Note: we ignore pinned refs in this case */
 
-  if (o->xref == G(L)->isxref) {
+  if (ck_pr_load_8(&o->xref) == G(L)->isxref) {
     return 0;
   }
 
@@ -1387,6 +1203,7 @@ static void sanity_check_mark_status(lua_State *L)
 
 static void local_collection(lua_State *L)
 {
+  if (L->heapid) return;
   if (L->in_gc) {
     return; // happens during finalizers
   }
@@ -1403,6 +1220,7 @@ static void local_collection(lua_State *L)
   /* mark roots */
   L->gch.marked = (L->gch.marked & ~BLACKBIT) | (!L->black);
   mark_object(L, &L->gch);
+
   /* trace and make things grey or black */
   propagate(L);
   /* grey any externally referenced white objects */
@@ -1524,7 +1342,7 @@ void luaC_checkGC(lua_State *L)
   }
 #endif
   local_collection(L);
-
+return;
 #if RANDOM_GC
   if (drand48() > 0.10) {
     return;

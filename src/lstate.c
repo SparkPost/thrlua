@@ -254,7 +254,7 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
   memset(L, 0, sizeof(*L) + g->extraspace);
   L->gch.tt = LUA_TTHREAD;
   /* L->black is implicitly 0, so this object is implicitly black */
-  scpt_atomic_inc(&L->gch.ref);
+  ck_pr_inc_32(&L->gch.ref);
   preinit_state(L, g);
   g->mainthread = L;
   g->panic = NULL;

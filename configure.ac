@@ -116,6 +116,7 @@ AC_SUBST(JAVA_LIBS)
 
 cd ck
 ./configure && make
+rm src/*.so
 cd ..
 
 AC_CONFIG_HEADERS([rcluaconfig.h])

@@ -8,32 +8,8 @@
 #ifndef lobject_h
 #define lobject_h
 
-#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
+#include "ck_pr.h"
 typedef uint32_t scpt_atomic_t;
-
-static inline scpt_atomic_t scpt_atomic_inc(volatile scpt_atomic_t *mem)
-{
-  scpt_atomic_t prev;
-  __asm__ volatile ("lock; xaddl %0, %1"
-    : "=r" (prev)
-    : "m" (*(mem)),
-    "0" (1));
-  return prev + 1;
-}
-
-static inline scpt_atomic_t scpt_atomic_dec(volatile scpt_atomic_t *mem)
-{
-  scpt_atomic_t prev;
-  __asm__ volatile ("lock; xaddl %0, %1"
-    : "=r" (prev)
-    : "m" (*(mem)),
-    "0" (-1));
-  return prev - 1;
-}
-
-#else
-# error no atomic inc/dec defined for this system
-#endif
 
 /* tags for values visible from Lua */
 #define LAST_TAG	LUA_TTHREAD
@@ -67,7 +43,7 @@ typedef struct GCheader {
   /** finalized, black, white, grey etc. */
   lu_byte marked;
   /** external reference status */
-  volatile lu_byte xref;
+  lu_byte xref;
 } GCheader;
 
 /*

@@ -17,7 +17,10 @@ noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-libthrlua_la_LDFLAGS = -lpthread -lm
+CFLAGS += -Ick/include -Isrc
+
+libthrlua_la_LDFLAGS = -Lck/src -lck -lpthread -lm
+libthrlua_la_CPPFLAGS = $(commonCFLAGS)
 libthrlua_la_SOURCES = \
 	src/lapi.c src/lcode.c src/ldebug.c src/ldo.c src/ldump.c src/lfunc.c \
 	src/lgc.c src/llex.c src/lmem.c src/lobject.c src/lopcodes.c \
@@ -39,22 +42,22 @@ rcluac_LDADD = -lthrlua
 # pcre
 pcre_la_SOURCES = modules/pcre.c
 pcre_la_LDFLAGS = -module @PCRE_LIBS@
-pcre_la_CPPFLAGS = -Isrc @PCRE_CFLAGS@
+pcre_la_CPPFLAGS = $(commonCFLAGS) @PCRE_CFLAGS@
 
 # mathx
 mathx_la_SOURCES = modules/mathx.c
 mathx_la_LDFLAGS = -module
-mathx_la_CPPFLAGS = -Isrc
+mathx_la_CPPFLAGS = $(commonCFLAGS)
 
 # javabridge
 javabridge_la_SOURCES = modules/java.c
 javabridge_la_LDFLAGS = -module @JAVA_LIBS@
-javabridge_la_CPPFLAGS = -Isrc @JAVA_CFLAGS@
+javabridge_la_CPPFLAGS = $(commonCFLAGS) @JAVA_CFLAGS@
 
 # lpeg
 lpeg_la_SOURCES = modules/lpeg.c
 lpeg_la_LDFLAGS = -module
-lpeg_la_CPPFLAGS = -Isrc
+lpeg_la_CPPFLAGS = $(commonCFLAGS)
 
 # yaml
 yaml_la_SOURCES = modules/yaml/lyaml.c modules/yaml/api.c \
@@ -63,7 +66,7 @@ yaml_la_SOURCES = modules/yaml/lyaml.c modules/yaml/api.c \
 	modules/yaml/reader.c modules/yaml/scanner.c \
 	modules/yaml/writer.c modules/yaml/b64.c
 yaml_la_LDFLAGS = -module
-yaml_la_CPPFLAGS = -Isrc -Imodules/yaml
+yaml_la_CPPFLAGS = $(commonCFLAGS) -Imodules/yaml
 
 
 EXTRA_DIST = COPYING HISTORY INSTALL README

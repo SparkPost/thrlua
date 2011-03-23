@@ -62,7 +62,7 @@ static void *thrlib_thread_func(void *arg)
     lua_gc(th->L, LUA_GCCOLLECT, 0);
   }
 
-  scpt_atomic_dec(&th->L->gch.ref);
+  ck_pr_dec_32(&th->L->gch.ref);
   return 0;
 }
 
@@ -77,7 +77,7 @@ static int thrlib_create(lua_State *L)
   th = lua_newuserdata(L, sizeof(*th));
   memset(th, 0, sizeof(*th));
   th->L = lua_newthread(L);
-  scpt_atomic_inc(&th->L->gch.ref);
+  ck_pr_inc_32(&th->L->gch.ref);
 
   /* trace function is on the top of the stack */
   lua_pushcfunction(th->L, traceback);
