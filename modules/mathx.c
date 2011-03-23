@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 
+
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
@@ -203,11 +204,13 @@ static int Lscalbn(lua_State *L)
   return 1;
 }
 
+#if 0
 static int Lsignbit(lua_State *L)
 {
   lua_pushboolean(L,signbit(A(1)));
   return 1;
 }
+#endif
 
 static int Ltgamma(lua_State *L)
 {
@@ -253,7 +256,9 @@ static const struct luaL_reg R[] =
 	{ "rint",	Lrint },
 	{ "round",	Lround },
 	{ "scalbn",	Lscalbn },
+#if 0
 	{ "signbit",	Lsignbit },
+#endif
 	{ "trunc",	Ltrunc },
 	{ NULL,		NULL }
 };

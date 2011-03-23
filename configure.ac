@@ -118,7 +118,21 @@ cd ck
 if test -f Makefile ; then
   make clean
 fi
-./configure && make
+export CFLAGS LDFLAGS
+if test `uname` = SunOS ; then
+	# workaround compiler check.
+	if test `uname -p` = i386 ; then
+		CFLAGS="$CFLAGS -m64 -D__x86_64__"
+		CC=gcc ./configure --profile=x86_64
+	else
+		CC=gcc ./configure --profile=sparcv9
+	fi
+	CFLAGS="$CFLAGS -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -std=gnu99"
+	LDFLAGS="-R/usr/sfw/lib/64/"
+else
+	./configure
+fi
+make
 rm src/*.so
 cd ..
 

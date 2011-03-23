@@ -1257,7 +1257,9 @@ static void global_collection(lua_State *L)
   stop_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("STOP'd threads; setting stopped flag, flipping xref\n");
 
+#ifdef ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN
   ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
+#endif
 
   G(L)->stopped = 1;
 
@@ -1284,7 +1286,9 @@ static void global_collection(lua_State *L)
   }
 
   G(L)->stopped = 0;
+#ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
+#endif
 
   resume_threads();
 
@@ -1390,6 +1394,7 @@ LUA_API void lua_close (lua_State *L)
 
 void lua_assert_fail(const char *expr, GCheader *obj, const char *file, int line)
 {
+#ifdef VALGRIND_PRINTF_BACKTRACE
   if (obj) {
     VALGRIND_PRINTF_BACKTRACE(
       "Assertion %s failed\nobj=%p owner=%x tt=%d ref=%d marked=%x xref=%x\n",
@@ -1397,6 +1402,7 @@ void lua_assert_fail(const char *expr, GCheader *obj, const char *file, int line
   } else {
     VALGRIND_PRINTF_BACKTRACE("Assertion %s failed\n", expr);
   }
+#endif
   fprintf(stderr, "Assertion %s failed at %s:%d\n", expr, file, line);
   abort();
 }

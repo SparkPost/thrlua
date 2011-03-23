@@ -22,6 +22,89 @@
 #include <errno.h>
 #include <stdlib.h>
 
+/* BEGIN: http://gcc.gnu.org/bugzilla/show_bug.cgi?id=19933 */
+#if defined(sun) && defined(__GNUC__)
+#undef  HUGE_VAL
+#define HUGE_VAL  (__builtin_huge_val())
+#undef  HUGE_VALF
+#define HUGE_VALF (__builtin_huge_valf())
+#undef  HUGE_VALL
+#define HUGE_VALL (__builtin_huge_vall())
+#undef  INFINITY
+#define INFINITY  (__builtin_inff())
+#undef  NAN
+#define NAN   (__builtin_nan(""))
+
+/*
+ * C99 7.12.3 classification macros
+ */
+#undef  fpclassify
+#define fpclassify(x) \
+  __extension__ ({ __typeof(x) __x_fp = (x); \
+       isnan(__x_fp) \
+         ? FP_NAN \
+         : isinf(__x_fp) \
+           ? FP_INFINITE \
+           : isnormal(__x_fp) \
+       ? FP_NORMAL \
+       : __x_fp == 0.0 \
+         ? FP_ZERO \
+         : FP_SUBNORMAL; })
+#undef  isfinite
+#define isfinite(x) \
+  __extension__ ({ __typeof (x) __x_f = (x); \
+       __builtin_expect(!isnan(__x_f - __x_f), 1); })
+#undef  isinf
+#define isinf(x) \
+  __extension__ ({ __typeof (x) __x_i = (x); \
+       __builtin_expect(!isnan(__x_i) && !isfinite(__x_i), 0); })
+#if __GNUC__ >= 4
+/* __builtin_isnan is type-generic so using its variants is not required.  */
+# undef  isnan
+# define isnan(x)  __builtin_isnan(x)
+#else
+# undef isnan
+#define isnan(x) \
+  __extension__ ({ __typeof (x) __x_a = (x); \
+  __builtin_expect(__x_a != __x_a, 0); })
+#endif
+#undef  isnormal
+#define isnormal(x) \
+  __extension__ ({ __typeof(x) __x_n = (x); \
+       if (__x_n < 0.0) __x_n = -__x_n; \
+       __builtin_expect(isfinite(__x_n) \
+            && (sizeof(__x_n) == sizeof(float) \
+            ? __x_n >= __FLT_MIN__ \
+            : sizeof(__x_n) == sizeof(long double) \
+              ? __x_n >= __LDBL_MIN__ \
+              : __x_n >= __DBL_MIN__), 1); })
+/* __builtin_signbit is not type-generic so using its variants is required.  */
+#undef  signbit
+#define signbit(x)  (sizeof(x) == sizeof(float) \
+       ? __builtin_signbitf(x) \
+       : sizeof(x) == sizeof(long double) \
+         ? __builtin_signbitl(x) \
+         : __builtin_signbit(x))
+
+
+/*
+ * C99 7.12.14 comparison macros
+ */
+#undef  isgreater
+#define isgreater(x, y)   __builtin_isgreater(x, y)
+#undef  isgreaterequal
+#define isgreaterequal(x, y)  __builtin_isgreaterequal(x, y)
+#undef  isless
+#define isless(x, y)    __builtin_isless(x, y)
+#undef  islessequal
+#define islessequal(x, y) __builtin_islessequal(x, y)
+#undef  islessgreater
+#define islessgreater(x, y) __builtin_islessgreater(x, y)
+#undef  isunordered
+#define isunordered(x, y) __builtin_isunordered(x, y)
+#endif  /* defined(_STDC_C99) || _XOPEN_SOURCE - 0 >= 600 || ... */
+/* END: http://gcc.gnu.org/bugzilla/show_bug.cgi?id=19933 */
+
 
 
 
@@ -532,7 +615,17 @@
 */
 #define LUA_NUMBER_SCAN		"%lf"
 #define LUA_NUMBER_FMT		"%.14g"
-#define lua_number2str(s,n)	sprintf((s), LUA_NUMBER_FMT, (n))
+//#define lua_number2str(s,n)	sprintf((s), LUA_NUMBER_FMT, (n))
+static inline void lua_number2str(char *buf, LUA_NUMBER n)
+{
+	if (isnan(n)) {
+		sprintf(buf, "nan");
+	} else if (isinf(n)) {
+		sprintf(buf, "inf");
+	} else {
+		sprintf(buf, LUA_NUMBER_FMT, n);
+	}
+}
 #define LUAI_MAXNUMBER2STR	32 /* 16 digits, sign, point, and \0 */
 #define lua_str2number(s,p)	strtod((s), (p))
 
