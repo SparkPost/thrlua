@@ -49,6 +49,7 @@ static void *thrlib_thread_func(void *arg)
 {
   struct thrlib_thread *th = arg;
   int st;
+  lua_State *L = th->L;
 
   /* on entry, stack looks like this:
    * [1] traceback
@@ -56,13 +57,21 @@ static void *thrlib_thread_func(void *arg)
    * [3] closure argument
    * Therefore, we call pcall with 1 arg and a base of 1 (traceback) */
 
-  st = lua_pcall(th->L, 1, 0, 1);
+  st = lua_pcall(L, 1, 0, 1);
   if (st != 0) {
     printf("thread pcall failed with status %d\n", st);
-    lua_gc(th->L, LUA_GCCOLLECT, 0);
   }
 
-  ck_pr_dec_32(&th->L->gch.ref);
+  lua_pop(L, lua_gettop(L));
+  luaC_checkGC(L);
+
+  /* since this thread is exiting, we need to donate it to the global
+   * heap for collection */
+  luaC_move_thread(L);
+
+  /* un-pin */
+  ck_pr_dec_32(&L->gch.ref);
+
   return 0;
 }
 
@@ -76,13 +85,14 @@ static int thrlib_create(lua_State *L)
 
   th = lua_newuserdata(L, sizeof(*th));
   memset(th, 0, sizeof(*th));
+
   th->L = lua_newthread(L);
   ck_pr_inc_32(&th->L->gch.ref);
 
   /* trace function is on the top of the stack */
   lua_pushcfunction(th->L, traceback);
 
-  /* get function parameter on top of stack */
+  /* make a copy of 1st function parameter; put on top of stack */
   lua_pushvalue(L, 1);
   /* move function over to new thread */
   lua_xmove(L, th->L, 1);

@@ -115,6 +115,9 @@ AC_SUBST(JAVA_CFLAGS)
 AC_SUBST(JAVA_LIBS)
 
 cd ck
+if test -f Makefile ; then
+  make clean
+fi
 ./configure && make
 rm src/*.so
 cd ..

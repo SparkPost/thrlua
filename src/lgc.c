@@ -912,7 +912,7 @@ static int is_finalizable_on_close(lua_State *L, GCheader *o)
 {
   /* Note: we ignore pinned refs in this case */
 
-  if (ck_pr_load_8(&o->xref) == G(L)->isxref) {
+  if (o->owner != L->heapid) {
     return 0;
   }
 
@@ -1032,6 +1032,7 @@ static void reclaim_white(lua_State *L, int final_close)
 
 static void run_finalize(lua_State *L)
 {
+  if (!L->Finalize.next) return;
   while (L->Finalize.next != &L->Finalize) {
     GCheader *o = L->Finalize.next;
     Udata *ud;
@@ -1055,9 +1056,8 @@ static void run_finalize(lua_State *L)
       } LUAI_TRY_END(L);
       lua_unlock(L);
     }
-    /* make it grey; will be freed next cycle */
-    mark_object(L, o);
-
+    /* make it black; will be freed next cycle */
+    append_list(L->Black, o);
   }
 }
 
@@ -1350,6 +1350,48 @@ void luaC_checkGC(lua_State *L)
   global_collection(L);
 }
 
+static void move_to_heap0(lua_State *L, GCheader *list)
+{
+  GCheader *obj;
+
+  if (list->next == NULL) {
+    return;
+  }
+
+  for (obj = list->next; obj != list; obj = obj->next) {
+    if (obj->owner == L->heapid) {
+      ck_pr_store_32(&obj->owner, 0);
+    }
+  }
+}
+
+void luaC_move_thread(lua_State *L)
+{
+  lock_all_threads();
+
+  move_to_heap0(L, &L->Grey);
+  move_to_heap0(L, L->White);
+  move_to_heap0(L, L->Black);
+  move_to_heap0(L, &L->Weak);
+
+  ck_pr_store_32(&L->heapid, 0);
+  unlock_all_threads();
+}
+
+static void tear_down(lua_State *L)
+{
+  /* finalize everything that needs it */
+  finalize_all_local(L);
+  whitelist_non_root(L);
+  if (L->Black->next != L->Black) {
+    finalize_all_local(L);
+    whitelist_non_root(L);
+    lua_assert(L->Black->next == L->Black);
+  }
+  /* kill-em-all! */
+  reclaim_white(L, 1);
+}
+
 /* The semantics of lua_close are to free up everything associated
  * with the lua_State, including others states and globals */
 LUA_API void lua_close (lua_State *L)
@@ -1359,15 +1401,22 @@ LUA_API void lua_close (lua_State *L)
   GCheader *o, *n;
   Table *reg;
   unsigned int udata;
+  lua_State *thr, *other;
 
   /* only the main thread can be closed */
   lua_assert(L == G(L)->mainthread);
 
-  /* finalize everything that needs it */
-  finalize_all_local(L);
-  whitelist_non_root(L);
-  /* kill-em-all! */
-  reclaim_white(L, 1);
+  tear_down(L);
+  for (thr = L->next; thr; thr = thr->next) {
+    tear_down(thr);
+    other = thr;
+  }
+  while (other != L) {
+    thr = other;
+    other = thr->prev;
+
+    luaE_freethread(G(L), thr);
+  }
 
   luaE_freethread(G(L), L);
 
