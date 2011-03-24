@@ -1099,10 +1099,16 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
   LUAI_TRY_BLOCK(L) {
     g = G(L);
     switch (what) {
+      case LUA_GCCOUNT:
+        /* returns amount in Kbytes */
+        res = luaC_count(L) >> 10;
+        break;
+      case LUA_GCCOUNTB:
+        /* returns remainder */
+        res = luaC_count(L) & 0x3ff;
+        break;
       case LUA_GCSTOP:
       case LUA_GCRESTART:
-      case LUA_GCCOUNT:
-      case LUA_GCCOUNTB:
       case LUA_GCSTEP:
       case LUA_GCSETPAUSE:
       case LUA_GCSETSTEPMUL:

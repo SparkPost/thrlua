@@ -184,18 +184,21 @@ static int luaB_collectgarbage (lua_State *L) {
     LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE, LUA_GCSETSTEPMUL};
   int o = luaL_checkoption(L, 1, "collect", opts);
   int ex = luaL_optint(L, 2, 0);
-  int res = lua_gc(L, optsnum[o], ex);
+  int res;
   switch (optsnum[o]) {
     case LUA_GCCOUNT: {
-      int b = lua_gc(L, LUA_GCCOUNTB, 0);
-      lua_pushnumber(L, res + ((lua_Number)b/1024));
+      int64_t b = luaC_count(L);
+	  /* the interface defines this is the number of KB, rounded up */
+      lua_pushnumber(L, ((b + 1024) >> 10));
       return 1;
     }
     case LUA_GCSTEP: {
+      res = lua_gc(L, optsnum[o], ex);
       lua_pushboolean(L, res);
       return 1;
     }
     default: {
+      res = lua_gc(L, optsnum[o], ex);
       lua_pushnumber(L, res);
       return 1;
     }

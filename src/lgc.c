@@ -37,6 +37,8 @@ static int LUA_SIG_RESUME  = DEF_LUA_SIG_RESUME;
 #define WEAKVALBIT  (1<<2)
 #define FREEDBIT    (1<<7)
 
+static void local_collection(lua_State *L);
+static void global_collection(lua_State *L);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
 {
@@ -734,6 +736,7 @@ thr_State *luaC_get_per_thread(void)
   pt = pthread_getspecific(tls_key);
   if (pt == NULL) {
     pt = calloc(1, sizeof(*pt));
+    ck_sequence_init(&pt->memlock);
     pthread_setspecific(tls_key, pt);
     pt->tid = pthread_self();
     lock_all_threads();
@@ -749,19 +752,75 @@ thr_State *luaC_get_per_thread(void)
   return pt;
 }
 
+static inline void sum_usage(struct lua_memtype_alloc_info *dest,
+  const struct lua_memtype_alloc_info *src)
+{
+  dest->bytes += src->bytes;
+  dest->allocs += src->allocs;
+}
+
+int64_t luaC_count(lua_State *L)
+{
+  uint32_t vers;
+  thr_State *pt;
+  int64_t tot = 0;
+
+  lock_all_threads();
+  for (pt = all_threads; pt; pt = pt->next) {
+    int64_t v;
+    do {
+      vers = ck_sequence_read_begin(&pt->memlock);
+      v = pt->mem.bytes;
+    } while (ck_sequence_read_retry(&pt->memlock, vers));
+    tot += v;
+  }
+  unlock_all_threads();
+  return tot;
+}
+
+void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data)
+{
+  uint32_t vers;
+  thr_State *pt;
+  int i;
+
+  memset(data, 0, sizeof(*data));
+
+  lock_all_threads();
+  for (pt = all_threads; pt; pt = pt->next) {
+    struct lua_memtype_alloc_info mem;
+    struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
+
+    do {
+      vers = ck_sequence_read_begin(&pt->memlock);
+      memcpy(&mem, &pt->mem, sizeof(mem));
+      memcpy(memtype, pt->memtype, sizeof(memtype));
+    } while (ck_sequence_read_retry(&pt->memlock, vers));
+
+    sum_usage(&data->global, &mem);
+    for (i = 0; i < LUA_MEM__MAX; i++) {
+      sum_usage(&data->bytype[i], &memtype[i]);
+    }
+  }
+  unlock_all_threads();
+}
+
 global_State *luaC_newglobal(struct lua_StateParams *p)
 {
   global_State *g;
   pthread_condattr_t cattr;
   pthread_mutexattr_t mattr;
 
-  g = p->allocfunc(p->allocdata, LUA_MEM_GLOBAL_STATE, NULL, 0, sizeof(*g));
+  g = p->allocfunc(p->allocdata, LUA_MEM_GLOBAL_STATE, NULL, 0,
+        sizeof(*g) + sizeof(lua_State) + p->extraspace);
   if (!g) {
     return NULL;
   }
   memset(g, 0, sizeof(*g));
   g->gch.tt = LUA_TGLOBAL;
   g->alloc = p->allocfunc;
+  g->gcstepmul = LUAI_GCMUL;
+  g->gcpause = LUAI_GCPAUSE;
   g->allocdata = p->allocdata;
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
@@ -782,7 +841,7 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_reallocG(G(L), objtype, NULL, 0, sizeof(b)); \
+      o = luaM_realloc(L, objtype, NULL, 0, sizeof(b)); \
       memset(o, 0, sizeof(b)); \
       o->owner = L->heapid; \
       o->tt = a; \
@@ -798,11 +857,12 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
       lua_State *n;
 
       lua_lock(L);
-      n = luaM_reallocG(G(L), LUA_MEM_THREAD, NULL, 0, sizeof(lua_State) + G(L)->extraspace);
+      n = luaM_realloc(L, LUA_MEM_THREAD, NULL, 0,
+          sizeof(lua_State) + G(L)->extraspace);
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
       n->heapid = ck_pr_faa_32(&G(L)->nextheapid, 1);
-      n->gch.owner = n->heapid;
+      n->gch.owner = L->heapid;
       lua_assert(n->heapid != G(L)->nextheapid);
       n->gch.marked = 1; /* white wrt. its own list */
       n->gch.xref = G(L)->isxref;
@@ -844,7 +904,7 @@ void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size)
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_reallocG(G(L), objtype, NULL, 0, size); \
+      o = luaM_realloc(L, objtype, NULL, 0, size); \
       memset(o, 0, size); \
       o->owner = L->heapid; \
       o->tt = a; \
@@ -908,6 +968,34 @@ static void move_matching_objects_to(lua_State *L, GCheader *src, GCheader *targ
   }
 }
 
+
+static void claim_objects_from_list(lua_State *L,
+  lua_State *old, GCheader *list)
+{
+  if (!list->next) return;
+  while (list->next != list) {
+    GCheader *obj = list->next;
+
+    printf("claiming obj=%p owner=%d old->heapid=%d new->heapid=%d\n",
+      obj, obj->owner, old->heapid, L->heapid);
+    lua_assert(obj->owner == old->heapid);
+    ck_pr_store_32(&obj->owner, L->heapid);
+    /* make it Grey; will be freed next cycle */
+    obj->marked = (obj->marked & ~BLACKBIT) | L->black;
+    append_list(&L->Grey, obj);
+  }
+}
+
+/* When collecting a dead thread, claim the objects in its gc lists */
+static void claim_objects(lua_State *L, lua_State *old)
+{
+  claim_objects_from_list(L, old, &old->B0);
+  claim_objects_from_list(L, old, &old->B1);
+  claim_objects_from_list(L, old, &old->Weak);
+  claim_objects_from_list(L, old, &old->Grey);
+  claim_objects_from_list(L, old, &old->Finalize);
+}
+
 static void reclaim_white(lua_State *L, int final_close)
 {
   GCheader *o;
@@ -934,7 +1022,7 @@ static void reclaim_white(lua_State *L, int final_close)
 
     switch (o->tt) {
       case LUA_TPROTO:
-        luaF_freeproto(G(L), gco2p(o));
+        luaF_freeproto(L, gco2p(o));
         break;
       case LUA_TFUNCTION:
         {
@@ -956,27 +1044,36 @@ static void reclaim_white(lua_State *L, int final_close)
 #endif
           size = (c->c.isC) ? sizeCclosure(c->c.nupvalues) :
             sizeLclosure(c->l.nupvalues);
-          luaM_freememG(G(L), LUA_MEM_FUNCTION, c, size);
+          luaM_freemem(L, LUA_MEM_FUNCTION, c, size);
           break;
         }
       case LUA_TUPVAL:
-        luaF_freeupval(G(L), gco2uv(o));
+        luaF_freeupval(L, gco2uv(o));
         break;
       case LUA_TTABLE:
-        luaH_free(G(L), gco2h(o));
+        luaH_free(L, gco2h(o));
         break;
       case LUA_TTHREAD:
-        lua_assert(gco2th(o) != G(L)->mainthread);
-        luaE_freethread(G(L), gco2th(o));
+      {
+        lua_State *th = gco2th(o);
+
+        lua_assert(th != G(L)->mainthread);
+        lock_all_threads();
+        claim_objects(L, th);
+        if (th->prev) th->prev->next = th->next;
+        if (th->next) th->next->prev = th->prev;
+        unlock_all_threads();
+        luaE_freethread(L, th);
         break;
+      }
       case LUA_TSTRING:
-        luaM_freememG(G(L), LUA_MEM_STRING, o, sizestring(gco2ts(o)));
+        luaM_freemem(L, LUA_MEM_STRING, o, sizestring(gco2ts(o)));
         break;
       case LUA_TGLOBAL:
         /* skip; someone else will clear this out */
         break;
       case LUA_TUSERDATA:
-        luaM_freememG(G(L), LUA_MEM_USERDATA, o, sizeudata(gco2u(o)));
+        luaM_freemem(L, LUA_MEM_USERDATA, o, sizeudata(gco2u(o)));
         break;
 
       default:
@@ -1217,6 +1314,9 @@ static void local_collection(lua_State *L)
   sanity_check_mark_status(L);
 //  if (L->heapid > 0) walk_gch_list(G(L), L->White, "live objects after collection");
 
+  /* revise threshold for next run */
+  L->gcthresh = L->gcestimate / 100 * G(L)->gcpause;
+
   L->in_gc = 0;
 }
 
@@ -1300,6 +1400,10 @@ static void global_collection(lua_State *L)
 
 void luaC_checkGC(lua_State *L)
 {
+  if (L->gcestimate >= L->gcthresh) {
+    local_collection(L);
+  }
+#if 0
 #if RANDOM_GC
   if (drand48() > 0.002) {
     return;
@@ -1312,6 +1416,7 @@ void luaC_checkGC(lua_State *L)
   }
 #endif
   global_collection(L);
+#endif
 }
 
 void luaC_fullgc (lua_State *L)
@@ -1337,12 +1442,14 @@ static void move_to_heap0(lua_State *L, GCheader *list)
 
 void luaC_move_thread(lua_State *L)
 {
+  return;
   lock_all_threads();
 
   move_to_heap0(L, &L->Grey);
-  move_to_heap0(L, L->White);
-  move_to_heap0(L, L->Black);
+  move_to_heap0(L, &L->B0);
+  move_to_heap0(L, &L->B1);
   move_to_heap0(L, &L->Weak);
+  move_to_heap0(L, &L->Finalize);
 
   ck_pr_store_32(&L->heapid, 0);
   unlock_all_threads();
@@ -1370,26 +1477,30 @@ LUA_API void lua_close (lua_State *L)
   GCheader *o, *n;
   Table *reg;
   unsigned int udata;
-  lua_State *thr, *other;
+  lua_State *thr, *other = NULL;
 
   /* only the main thread can be closed */
   lua_assert(L == G(L)->mainthread);
+  lua_assert((L->gch.marked & FREEDBIT) == 0);
+  printf("lua_close %p\n", L);
+  L->gch.ref = 1;
 
   tear_down(L);
   for (thr = L->next; thr; thr = thr->next) {
     tear_down(thr);
     other = thr;
   }
-  while (other != L) {
+  while (other && other != L) {
     thr = other;
     other = thr->prev;
 
-    luaE_freethread(G(L), thr);
+    luaE_freethread(L, thr);
   }
 
-  luaE_freethread(G(L), L);
+  luaE_freethread(L, L);
 
-  g->alloc(g->allocdata, LUA_MEM_GLOBAL_STATE, g, sizeof(*g), 0);
+  g->alloc(g->allocdata, LUA_MEM_GLOBAL_STATE, g,
+    sizeof(*g) + sizeof(lua_State) + g->extraspace, 0);
 }
 
 void lua_assert_fail(const char *expr, GCheader *obj, const char *file, int line)

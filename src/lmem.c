@@ -68,6 +68,34 @@ void *luaM_toobig (lua_State *L) {
   return NULL;  /* to avoid warnings */
 }
 
+static inline void *call_allocator(lua_State *L, enum lua_memtype objtype,
+  void *block, size_t oldsize, size_t size)
+{
+  thr_State *pt = luaC_get_per_thread();
+  void *res;
+  int64_t delta;
+
+  res = G(L)->alloc(G(L)->allocdata, objtype, block, oldsize, size);
+
+  delta = (int64_t)size - (int64_t)oldsize;
+
+  /* metrics for local collection */
+  L->gcestimate += delta;
+
+  ck_sequence_write_begin(&pt->memlock);
+
+  if (objtype < LUA_MEM__VSIZE) {
+    /* fixed size allocs */
+    pt->mem.allocs += size ? 1 : -1;
+    pt->memtype[objtype].allocs += size ? 1 : -1;
+  }
+
+  pt->mem.bytes += delta;
+  pt->memtype[objtype].bytes += delta;
+  ck_sequence_write_end(&pt->memlock);
+
+  return res;
+}
 
 
 /*
@@ -77,7 +105,7 @@ void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype, void *block,
   size_t osize, size_t nsize)
 {
   lua_assert((osize == 0) == (block == NULL));
-  block = (*G(L)->alloc)(G(L)->allocdata, objtype, block, osize, nsize);
+  block = call_allocator(L, objtype, block, osize, nsize);
   if (block == NULL && nsize > 0)
     luaD_throw(L, LUA_ERRMEM);
   lua_assert((nsize == 0) == (block == NULL));
@@ -97,10 +125,10 @@ LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 }
 #endif
 
-void *luaM_reallocG(global_State *g, enum lua_memtype objtype,
+void *luaM_realloc(lua_State *L, enum lua_memtype objtype,
   void *block, size_t oldsize, size_t size)
 {
-  return g->alloc(g->allocdata, objtype, block, oldsize, size);
+  return call_allocator(L, objtype, block, oldsize, size);
 }
 
 static int panic (lua_State *L)

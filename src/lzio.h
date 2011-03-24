@@ -31,11 +31,11 @@ typedef struct Mbuffer {
 #define luaZ_resetbuffer(buff) ((buff)->n = 0)
 
 
-#define luaZ_resizebuffer(g, buff, size) \
-	(luaM_reallocvectorG(g, LUA_MEM_ZBUF, (buff)->buffer, (buff)->buffsize, size, char), \
+#define luaZ_resizebuffer(L, buff, size) \
+	(luaM_reallocvector(L, LUA_MEM_ZBUF, (buff)->buffer, (buff)->buffsize, size, char), \
 	(buff)->buffsize = size)
 
-#define luaZ_freebuffer(g, buff)	luaZ_resizebuffer(g, buff, 0)
+#define luaZ_freebuffer(L, buff)	luaZ_resizebuffer(L, buff, 0)
 
 
 LUAI_FUNC char *luaZ_openspace (lua_State *L, Mbuffer *buff, size_t n);

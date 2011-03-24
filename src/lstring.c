@@ -10,12 +10,12 @@
 #include "thrlua.h"
 
 /* MUST be called with the string table locked by the caller */
-void luaS_resize (global_State *g, stringtable *tb, int newsize)
+void luaS_resize (lua_State *L, stringtable *tb, int newsize)
 {
   struct stringtable_node **newhash;
   int i;
 
-  newhash = luaM_reallocG(g, LUA_MEM_STRING_TABLE, NULL, 0,
+  newhash = luaM_realloc(L, LUA_MEM_STRING_TABLE, NULL, 0,
               newsize * sizeof(struct stringtable_node *));
   memset(newhash, 0, newsize * sizeof(struct stringtable_node*));
 
@@ -32,7 +32,7 @@ void luaS_resize (global_State *g, stringtable *tb, int newsize)
       p = next;
     }
   }
-  luaM_reallocG(g, LUA_MEM_STRING_TABLE, tb->hash, 
+  luaM_realloc(L, LUA_MEM_STRING_TABLE, tb->hash,
     tb->size * sizeof(struct stringtable_node *), 0);
   tb->size = newsize;
   tb->hash = newhash;
@@ -64,7 +64,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   tb->hash[h] = n;
   tb->nuse++;
   if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2)
-    luaS_resize(G(L), tb, tb->size*2);  /* too crowded */
+    luaS_resize(L, tb, tb->size*2);  /* too crowded */
   return ts;
 }
 

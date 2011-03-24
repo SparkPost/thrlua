@@ -130,10 +130,11 @@ static void unlinkupval (UpVal *uv) {
 }
 
 
-void luaF_freeupval (global_State *g, UpVal *uv) {
+void luaF_freeupval(lua_State *L, UpVal *uv)
+{
   if (uv->v != &uv->u.value)  /* is it open? */
     unlinkupval(uv);  /* remove from open list */
-  luaM_freeG(g, LUA_MEM_UPVAL, uv);  /* free upvalue */
+  luaM_free(L, LUA_MEM_UPVAL, uv);  /* free upvalue */
 }
 
 
@@ -166,14 +167,15 @@ Proto *luaF_newproto (lua_State *L) {
 }
 
 
-void luaF_freeproto (global_State *g, Proto *f) {
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->code, f->sizecode, Instruction);
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->p, f->sizep, Proto *);
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->k, f->sizek, TValue);
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->lineinfo, f->sizelineinfo, int);
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->locvars, f->sizelocvars, struct LocVar);
-  luaM_freearrayG(g, LUA_MEM_PROTO_DATA, f->upvalues, f->sizeupvalues, TString *);
-  luaM_freeG(g, LUA_MEM_PROTO, f);
+void luaF_freeproto(lua_State *L, Proto *f)
+{
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->code, f->sizecode, Instruction);
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->p, f->sizep, Proto *);
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->k, f->sizek, TValue);
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->lineinfo, f->sizelineinfo, int);
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->locvars, f->sizelocvars, struct LocVar);
+  luaM_freearray(L, LUA_MEM_PROTO_DATA, f->upvalues, f->sizeupvalues, TString *);
+  luaM_free(L, LUA_MEM_PROTO, f);
 }
 
 

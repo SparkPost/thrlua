@@ -365,12 +365,12 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
 }
 
 
-void luaH_free (global_State *g, Table *t) {
+void luaH_free (lua_State *L, Table *t) {
   if (t->node != dummynode)
-    luaM_freearrayG(g, LUA_MEM_TABLE_NODES, t->node, sizenode(t), Node);
-  luaM_freearrayG(g, LUA_MEM_TABLE_NODES, t->array, t->sizearray, TValue);
+    luaM_freearray(L, LUA_MEM_TABLE_NODES, t->node, sizenode(t), Node);
+  luaM_freearray(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, TValue);
   pthread_rwlock_destroy(&t->lock);
-  luaM_freeG(g, LUA_MEM_TABLE, t);
+  luaM_free(L, LUA_MEM_TABLE, t);
 }
 
 

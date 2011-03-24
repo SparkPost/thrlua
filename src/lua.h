@@ -75,22 +75,37 @@ typedef void *(*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
 #endif
 
 enum lua_memtype {
-  LUA_MEM_STRING,
-  LUA_MEM_STRING_TABLE,
-  LUA_MEM_STRING_TABLE_NODE,
-  LUA_MEM_TABLE,
+  LUA_MEM_STRING, /* fixed size */
+  LUA_MEM_STRING_TABLE_NODE, /* fixed size */
+  LUA_MEM_TABLE, /* fixed size */
+  LUA_MEM_USERDATA, /* fixed size */
+  LUA_MEM_FUNCTION, /* fixed size */
+  LUA_MEM_GLOBAL_STATE, /* fixed size */
+  LUA_MEM_THREAD, /* fixed size */
+  LUA_MEM_UPVAL, /* fixed size */
+  LUA_MEM_PROTO, /* fixed size */
+  LUA_MEM__VSIZE, /* symbolic; indicates start of variable sized types */
+  LUA_MEM_STRING_TABLE = LUA_MEM__VSIZE,
   LUA_MEM_TABLE_NODES,
-  LUA_MEM_USERDATA,
-  LUA_MEM_FUNCTION,
-  LUA_MEM_GLOBAL_STATE,
-  LUA_MEM_THREAD,
   LUA_MEM_ZBUF,
   LUA_MEM_STACK,
   LUA_MEM_CALLINFO,
-  LUA_MEM_UPVAL,
-  LUA_MEM_PROTO,
   LUA_MEM_PROTO_DATA,
+  LUA_MEM__MAX /* must be last */
 };
+
+struct lua_memtype_alloc_info {
+  int64_t bytes;
+  int64_t allocs;
+};
+
+struct lua_mem_usage_data {
+  struct lua_memtype_alloc_info global;
+  struct lua_memtype_alloc_info bytype[LUA_MEM__MAX];
+};
+
+/* returns memory used by the lua runtime */
+void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data);
 
 typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype, void *ptr, size_t osize, size_t nsize);
 

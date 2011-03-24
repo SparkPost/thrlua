@@ -7,6 +7,8 @@
 #ifndef lstate_h
 #define lstate_h
 
+#include <ck_sequence.h>
+
 struct lua_longjmp;  /* defined in ldo.c */
 
 
@@ -78,6 +80,11 @@ struct thr_State {
   unsigned int wake;
   /* so that we can avoid deadlock during thread destruction */
   unsigned int dead;
+
+  /* memory usage accounting */
+  ck_sequence_t memlock;
+  struct lua_memtype_alloc_info mem;
+  struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 };
 typedef struct thr_State thr_State;
 
@@ -98,6 +105,12 @@ struct global_State {
   void *allocdata;
   int exiting;
   scpt_atomic_t nextheapid;
+
+  int gcstepmul;
+  /* when memory utilization exceeds thresh, we'll trigger a collection */
+  uint64_t gcthresh;
+  /* after a completed cycle, current memory * gcpause / 100 sets new thresh */
+  int gcpause;
 
   TString *memerr;
   TValue l_registry;
@@ -135,6 +148,7 @@ struct lua_State {
 
   lu_byte status;
   int in_gc;
+  uint64_t gcestimate, gcthresh;
 
   /** the current value of black */
   lu_byte black;
@@ -214,7 +228,7 @@ struct lua_State {
 #define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
 
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
-LUAI_FUNC void luaE_freethread (global_State *g, lua_State *L1);
+LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
 LUAI_FUNC void luaE_flush_stringtable(lua_State *L);
 LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
 
