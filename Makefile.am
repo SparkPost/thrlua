@@ -17,9 +17,9 @@ noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-CFLAGS += -Ick/include -Isrc
+CFLAGS += -Isrc/ck/include -Isrc
 
-libthrlua_la_LDFLAGS = -Lck/src -lck -lpthread -lm
+libthrlua_la_LDFLAGS = -Lsrc/ck/src -lck -lpthread -lm
 libthrlua_la_CPPFLAGS = $(commonCFLAGS)
 libthrlua_la_SOURCES = \
 	src/lapi.c src/lcode.c src/ldebug.c src/ldo.c src/ldump.c src/lfunc.c \

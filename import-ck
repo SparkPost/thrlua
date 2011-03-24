@@ -13,10 +13,10 @@ if test ! -f src/lgc.c ; then
   exit 1
 fi
 
-rm -rf ck
-cp -r $CK ck
-rm -r ck/regressions
-rm -rf ck/.git
-rm -f ck/.gitignore
-rm -rf ck/.hg
+rm -rf src/ck
+cp -r $CK src/ck
+rm -r src/ck/regressions
+rm -rf src/ck/.git
+rm -f src/ck/.gitignore
+rm -rf src/ck/.hg
 

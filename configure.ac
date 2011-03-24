@@ -114,7 +114,7 @@ esac
 AC_SUBST(JAVA_CFLAGS)
 AC_SUBST(JAVA_LIBS)
 
-cd ck
+cd src/ck
 if test -f Makefile ; then
   make clean
 fi
@@ -134,7 +134,7 @@ else
 fi
 make
 rm src/*.so
-cd ..
+cd ../..
 
 AC_CONFIG_HEADERS([rcluaconfig.h])
 AC_CONFIG_FILES([Makefile etc/rclua.pc])
