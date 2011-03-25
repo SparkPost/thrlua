@@ -7,7 +7,7 @@
 #ifndef lstate_h
 #define lstate_h
 
-#include <sys/queue.h>
+#include "queue.h"
 #include <ck_sequence.h>
 
 struct lua_longjmp;  /* defined in ldo.c */

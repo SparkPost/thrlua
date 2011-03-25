@@ -8,7 +8,7 @@
 #ifndef lobject_h
 #define lobject_h
 
-#include <sys/queue.h>
+#include "queue.h"
 #include "ck_pr.h"
 #include "ck_stack.h"
 typedef uint32_t scpt_atomic_t;
