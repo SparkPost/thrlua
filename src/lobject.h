@@ -8,7 +8,9 @@
 #ifndef lobject_h
 #define lobject_h
 
+#include <sys/queue.h>
 #include "ck_pr.h"
+#include "ck_stack.h"
 typedef uint32_t scpt_atomic_t;
 
 /* tags for values visible from Lua */
@@ -25,19 +27,54 @@ typedef uint32_t scpt_atomic_t;
 #define LUA_TDEADKEY	(LAST_TAG+3)
 #define LUA_TGLOBAL (LAST_TAG+4)
 
-/*
-** Common Header for all collectable objects (in macro form, to be
-** included in other objects)
-*/
+typedef struct GCheap {
+  /** list of all objects allocated against this heap.
+   * Only the owner is allowed to modify or traverse this list.
+   * The exception to this rule is if the world is stopped; the
+   * only remaining thread is safe to traverse (but not modify!)
+   * the list */
+  TAILQ_HEAD(GCheaderList, GCheader) objects;
+
+  /** Records how much memory has been allocated against this heap */
+  uint64_t allocd;
+
+  /** backref to owning thread */
+  struct lua_State *owner;
+
+  /** linkage into list of all heaps */
+  TAILQ_ENTRY(GCheap) heaps;
+
+  /* an object can be in 0 or 1 of the following stacks at any time */
+
+  /** a stack of grey objects.
+   * When an object is marked grey, it is pushed onto the stack
+   * of its containing heap. */
+  ck_stack_t grey;
+
+  /** a stack of weak tables.
+   * When we mark a table with weak keys, we add it to this stack. */
+  ck_stack_t weak;
+
+  /** a stack of objects that need finalizing */
+  ck_stack_t finalize;
+} GCheap;
+
 /*
 ** Common header in struct form
 */
 typedef struct GCheader {
-  struct GCheader *next, *prev;
+  /** linkage into allocd object list */
+  TAILQ_ENTRY(GCheader) allocd;
+
+  /** linkage into various marking stacks */
+  ck_stack_entry_t instack;
+
   /** if pinned from C, count of number of pins */
   scpt_atomic_t ref;
-  /** the owning heap id */
-  scpt_atomic_t owner;
+
+  /** the owning heap */
+  GCheap *owner;
+
   /** object type: LUA_TXXX */
   lu_byte tt;
   /** finalized, black, white, grey etc. */
@@ -133,7 +170,7 @@ typedef union Udata {
     GCheader /*struct Table*/ *metatable;
     GCheader /*struct Table*/ *env;
     size_t len;
-    lu_byte finalized;
+//    lu_byte finalized;
   } uv;
 } Udata;
 

@@ -7,6 +7,7 @@
 #ifndef lstate_h
 #define lstate_h
 
+#include <sys/queue.h>
 #include <ck_sequence.h>
 
 struct lua_longjmp;  /* defined in ldo.c */
@@ -72,8 +73,9 @@ typedef struct CallInfo {
  * collectable objects from here.
  */
 struct thr_State {
-  /* so we can find all threads that have run lua */
-  struct thr_State *prev, *next;
+  /** so we can find all threads that have run lua */
+  TAILQ_ENTRY(thr_State) threads;
+
   /* so that we can stop this thread later */
   pthread_t tid;
   /* so that a suspended thread knows to wake up */
@@ -93,6 +95,7 @@ typedef struct thr_State thr_State;
 */
 struct global_State {
   GCheader gch;
+  GCheap gheap;
 
   /** xref bits are safe to read so long as you have locked at least one
    * lua_State */
@@ -104,7 +107,6 @@ struct global_State {
   lua_Alloc2 alloc;
   void *allocdata;
   int exiting;
-  scpt_atomic_t nextheapid;
 
   int gcstepmul;
   /* when memory utilization exceeds thresh, we'll trigger a collection */
@@ -141,29 +143,18 @@ LUAI_FUNC thr_State *luaC_get_per_thread(void);
 */
 struct lua_State {
   GCheader gch;
-
-  struct lua_State *prev, *next;
-
-  scpt_atomic_t heapid;
+  GCheap *heap;
 
   lu_byte status;
   int in_gc;
-  uint64_t gcestimate, gcthresh;
+  uint64_t gcestimate;
 
-  /** the current value of black */
-  lu_byte black;
+  /** Next threshold for collection; when allocd >= thresh, we will
+   * perform a local collection */
+  uint64_t thresh;
 
-  /** list of objects with white status */
-  GCheader *White;
-  /** list of objects with black status */
-  GCheader *Black;
-  GCheader B0, B1;
-  /** list of objects with grey status */
-  GCheader Grey;
-  /** list of white objects pending finalization */
-  GCheader Finalize;
-  /** list of Black tables with weak references */
-  GCheader Weak;
+  /** What color is black? */
+  uint8_t black;
 
   pthread_mutex_t lock;
   StkId top;  /* first free slot in the stack */

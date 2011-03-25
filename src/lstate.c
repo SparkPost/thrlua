@@ -158,9 +158,6 @@ static void preinit_state (lua_State *L, global_State *g)
   pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&L->lock, &mattr);
   pthread_mutexattr_destroy(&mattr);
-
-  L->Black = &L->B0;
-  L->White = &L->B1;
 }
 
 
@@ -183,11 +180,6 @@ lua_State *luaE_newthread (lua_State *L) {
   resethookcount(L1);
   stringtable_init(L1);
   luaZ_initbuffer(G(L), &L1->buff);
-
-  lua_lock(G(L)->mainthread);
-  L1->prev = G(L)->mainthread;
-  G(L)->mainthread->next = L1;
-  lua_unlock(G(L)->mainthread);
 
   if (G(L1)->on_state_create) {
     G(L1)->on_state_create(L1);
@@ -249,17 +241,10 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
   if (!g) {
     return NULL;
   }
-  L = (lua_State*)(g + 1);
-  if (L == NULL) {
-    /* FIXME: leak */
-    return NULL;
-  }
-  memset(L, 0, sizeof(*L) + g->extraspace);
-  L->gch.tt = LUA_TTHREAD;
+  L = g->mainthread;
   /* L->black is implicitly 0, so this object is implicitly black */
   ck_pr_inc_32(&L->gch.ref);
   preinit_state(L, g);
-  g->mainthread = L;
   g->panic = NULL;
 
   if (luaD_rawrunprotected(L, f_luaopen, NULL) != 0) {
