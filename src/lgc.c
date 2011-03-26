@@ -202,14 +202,20 @@ static INLINE void block_collector(lua_State *L)
   pthread_sigmask(SIG_BLOCK, &mask, NULL);
 #else
   thr_State *pt = luaC_get_per_thread();
-  ck_backoff_t backoff = CK_BACKOFF_INITIALIZER;
 
-  while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
-    /* we will get suspended momentarily */
-    ck_backoff_eb(&backoff);
+  for (;;) {
+    while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
+      /* we will get suspended momentarily */
+      ck_pr_stall();
+    }
+    /* tell a possible collector that we're in a write barrier */
+    ck_pr_store_32(&pt->in_barrier, 1);
+    ck_pr_fence_memory();
+    if (ck_pr_load_32(&G(L)->intend_to_stop) == 0)
+      break;
+
+    ck_pr_store_32(&pt->in_barrier, 0);
   }
-  /* tell a possible collector that we're in a write barrier */
-  ck_pr_store_32(&pt->in_barrier, 1);
 #endif
 }
 
@@ -614,6 +620,7 @@ static int signal_all_threads(lua_State *L, int sig)
 
 #if !BLOCK_COLLECTOR_USING_SIGNALS
   ck_pr_store_32(&G(L)->intend_to_stop, sig == LUA_SIG_SUSPEND ? 1 : 0);
+  ck_pr_fence_memory();
 #endif
 
   TAILQ_FOREACH(pt, &all_threads, threads) {
@@ -626,11 +633,9 @@ static int signal_all_threads(lua_State *L, int sig)
     }
 #if !BLOCK_COLLECTOR_USING_SIGNALS
     if (sig == LUA_SIG_SUSPEND) {
-      ck_backoff_t backoff = CK_BACKOFF_INITIALIZER;
-
       /* wait for thread to leave its barrier */
       while (ck_pr_load_32(&pt->in_barrier) == 1) {
-        ck_backoff_eb(&backoff);
+        ck_pr_stall();
       }
     }
 #endif
