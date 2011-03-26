@@ -13,7 +13,9 @@ sub _command_line {
   if ($file =~ m/\.lua$/) {
     $cmd = $ENV{LUA_EXECUTABLE} . " $file";
     if ($ENV{USE_VALGRIND}) {
-      $cmd = "valgrind --tool=memcheck --leak-check=full --track-origins=yes --show-reachable=yes $cmd";
+      my $logname = $file . ".vglog";
+      my $dsymutl = ($^O eq 'darwin') ? ' --dsymutil=yes ' : '';
+      $cmd = "valgrind --tool=memcheck $dsymutl --log-file=$logname --leak-check=full --track-origins=yes --show-reachable=yes $cmd";
     }
   } elsif ($file =~ m/\.luat$/) {
     $cmd = $^X . " t/doluat $file";

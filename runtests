@@ -6,6 +6,7 @@ use strict;
 use File::Find;
 use Data::Dumper;
 use Getopt::Long;
+use IO::File;
 use lib 't';
 use t::strap;
 BEGIN {
@@ -67,3 +68,48 @@ foreach (@ARGV) {
 }
 runtests(@tests);
 
+if ($valgrind) {
+  my $res = {};
+  my $loss = 0;
+  my $bad = 0;
+
+  foreach my $test (@tests) {
+    my $log = $test . '.vglog';
+    if (-f $log) {
+      my $fh = IO::File->new($log);
+      my $out = 0;
+      my $badmem = 0;
+      while (<$fh>) {
+        if (m/(definitely|indirectly|possibly) lost: (\d+) bytes in \d+ blocks/)
+        {
+          my $amount = $2;
+          if ($amount == 0) {
+            next;
+          }
+          if ($1 eq 'definitely') {
+            $loss += $amount;
+          }
+          if (!$out) {
+            print "\n$test:\n";
+            $out = 1;
+          }
+          print $_;
+        }
+      }
+      if (m/Invalid (read|write) of size/) {
+        $bad++;
+        if (!$out) {
+          print "\n$test:\n";
+          $out = 1;
+        }
+        if (!$badmem) {
+          print "$_\n";
+          $badmem++;
+        }
+      }
+    }
+  }
+  if (!$loss) {
+    print "\nValgrind says everything is clean\n";
+  }
+}

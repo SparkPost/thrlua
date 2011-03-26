@@ -1,3 +1,7 @@
+if os.getenv("USE_VALGRIND") then
+	print("valgrind incompatible");
+	os.exit(1);
+end
 require 'Test.More';
 plan(14);
 
