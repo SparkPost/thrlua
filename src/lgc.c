@@ -18,6 +18,14 @@
 # define INLINE inline
 #endif
 
+/* when entering a critical section in the mutator (the write barrier),
+ * we need to ensure that we atomically update a structure wrt. global
+ * trace.  We can either do this by blocking signals or by using a set
+ * of atomic operations to coordinate with a potential collector.
+ * In a single threaded run, using atomics is 2x faster than blocking
+ * signals.  If you need to use blocked signals, you can define this to 1 */
+#define BLOCK_COLLECTOR_USING_SIGNALS 0
+
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
 # define DEF_LUA_SIG_RESUME  SIGXCPU
@@ -192,7 +200,6 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-#define BLOCK_COLLECTOR_USING_SIGNALS 0
 static INLINE void block_collector(lua_State *L)
 {
 #if BLOCK_COLLECTOR_USING_SIGNALS
@@ -1183,29 +1190,6 @@ static void run_finalize(lua_State *L)
       call_finalize(L, o);
     }
   }
-}
-
-
-static void finalize_all_local(lua_State *L)
-{
-#if 0
-  move_matching_objects_to(L, L->Black, &L->Finalize, is_finalizable_on_close);
-  move_matching_objects_to(L, L->White, &L->Finalize, is_finalizable_on_close);
-  move_matching_objects_to(L, &L->Grey, &L->Finalize, is_finalizable_on_close);
-  move_matching_objects_to(L, &L->Weak, &L->Finalize, is_finalizable_on_close);
-#endif
-  run_finalize(L);
-}
-
-static void whitelist_non_root(lua_State *L)
-{
-#if 0
-  move_matching_objects_to(L, L->Black, L->White, is_non_root_on_close);
-  move_matching_objects_to(L, &L->Grey, L->White, is_non_root_on_close);
-  move_matching_objects_to(L, &L->Weak, L->White, is_non_root_on_close);
-  unlink_list(&L->gch);
-  unlink_list(&G(L)->gch);
-#endif
 }
 
 static void check_references(lua_State *L)

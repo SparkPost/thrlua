@@ -1,6 +1,27 @@
 AC_INIT([rclua], [5.1.4], [], [rclua])
 AM_INIT_AUTOMAKE([dist-bzip2])
+AC_CANONICAL_HOST
 AC_PROG_CC
+
+# Same basic environmental bits that we need to get straight before we probe
+# for libraries
+case $host in
+	i386*solaris*)
+		CFLAGS="$CFLAGS -m64 -D__x86_64__"
+		CK_PROFILE=x86_64
+		;;
+	sparc*solaris*)
+		CK_PROFILE=sparcv9
+		;;
+esac
+case $host in
+	*solaris*)
+		CFLAGS="$CFLAGS -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -std=gnu99"
+		LDFLAGS="-R/usr/sfw/lib/64/"
+		;;
+esac
+export CFLAGS LDFLAGS CC
+
 AC_PROG_LIBTOOL
 AC_C_INLINE
 AM_PROG_CC_C_O
@@ -38,6 +59,7 @@ AC_SUBST(PCRE_CFLAGS)
 AC_CHECK_LIB(dl,dlopen)
 AC_CHECK_LIB(rt,clock_gettime)
 AC_CHECK_LIB(crypt,crypt)
+AC_CHECK_LIB(crypt_d, crypt)
 
 AC_ARG_WITH(readline,
 [  --with-readline    link rclua against libreadline
@@ -119,17 +141,8 @@ cd src/ck
 if test -f Makefile ; then
   make clean
 fi
-export CFLAGS LDFLAGS
-if test `uname` = SunOS ; then
-	# workaround compiler check.
-	if test `uname -p` = i386 ; then
-		CFLAGS="$CFLAGS -m64 -D__x86_64__"
-		CC=gcc ./configure --profile=x86_64
-	else
-		CC=gcc ./configure --profile=sparcv9
-	fi
-	CFLAGS="$CFLAGS -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -std=gnu99"
-	LDFLAGS="-R/usr/sfw/lib/64/"
+if test -n "$CK_PROFILE" ; then
+	./configure --profile=$CK_PROFILE
 else
 	./configure
 fi

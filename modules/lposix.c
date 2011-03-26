@@ -10,8 +10,7 @@
 * Based on original by Claudio Terra for Lua 3.x.
 * With contributions by Roberto Ierusalimschy.
 */
-#define _XOPEN_SOURCE
-#define _BSD_SOURCE
+#include "rcluaconfig.h"
 #include <sys/stat.h>
 #include <sys/times.h>
 #include <sys/types.h>
@@ -1330,15 +1329,41 @@ static int Pcrypt(lua_State *L)		/** crypt(string,salt) */
 
 static const int Krlimit[] =
 {
-	RLIMIT_CORE, RLIMIT_CPU, RLIMIT_DATA, RLIMIT_FSIZE, RLIMIT_MEMLOCK,
-	RLIMIT_NOFILE, RLIMIT_NPROC, RLIMIT_RSS, RLIMIT_STACK,
+	RLIMIT_CORE, RLIMIT_CPU, RLIMIT_DATA, RLIMIT_FSIZE,
+#ifdef RLIMIT_MEMLOCK
+	RLIMIT_MEMLOCK,
+#endif
+	RLIMIT_NOFILE,
+#ifdef RLIMIT_NPROC
+	RLIMIT_NPROC,
+#endif
+#ifdef RLIMIT_RSS
+	RLIMIT_RSS,
+#endif
+	RLIMIT_STACK,
+#ifdef RLIMIT_VMEM
+	RLIMIT_VMEM,
+#endif
 	-1
 };
 
 static const char *const Srlimit[] =
 {
-	"core", "cpu", "data", "fsize", "memlock",
-	"nofile", "nproc", "rss", "stack",
+	"core", "cpu", "data", "fsize",
+#ifdef RLIMIT_MEMLOCK
+	"memlock",
+#endif
+	"nofile",
+#ifdef RLIMIT_NPROC
+	"nproc",
+#endif
+#ifdef RLIMIT_RSS
+	"rss",
+#endif
+	"stack",
+#ifdef RLIMIT_VMEM
+	"vmem",
+#endif
 	NULL
 };
 
@@ -1950,10 +1975,14 @@ LUALIB_API int luaopen_posix (lua_State *L)
 
 #if _POSIX_VERSION >= 200112L
 	set_const("LOG_AUTH", LOG_AUTH);
+#ifdef LOG_AUTHPRIV
 	set_const("LOG_AUTHPRIV", LOG_AUTHPRIV);
+#endif
 	set_const("LOG_CRON", LOG_CRON);
 	set_const("LOG_DAEMON", LOG_DAEMON);
+#ifdef LOG_FTP
 	set_const("LOG_FTP", LOG_FTP);
+#endif
 	set_const("LOG_KERN", LOG_KERN);
 	set_const("LOG_LOCAL0", LOG_LOCAL0);
 	set_const("LOG_LOCAL1", LOG_LOCAL1);

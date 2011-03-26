@@ -4,7 +4,18 @@
 t = {}
 local iter = 0;
 
-require 'posix'
+pcall(function()
+	require 'posix'
+end)
+
+if not posix then
+	posix = {}
+	function posix.gettimeofday()
+		local t = os.time();
+		print("os.time is", t)
+		return t, 0;
+	end
+end
 
 print 'starting iteration test'
 
