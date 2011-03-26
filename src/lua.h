@@ -104,8 +104,13 @@ struct lua_mem_usage_data {
   struct lua_memtype_alloc_info bytype[LUA_MEM__MAX];
 };
 
+enum lua_mem_info_scope {
+  LUA_MEM_SCOPE_LOCAL,
+  LUA_MEM_SCOPE_GLOBAL,
+};
 /* returns memory used by the lua runtime */
-void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data);
+void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
+  enum lua_mem_info_scope scope);
 
 typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype, void *ptr, size_t osize, size_t nsize);
 

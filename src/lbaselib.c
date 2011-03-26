@@ -178,17 +178,53 @@ static int luaB_gcinfo (lua_State *L) {
 
 
 static int luaB_collectgarbage (lua_State *L) {
-  static const char *const opts[] = {"stop", "restart", "collect",
-    "count", "step", "setpause", "setstepmul", NULL};
-  static const int optsnum[] = {LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
-    LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE, LUA_GCSETSTEPMUL};
+  static const char *const opts[] = {
+      "meminfo", "meminfo:global",
+      "stop", "restart", "collect",
+      "count", "step", "setpause",
+      "setstepmul", NULL
+  };
+  static const int optsnum[] = {
+      LUA_MEM_SCOPE_LOCAL, LUA_MEM_SCOPE_GLOBAL,
+      LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
+      LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE,
+      LUA_GCSETSTEPMUL
+  };
   int o = luaL_checkoption(L, 1, "collect", opts);
   int ex = luaL_optint(L, 2, 0);
   int res;
+
+	if (o < 2) {
+    /* meminfo */
+    struct lua_mem_usage_data data;
+    int i;
+    /* order depends on the lua_memtype enum */
+    static const char *const labels[] = {
+      "string", "stringtable_node", "table", "userdata", "function",
+      "global", "thread", "upval", "proto", "stringtable", "table_node",
+      "zbuf", "stack", "callinfo", "proto_data"
+    };
+
+    lua_mem_get_usage(L, &data, optsnum[o]);
+
+    lua_createtable(L, 0, LUA_MEM__MAX + 1);
+
+    lua_pushinteger(L, data.global.bytes);
+    lua_setfield(L, -2, "global");
+    for (i = 0; i < LUA_MEM__MAX; i++) {
+      if (data.bytype[i].bytes) {
+        lua_pushinteger(L, data.bytype[i].bytes);
+        lua_setfield(L, -2, labels[i]);
+      }
+    }
+
+    return 1;
+  }
+
   switch (optsnum[o]) {
     case LUA_GCCOUNT: {
       int64_t b = luaC_count(L);
-	  /* the interface defines this is the number of KB, rounded up */
+      /* the interface defines this is the number of KB, rounded up */
       lua_pushnumber(L, ((b + 1024) >> 10));
       return 1;
     }

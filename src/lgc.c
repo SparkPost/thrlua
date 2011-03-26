@@ -761,13 +761,24 @@ int64_t luaC_count(lua_State *L)
   return tot;
 }
 
-void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data)
+void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
+  enum lua_mem_info_scope scope)
 {
   uint32_t vers;
   GCheap *h;
   int i;
 
   memset(data, 0, sizeof(*data));
+
+  if (scope == LUA_MEM_SCOPE_LOCAL) {
+    do {
+      vers = ck_sequence_read_begin(&L->memlock);
+      memcpy(&data->global, &L->mem, sizeof(L->mem));
+      memcpy(&data->bytype, L->memtype, sizeof(L->memtype));
+    } while (ck_sequence_read_retry(&L->memlock, vers));
+
+    return;
+  }
 
   lock_all_threads();
   TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
