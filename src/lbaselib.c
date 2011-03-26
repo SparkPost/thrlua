@@ -557,6 +557,13 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
     if (!lua_checkstack(L, nres + 1))
       luaL_error(L, "too many results to resume");
     lua_xmove(co, L, nres);  /* move yielded values */
+
+    if (status == 0) {
+      /* coroutine finished; tidy it up */
+      lua_pop(co, lua_gettop(co));
+      luaC_localgc(co);
+      luaC_inherit_thread(L, co);
+    }
     return nres;
   }
   else {

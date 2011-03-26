@@ -21,6 +21,7 @@ struct thrlib_thread {
 
 static int traceback(lua_State *L)
 {
+  // FIXME: write a test for traceback inside a thread
   if (!lua_isstring(L, 1))  {
     /* 'message' not a string? */
     printf("TRACEBACK: error is not a string\n");
@@ -63,14 +64,10 @@ static void *thrlib_thread_func(void *arg)
   }
 
   lua_pop(L, lua_gettop(L));
-  luaC_checkGC(L);
+  luaC_localgc(L);
 
-  /* since this thread is exiting, we need to donate it to the global
-   * heap for collection */
-  luaC_move_thread(L);
-
-  /* un-pin */
-  ck_pr_dec_32(&L->gch.ref);
+  /* we exit leaving a ref to the lua_State; whoever joins will un-pin
+   * and inherit that thread */
 
   return 0;
 }
@@ -87,6 +84,7 @@ static int thrlib_create(lua_State *L)
   memset(th, 0, sizeof(*th));
 
   th->L = lua_newthread(L);
+  /* one ref for the OS-level thread */
   ck_pr_inc_32(&th->L->gch.ref);
 
   /* trace function is on the top of the stack */
@@ -120,6 +118,11 @@ static int thread_join(lua_State *L)
     void *retval = NULL;
     pthread_join(th->osthr, &retval);
     th->joined = 1;
+
+    /* we inherit this thread */
+    luaC_inherit_thread(L, th->L);
+    ck_pr_dec_32(&th->L->gch.ref);
+    th->L = NULL;
   }
   lua_pushboolean(L, 1);
   return 1;

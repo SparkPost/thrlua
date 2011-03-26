@@ -517,14 +517,6 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
         status = L->status;
       }
       --L->nCcalls;
-      switch (L->status) {
-        case LUA_SUSPEND:
-        case LUA_YIELD:
-          break;
-        case 0:
-        default:
-          luaC_move_thread(L);
-      }
     }
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);

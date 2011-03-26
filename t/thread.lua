@@ -27,7 +27,7 @@ end
 local start_sync = thread.mutex();
 start_sync:lock()
 
-local t = thread.create(function (t)
+t = thread.create(function (t)
   start_sync:lock()
 
   --[[ We deliberately attempt to unlock a mutex that we don't
@@ -62,6 +62,7 @@ start_sync:unlock()
 -- wait for thread to complete
 is(t:join(), true, "joined thread");
 is(type(t), "userdata", "got a thread userdata");
+t = nil;
 is(counter, 11, "main sees counter value 11");
 
 is(_TLS.n, "main", "_TLS is still set to main");
@@ -72,8 +73,6 @@ is(_OSTLS.n, "main", "_OSTLS is still set to main");
 local uv1 = 0
 local uv2 = 0
 local uvm = thread.mutex();
-
-local t = {};
 
 local statkeys = {
 "callinfo",
@@ -106,7 +105,7 @@ local function diffmeminfo(before, after)
   for _, l in ipairs(statkeys) do
     local b = before[l] or 0;
     local a = after[l] or 0;
-    local d = b - a;
+    local d = a - b;
     if d ~= 0 then
       print(string.format("%18s %16d", l, d))
     end
@@ -146,6 +145,7 @@ local function upvaltestfunc(me)
   uvm:unlock();
 end
 
+t = {};
 for i = 1, 4 do
   table.insert(t, thread.create(upvaltestfunc));
 end
@@ -153,6 +153,8 @@ end
 for _, thr in pairs(t) do
   thr:join();
 end
+t = nil;
+
 local stats = collectgarbage 'meminfo';
 print("main thread:");
 showmeminfo(stats);
@@ -160,6 +162,8 @@ stats = collectgarbage 'meminfo:global';
 print("global:");
 showmeminfo(stats);
 
+-- Need to do a global and an additional local to reclaim the threads we
+-- created in here
 collectgarbage 'globaltrace';
 collectgarbage 'collect';
 

@@ -876,6 +876,7 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->owner = L->heap;
   o->tt = tt;
   o->marked = !L->black;
+  o->xref = G(L)->notxref;
   TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
   make_grey(L, o);
 
@@ -906,7 +907,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
       G(n) = G(L);
-      /* threads own themselves. their creators hold an xref */
+      /* threads own themselves. their creators hold a ref */
       n->heap = new_heap(n);
       n->gch.owner = n->heap;
       ck_sequence_init(&n->memlock);
@@ -915,7 +916,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       o = &n->gch;
       o->marked = !n->black;
 
-      n->gch.xref = G(L)->isxref;
+      n->gch.xref = G(L)->notxref;
 
       lua_unlock(L);
       break;
@@ -960,6 +961,44 @@ void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size)
   return o;
 }
 
+void luaC_inherit_thread(lua_State *L, lua_State *th)
+{
+  int i;
+  GCheader *steal, *tmp;
+
+  if (th->heap == NULL) {
+    // already done
+    return;
+  }
+
+  /* when a thread is reclaimed, the executing thread
+   * needs to steal its contents */
+  lock_all_threads();
+
+  ck_sequence_write_begin(&th->memlock);
+  ck_sequence_write_begin(&L->memlock);
+  L->gcestimate += th->gcestimate;
+  sum_usage(&L->mem, &th->mem);
+  for (i = 0; i < LUA_MEM__MAX; i++) {
+    sum_usage(&L->memtype[i], &th->memtype[i]);
+  }
+
+  ck_sequence_write_end(&L->memlock);
+  ck_sequence_write_end(&th->memlock);
+
+  TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
+    TAILQ_REMOVE(&th->heap->objects, steal, allocd);
+
+    steal->owner = L->heap;
+    TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
+  }
+  TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
+  unlock_all_threads();
+
+  free(th->heap);
+  th->heap = NULL;
+}
+
 static void reclaim_object(lua_State *L, GCheader *o)
 {
   TAILQ_REMOVE(&L->heap->objects, o, allocd);
@@ -1001,37 +1040,11 @@ static void reclaim_object(lua_State *L, GCheader *o)
     case LUA_TTHREAD:
       {
         lua_State *th = gco2th(o);
-        GCheader *steal, *tmp;
-        int i;
 
         if (th == G(L)->mainthread) {
           return;
         }
-        /* when a thread is reclaimed, the executing thread
-         * need to steal its contents */
-        lock_all_threads();
-
-        ck_sequence_write_begin(&th->memlock);
-        ck_sequence_write_begin(&L->memlock);
-        L->gcestimate += th->gcestimate;
-        sum_usage(&L->mem, &th->mem);
-        for (i = 0; i < LUA_MEM__MAX; i++) {
-          sum_usage(&L->memtype[i], &th->memtype[i]);
-        }
-
-        ck_sequence_write_end(&L->memlock);
-        ck_sequence_write_end(&th->memlock);
-
-        TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
-          TAILQ_REMOVE(&th->heap->objects, steal, allocd);
-
-          steal->owner = L->heap;
-          TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
-        }
-        unlock_all_threads();
-
-        free(th->heap);
-        th->heap = NULL;
+        luaC_inherit_thread(L, th);
 
         luaE_freethread(L, th);
         break;
@@ -1340,7 +1353,7 @@ static void global_collection(lua_State *L)
     GCheader *o;
 
     TAILQ_FOREACH(o, &h->objects, allocd) {
-      traverse_object(h->owner, o, global_trace_obj);
+      global_trace_obj(h->owner, &h->owner->gch, o);
     }
   }
 
@@ -1376,10 +1389,6 @@ void luaC_fullgc (lua_State *L)
   local_collection(L);
 }
 
-void luaC_move_thread(lua_State *L)
-{
-}
-
 /* The semantics of lua_close are to free up everything associated
  * with the lua_State, including others states and globals */
 LUA_API void lua_close (lua_State *L)
@@ -1395,7 +1404,6 @@ LUA_API void lua_close (lua_State *L)
 
   /* attempt a graceful first pass */
   lua_pop(L, lua_gettop(L));
-  local_collection(L);
   global_collection(L);
   local_collection(L);
 
