@@ -109,7 +109,7 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
           done = 0;
         }
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(L, h);
+        luaH_rdunlock(L, h);
       } LUAI_TRY_END(L);
       if (done) {
         return;
@@ -151,7 +151,7 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
           done = 0;
         }
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(L, h);
+        luaH_wrunlock(L, h);
       } LUAI_TRY_END(L);
       if (done) {
         return;
@@ -633,7 +633,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             LUAI_TRY_BLOCK(L) {
               setnvalue(ra, cast_num(luaH_getn(t)));
             } LUAI_TRY_FINALLY(L) {
-              luaH_unlock(L, t);
+              luaH_rdunlock(L, t);
             } LUAI_TRY_END(L);
             break;
           }
@@ -836,7 +836,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             luaC_writebarriervv(L, &h->gch, src, val);
           }
         } LUAI_TRY_FINALLY(L) {
-          luaH_unlock(L, h);
+          luaH_wrunlock(L, h);
         } LUAI_TRY_END(L);
         continue;
       }

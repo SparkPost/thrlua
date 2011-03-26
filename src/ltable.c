@@ -349,6 +349,9 @@ static void rehash (lua_State *L, Table *t, const TValue *ek) {
 Table *luaH_new (lua_State *L, int narray, int nhash) {
   int r;
   Table *t = luaC_newobj(L, LUA_TTABLE);
+#if LUA_USE_RW_SPINLOCK
+  lua_rwspinlock_init(&t->lock);
+#else
   do {
     r = pthread_rwlock_init(&t->lock, NULL);
   } while (r == EAGAIN || r == EINTR);
@@ -356,6 +359,7 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
     luaL_error(L, "table create: failed to init lock with errno %d: %s\n",
       errno, strerror(errno));
   }
+#endif
 
   t->flags = cast_byte(~0);
   t->node = cast(Node *, dummynode);
@@ -369,7 +373,9 @@ void luaH_free (lua_State *L, Table *t) {
   if (t->node != dummynode)
     luaM_freearray(L, LUA_MEM_TABLE_NODES, t->node, sizenode(t), Node);
   luaM_freearray(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, TValue);
+#if !LUA_USE_RW_SPINLOCK
   pthread_rwlock_destroy(&t->lock);
+#endif
   luaM_free(L, LUA_MEM_TABLE, t);
 }
 
@@ -580,6 +586,7 @@ int luaH_getn (Table *t) {
   else return unbound_search(t, j);
 }
 
+#if !LUA_USE_RW_SPINLOCK
 /* block until a write lock is obtained */
 void luaH_wrlock(lua_State *L, Table *t)
 {
@@ -609,7 +616,7 @@ void luaH_rdlock(lua_State *L, Table *t)
 }
 
 /* release a lock */
-void luaH_unlock(lua_State *L, Table *t)
+void luaH_wrunlock(lua_State *L, Table *t)
 {
   int r;
   do {
@@ -621,6 +628,20 @@ void luaH_unlock(lua_State *L, Table *t)
       r, strerror(r));
   }
 }
+
+void luaH_rdunlock(lua_State *L, Table *t)
+{
+  int r;
+  do {
+    r = pthread_rwlock_unlock(&t->lock);
+  } while (r == EINTR || r == EAGAIN);
+  if (r) {
+    lua_assert(r == 0);
+    luaL_error(L, "table unlock failed with errno %d: %s\n",
+      r, strerror(r));
+  }
+}
+#endif
 
 #if defined(LUA_DEBUG)
 

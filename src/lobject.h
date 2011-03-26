@@ -11,6 +11,7 @@
 #include "queue.h"
 #include "ck_pr.h"
 #include "ck_stack.h"
+#include "ck_spinlock.h"
 
 /* tags for values visible from Lua */
 #define LAST_TAG	LUA_TTHREAD
@@ -302,12 +303,63 @@ typedef struct Node {
   TKey i_key;
 } Node;
 
+#define LUA_USE_RW_SPINLOCK 1
+
+#if LUA_USE_RW_SPINLOCK
+typedef struct lua_rwspinlock {
+  uint32_t readers;
+  ck_spinlock_fas_t writer;
+} lua_rwspinlock_t;
+
+static inline void lua_rwspinlock_init(lua_rwspinlock_t *rw)
+{
+  ck_pr_store_32(&rw->readers, 0);
+  ck_spinlock_fas_init(&rw->writer);
+}
+
+static inline void lua_rwspinlock_write_lock(lua_rwspinlock_t *rw)
+{
+  ck_spinlock_fas_lock(&rw->writer);
+  while (ck_pr_load_32(&rw->readers) != 0) {
+    ck_pr_stall();
+  }
+}
+
+static inline void lua_rwspinlock_write_unlock(lua_rwspinlock_t *rw)
+{
+  ck_spinlock_fas_unlock(&rw->writer);
+}
+
+static inline void lua_rwspinlock_read_lock(lua_rwspinlock_t *rw)
+{
+  for (;;) {
+    while (ck_pr_load_uint(&rw->writer.value)) {
+      ck_pr_stall();
+    }
+
+    ck_pr_inc_32(&rw->readers);
+    if (ck_pr_load_uint(&rw->writer.value) == 0) {
+      return;
+    }
+    ck_pr_dec_32(&rw->readers);
+  }
+}
+
+static inline void lua_rwspinlock_read_unlock(lua_rwspinlock_t *rw)
+{
+  ck_pr_dec_32(&rw->readers);
+}
+#endif
 
 typedef struct Table {
   GCheader gch;
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */ 
   lu_byte lsizenode;  /* log2 of size of `node' array */
+#if LUA_USE_RW_SPINLOCK
+  lua_rwspinlock_t lock;
+#else
   pthread_rwlock_t lock;
+#endif
   GCheader /*struct Table*/ *metatable;
   TValue *array;  /* array part */
   Node *node;

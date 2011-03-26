@@ -137,7 +137,7 @@ TString *luaX_newstring (LexState *ls, const char *str, size_t l) {
       setbvalue(o, 1);  /* make sure `str' will not be collected */
     }
   } LUAI_TRY_FINALLY(L) {
-    luaH_unlock(L, ls->fs->h);
+    luaH_wrunlock(L, ls->fs->h);
   } LUAI_TRY_END(L);
 //  luaC_checkGC(L);
   return ts;

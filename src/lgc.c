@@ -363,7 +363,7 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
             }
           }
         }
-        if (!is_world_stopped(L)) luaH_unlock(L, h);
+        if (!is_world_stopped(L)) luaH_rdunlock(L, h);
         break;
       }
 
@@ -1274,7 +1274,7 @@ static void fixup_weak_refs(lua_State *L)
         removeentry(n);
       }
     }
-    luaH_unlock(L, h);
+    luaH_wrunlock(L, h);
   }
 }
 

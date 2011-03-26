@@ -30,6 +30,18 @@ end
 
 local es, eu = posix.gettimeofday()
 
+function difftime(ss, su, es, eu)
+  local u = eu - su;
+  local s = es - ss;
+  if u < 1 then
+	s = s - 1
+	u = u + 1000000
+  end
+  return s, u
+end
+
+local ds, du = difftime(ss, su, es, eu)
+
 print(string.format("Performed %d iterations", iter));
-print(string.format("in %d.%d", es - ss, eu - su));
+print(string.format("in %d.%d", ds, du))
 

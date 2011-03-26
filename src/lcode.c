@@ -234,7 +234,7 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
       retval = fs->nk++;
     }
   } LUAI_TRY_FINALLY(L) {
-    luaH_unlock(L, fs->h);
+    luaH_wrunlock(L, fs->h);
   } LUAI_TRY_END(L);
   return retval;
 }

@@ -435,7 +435,7 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
       LUAI_TRY_BLOCK(L) {
         n = luaH_getn(table);
       } LUAI_TRY_FINALLY(L) {
-        luaH_unlock(L, table);
+        luaH_rdunlock(L, table);
       } LUAI_TRY_END(L);
       return n;
     }
@@ -689,7 +689,7 @@ LUA_API void lua_rawget (lua_State *L, int idx) {
     luaH_rdlock(L, table);
     setobj2s(L, L->top - 1, luaH_get(table, L->top - 1));
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(L, table);
+    if (table) luaH_rdunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -708,7 +708,7 @@ LUA_API void lua_rawgeti (lua_State *L, int idx, int n) {
     setobj2s(L, L->top, luaH_getnum(table, n));
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(L, table);
+    if (table) luaH_rdunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -838,7 +838,7 @@ LUA_API void lua_rawset (lua_State *L, int idx) {
     luaC_writebarriervv(L, &table->gch, p, L->top - 1);
     L->top -= 2;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(L, table);
+    if (table) luaH_wrunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -860,7 +860,7 @@ LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
     luaC_writebarriervv(L, &table->gch, p, L->top - 1);
     L->top--;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(L, table);
+    if (table) luaH_wrunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -1168,7 +1168,7 @@ LUA_API int lua_next (lua_State *L, int idx) {
     else  /* no more elements */
       L->top -= 1;  /* remove key */
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_unlock(L, table);
+    if (table) luaH_rdunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
   return more;

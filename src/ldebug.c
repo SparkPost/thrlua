@@ -177,7 +177,7 @@ static void collectvalidlines (lua_State *L, Closure *f) {
         setbvalue(luaH_setnum(L, t, lineinfo[i]), 1);
       sethvalue(L, L->top, t);
     } LUAI_TRY_FINALLY(L) {
-      luaH_unlock(L, t);
+      luaH_wrunlock(L, t);
     } LUAI_TRY_END(L);
   }
   incr_top(L);

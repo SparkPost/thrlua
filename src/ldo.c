@@ -203,7 +203,7 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
       /* store counter in field `n' */
       setnvalue(luaH_setstr(L, htab, luaS_newliteral(L, "n")), cast_num(nvar));
     } LUAI_TRY_FINALLY(L) {
-      luaH_unlock(L, htab);
+      luaH_wrunlock(L, htab);
     } LUAI_TRY_END(L);
   }
 #endif
