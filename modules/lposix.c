@@ -10,7 +10,8 @@
 * Based on original by Claudio Terra for Lua 3.x.
 * With contributions by Roberto Ierusalimschy.
 */
-
+#define _XOPEN_SOURCE
+#define _BSD_SOURCE
 #include <sys/stat.h>
 #include <sys/times.h>
 #include <sys/types.h>
@@ -1663,12 +1664,20 @@ static int signalno;
 
 static const char *const Ssigmacros[] =
 {
-	"SIG_DFL", "SIG_ERR", "SIG_HOLD", "SIG_IGN", NULL
+	"SIG_DFL", "SIG_ERR",
+#ifdef SIG_HOLD
+	"SIG_HOLD",
+#endif
+	"SIG_IGN", NULL
 };
 
 static void (*Fsigmacros[])(int) =
 {
-	SIG_DFL, SIG_ERR, SIG_HOLD, SIG_IGN, NULL
+	SIG_DFL, SIG_ERR,
+#ifdef SIG_HOLD
+	SIG_HOLD,
+#endif
+	SIG_IGN, NULL
 };
 
 static void sig_handle (lua_State *L, lua_Debug *ar) {
