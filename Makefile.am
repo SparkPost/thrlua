@@ -7,7 +7,7 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la
+cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la posix.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -68,6 +68,10 @@ yaml_la_SOURCES = modules/yaml/lyaml.c modules/yaml/api.c \
 yaml_la_LDFLAGS = -module
 yaml_la_CPPFLAGS = $(commonCFLAGS) -Imodules/yaml
 
+# posix
+posix_la_SOURCES = modules/lposix.c
+posix_la_LDFLAGS = -module
+posix_la_CPPFLAGS = $(commonCFLAGS)
 
 EXTRA_DIST = COPYING HISTORY INSTALL README
 
