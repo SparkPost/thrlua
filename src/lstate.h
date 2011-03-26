@@ -138,7 +138,24 @@ struct global_State {
   void (*on_state_finalize)(lua_State *L);
 };
 
-LUAI_FUNC thr_State *luaC_get_per_thread(void);
+#define LUA_USE___THREAD 1
+
+LUAI_FUNC thr_State *luaC_get_per_thread_(void);
+#if LUA_USE___THREAD
+LUAI_FUNC __thread thr_State *lua_tls_State;
+#define luaC_get_per_thread_raw() lua_tls_State
+#else
+LUAI_FUNC pthread_key_t lua_tls_key;
+#define luaC_get_per_thread_raw() pthread_getspecific(lua_tls_key)
+#endif
+
+static inline thr_State *luaC_get_per_thread(void)
+{
+  thr_State *st = luaC_get_per_thread_raw();
+  if (st) return st;
+  return luaC_get_per_thread_();
+}
+
 
 /*
 ** `per thread' state

@@ -93,7 +93,16 @@ typedef uint32_t Instruction;
 #endif
 
 #ifndef luai_threadyield
-#define luai_threadyield(L)     {lua_unlock(L); lua_lock(L);}
+  /* luai_threadyield is called via dojump in the VM executor.
+   * its purpose is to relinquish the lua_lock and re-acquire it.
+   * In stock lua it is a nop.  It doesn't seem useful in our application,
+   * so we NOP it too, but preserve the intent to yield.
+   * We don't simply call lua_unlock(); lua_lock() because lua_lock
+   * needs to attach to TLS for new threads, and this is a moderately
+   * expensive operation.
+   * Our implementation of luai_threadyield can be found in lstate.c
+   * */
+#define luai_threadyield(L)     0
 #endif
 
 

@@ -9,6 +9,37 @@
 
 #include "thrlua.h"
 
+#if 0
+void luai_threadyield(lua_State *L)
+{
+  /* luai_threadyield is called via dojump in the VM executor.
+   * its purpose is to relinquish the lua_lock and re-acquire it.
+   * In stock lua it is a nop.  It doesn't seem useful in our application,
+   * so we NOP it too, but preserve the intent to yield.
+   * We don't simply call lua_unlock(); lua_lock() because lua_lock
+   * needs to attach to TLS for new threads, and this is a moderately
+   * expensive operation */
+  int r;
+
+  do {
+    r = pthread_mutex_unlock(&L->lock);
+  } while (r == EINTR || r == EAGAIN);
+  if (r) {
+    luaL_error(L, "lua_unlock(%p) failed with errno %d: %s\n",
+        L, r, strerror(r));
+  }
+
+  do {
+    r = pthread_mutex_lock(&L->lock);
+  } while (r == EINTR || r == EAGAIN);
+
+  if (r) {
+    luaL_error(L, "lua_lock(%p) failed with errno %d: %s\n",
+        L, r, strerror(r));
+  }
+}
+#endif
+
 void lua_lock(lua_State *L)
 {
   int r;

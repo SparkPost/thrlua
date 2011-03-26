@@ -40,7 +40,10 @@
 static int LUA_SIG_SUSPEND = DEF_LUA_SIG_SUSPEND;
 static int LUA_SIG_RESUME  = DEF_LUA_SIG_RESUME;
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
-static pthread_key_t tls_key;
+#if LUA_USE___THREAD
+__thread thr_State *lua_tls_State = NULL;
+#endif
+pthread_key_t lua_tls_key;
 
 /* we use these to track the threads so that we can stop the world */
 static pthread_mutex_t all_threads_lock; /* initialized via pthread_once */
@@ -68,22 +71,22 @@ static INLINE int is_black(lua_State *L, GCheader *obj)
 
 static INLINE int is_grey(GCheader *obj)
 {
-  return (obj->marked & GREYBIT) == GREYBIT;
+  return obj->marked & GREYBIT;
 }
 
 static INLINE int is_finalized(GCheader *obj)
 {
-  return (obj->marked & FINALBIT) == FINALBIT;
+  return obj->marked & FINALBIT;
 }
 
 static INLINE int is_aggregate(GCheader *obj)
 {
-  return obj->tt > LUA_TSTRING;
+  return obj->tt != LUA_TSTRING;
 }
 
 static INLINE int is_free(GCheader *obj)
 {
-  return (obj->marked & FREEDBIT) == FREEDBIT;
+  return obj->marked & FREEDBIT;
 }
 
 /** defines GCheader_from_stack to convert a stack entry to a
@@ -161,6 +164,8 @@ static INLINE void make_black(lua_State *L, GCheader *obj)
 
 static INLINE void mark_object(lua_State *L, GCheader *obj)
 {
+  register int m;
+
   if (L->heap != obj->owner) {
     /* external reference */
     ck_pr_store_32(&obj->xref, G(L)->isxref);
@@ -170,7 +175,8 @@ static INLINE void mark_object(lua_State *L, GCheader *obj)
   lua_assert_obj(!is_free(obj), obj);
   lua_assert_obj(obj->owner == L->heap, obj);
 
-  if (is_grey(obj) || is_black(L, obj)) {
+  m = obj->marked;
+  if ((m & GREYBIT) || ((m & BLACKBIT) == L->black)) {
     /** already marked */
     return;
   }
@@ -200,7 +206,7 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-static INLINE void block_collector(lua_State *L)
+static INLINE void block_collector(lua_State *L, thr_State *pt)
 {
 #if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
@@ -208,7 +214,6 @@ static INLINE void block_collector(lua_State *L)
   sigfillset(&mask);
   pthread_sigmask(SIG_BLOCK, &mask, NULL);
 #else
-  thr_State *pt = luaC_get_per_thread();
 
   for (;;) {
     while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
@@ -226,7 +231,7 @@ static INLINE void block_collector(lua_State *L)
 #endif
 }
 
-static INLINE void unblock_collector(lua_State *L)
+static INLINE void unblock_collector(lua_State *L, thr_State *pt)
 {
 #if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
@@ -234,8 +239,6 @@ static INLINE void unblock_collector(lua_State *L)
   sigfillset(&mask);
   pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 #else
-  thr_State *pt = luaC_get_per_thread();
-
   ck_pr_store_32(&pt->in_barrier, 0);
 #endif
 }
@@ -248,7 +251,6 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   lua_assert(ro != NULL);
   checkconsistency(rvalue);
 
-  set_xref(L, object, ro, 0);
   mark_object(L, ro);
 
   *lvalue = ro;
@@ -258,27 +260,27 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
 void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue)
 {
-  GCheader *ro = iscollectable(rvalue) ? gcvalue(rvalue) : NULL;
+  thr_State *pt = luaC_get_per_thread();
 
-  if (ro) {
-    set_xref(L, object, ro, 0);
+  if (iscollectable(rvalue)) {
+    GCheader *ro = gcvalue(rvalue);
+
     mark_object(L, ro);
   }
 
-  block_collector(L);
+  block_collector(L, pt);
   lvalue->value = rvalue->value;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
    * the collector */
   lvalue->tt = rvalue->tt;
-  unblock_collector(L);
+  unblock_collector(L, pt);
 }
 
 void luaC_writebarrier(lua_State *L, GCheader *object,
   GCheader **lvalue, GCheader *rvalue)
 {
   if (rvalue) {
-    set_xref(L, object, rvalue, 0);
     mark_object(L, rvalue);
   }
 
@@ -554,7 +556,7 @@ static void thread_suspend_requested(int sig)
   thr_State *pt;
   int r;
 
-  pt = pthread_getspecific(tls_key);
+  pt = luaC_get_per_thread_raw();
 
   /* there are some edges where we may no longer have a valid pt; for instance,
    * we may be exiting this thread and have already destroyed the pt. In this
@@ -593,7 +595,7 @@ static void thread_resume_requested(int sig)
   thr_State *pt;
   int save = errno;
 
-  pt = pthread_getspecific(tls_key);
+  pt = luaC_get_per_thread_raw();
   ck_pr_store_uint(&pt->wake, 1);
 
   errno = save;
@@ -685,7 +687,7 @@ static void thread_exited(void *p)
   ck_pr_dec_32(&num_threads);
 
   /* POSIX states that we are only called when p is non-NULL */
-  assert(p != NULL);
+  lua_assert(p != NULL);
 
   if (try_lock_all_threads()) {
     TAILQ_REMOVE(&all_threads, thr, threads);
@@ -712,7 +714,7 @@ static void free_last_global_bits(void)
 {
   thr_State *pt;
 
-  pt = pthread_getspecific(tls_key);
+  pt = luaC_get_per_thread_raw();
   if (pt) {
     thread_exited(pt);
   }
@@ -757,26 +759,29 @@ static void make_tls_key(void)
   allowed_sigs(&suspend_handler_mask);
   sigdelset(&suspend_handler_mask, LUA_SIG_RESUME);
 
-  pthread_key_create(&tls_key, thread_exited);
+  pthread_key_create(&lua_tls_key, thread_exited);
 }
 
-thr_State *luaC_get_per_thread(void)
+thr_State *luaC_get_per_thread_(void)
 {
   thr_State *pt;
 
   pthread_once(&tls_init, make_tls_key);
-  pt = pthread_getspecific(tls_key);
-  if (pt == NULL) {
-    pt = calloc(1, sizeof(*pt));
-    pthread_setspecific(tls_key, pt);
-    pt->tid = pthread_self();
 
-    lock_all_threads();
-    TAILQ_INSERT_HEAD(&all_threads, pt, threads);
-    unlock_all_threads();
+  pt = calloc(1, sizeof(*pt));
+#if LUA_USE___THREAD
+  lua_tls_State = pt;
+#endif
+  /* we use BOTH the gcc extension and the posix tls, so that pthreads
+   * will clean things up when a thread terminates */
+  pthread_setspecific(lua_tls_key, pt);
+  pt->tid = pthread_self();
 
-    ck_pr_inc_32(&num_threads);
-  }
+  lock_all_threads();
+  TAILQ_INSERT_HEAD(&all_threads, pt, threads);
+  unlock_all_threads();
+
+  ck_pr_inc_32(&num_threads);
   return pt;
 }
 

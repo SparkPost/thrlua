@@ -701,14 +701,14 @@ static inline void lua_number2str(char *buf, LUA_NUMBER n)
 
 #elif defined(LUA_USE_ULONGJMP)
 /* in Unix, try _longjmp/_setjmp (more efficient) */
-#define LUAI_THROW(L,c)	_longjmp((c)->b, 1)
-#define LUAI_TRY(L,c,a)	if (_setjmp((c)->b) == 0) { a }
+#define LUAI_THROW(L,c)	lua_do_longjmp((c)->b, 1)
+#define LUAI_TRY(L,c,a)	if (lua_do_setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf	jmp_buf
 
 #else
 /* default handling with long jumps */
-#define LUAI_THROW(L,c)	longjmp((c)->b, 1)
-#define LUAI_TRY(L,c,a)	if (setjmp((c)->b) == 0) { a }
+#define LUAI_THROW(L,c)	lua_do_longjmp((c)->b, 1)
+#define LUAI_TRY(L,c,a)	if (lua_do_setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf	jmp_buf
 
 #endif

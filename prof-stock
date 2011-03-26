@@ -1,0 +1,12 @@
+#!/bin/sh
+LD_LIBRARY_PATH=.libs
+DYLD_LIBRARY_PATH="$LD_LIBRARY_PATH"
+RCLUA_CPATH='.libs/?.so'
+RCLUA_PATH='./?.lua;./etc/?.lua;./etc/?/init.lua'
+case `uname` in
+	Darwin)
+	  dsymutil=" --dsymutil=yes"
+	  ;;
+esac
+export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
+exec valgrind --tool=callgrind $dsymutil --dump-line=yes --dump-instr=yes /opt/msys/3rdParty/bin/rclua $*

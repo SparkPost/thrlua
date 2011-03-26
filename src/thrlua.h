@@ -15,7 +15,7 @@
 #define _GNU_SOURCE
 #include "luaconf.h"
 
-#define LUA_ASSERTIONS 1
+#define LUA_ASSERTIONS 0
 
 #if HAVE__OPT_MSYS_3RDPARTY_INCLUDE_VALGRIND_VALGRIND_H
 #include </opt/msys/3rdParty/include/valgrind/memcheck.h>
@@ -47,8 +47,8 @@ LUAI_FUNC void lua_assert_fail(const char *expr, struct GCheader *obj, const cha
 # define lua_assert assert
 # define lua_assert_obj(expr, __obj) assert(expr)
 #else
-# define lua_assert(expr)
-# define lua_assert_obj(expr, __obj)
+# define lua_assert(expr) 0
+# define lua_assert_obj(expr, __obj) 0
 #endif
 
 
@@ -209,6 +209,13 @@ struct lua_longjmp {
   unsigned int line;
 };
 
+#ifdef __x86_64__
+# define lua_do_setjmp  _lua_setjmp_amd64
+# define lua_do_longjmp _lua_longjmp_amd64
+#else
+# error boo
+#endif
+
 /* NOTE: undefined (certainly bad!) behavior will result if the function
  * returns from within the TRY/FINALLY block handling */
 #define LUAI_TRY_BLOCK(L) do { \
@@ -218,7 +225,7 @@ struct lua_longjmp {
   (L)->errorJmp = &lj; \
   lj.file = __FILE__; \
   lj.line = __LINE__; \
-  if (setjmp(lj.b) == 0) {
+  if (lua_do_setjmp(lj.b) == 0) {
 
 #define LUAI_TRY_FINALLY(L) \
   }

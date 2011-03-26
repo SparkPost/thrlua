@@ -450,10 +450,15 @@ const TValue *luaH_getstr (Table *t, TString *key) {
   Node *n = hashstr(t, key);
   do {  /* check whether `key' is somewhere in the chain */
     if (ttisstring(gkey(n))) {
-      if (rawtsvalue(gkey(n)) == key) {
+      TString *ts = rawtsvalue(gkey(n));
+
+      if (ts == key) {
         return gval(n);  /* that's it */
       }
-      if (luaV_strcmp(rawtsvalue(gkey(n)), key) == 0) {
+
+      if (ts->tsv.hash == key->tsv.hash &&
+          ts->tsv.len == key->tsv.len &&
+          !memcmp(getstr(ts), getstr(key), ts->tsv.len)) {
         return gval(n);
       }
     }

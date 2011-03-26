@@ -211,11 +211,18 @@ static int call_orderTM (lua_State *L, const TValue *p1, const TValue *p2,
 
 int luaV_strcmp (const TString *ls, const TString *rs)
 {
-  const char *l = getstr(ls);
-  size_t ll = ls->tsv.len;
-  const char *r = getstr(rs);
-  size_t lr = rs->tsv.len;
-  if (ls == rs || l == r) return 0;
+  const char *l, *r;
+  size_t ll, lr;
+
+  if (ls == rs) return 0;
+
+  l = getstr(ls);
+  r = getstr(rs);
+  if (l == r) return 0;
+
+  ll = ls->tsv.len;
+  lr = rs->tsv.len;
+
   for (;;) {
     int temp = strcoll(l, r);
     if (temp != 0) return temp;

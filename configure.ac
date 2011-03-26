@@ -25,6 +25,7 @@ export CFLAGS LDFLAGS CC
 AC_PROG_LIBTOOL
 AC_C_INLINE
 AM_PROG_CC_C_O
+AM_PROG_AS
 
 AC_DEFINE(LUA_USE_POSIX, 1, [Use POSIX functions])
 AC_DEFINE(LUA_USE_DLOPEN, 1, [Use dlopen for loading modules])
