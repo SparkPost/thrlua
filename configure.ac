@@ -37,6 +37,7 @@ AC_SUBST(PCRE_CFLAGS)
 
 AC_CHECK_LIB(dl,dlopen)
 AC_CHECK_LIB(rt,clock_gettime)
+AC_CHECK_LIB(crypt,crypt)
 
 AC_ARG_WITH(readline,
 [  --with-readline    link rclua against libreadline
