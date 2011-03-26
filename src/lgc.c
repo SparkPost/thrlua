@@ -990,6 +990,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     TAILQ_REMOVE(&th->heap->objects, steal, allocd);
 
     steal->owner = L->heap;
+    steal->instack.next = NULL;
+
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
