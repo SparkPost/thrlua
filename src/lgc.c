@@ -192,20 +192,39 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-static INLINE void block_collector(sigset_t *set)
+#define BLOCK_COLLECTOR_USING_SIGNALS 0
+static INLINE void block_collector(lua_State *L)
 {
+#if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
 
   sigfillset(&mask);
-  pthread_sigmask(SIG_BLOCK, &mask, set);
+  pthread_sigmask(SIG_BLOCK, &mask, NULL);
+#else
+  thr_State *pt = luaC_get_per_thread();
+  ck_backoff_t backoff = CK_BACKOFF_INITIALIZER;
+
+  while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
+    /* we will get suspended momentarily */
+    ck_backoff_eb(&backoff);
+  }
+  /* tell a possible collector that we're in a write barrier */
+  ck_pr_store_32(&pt->in_barrier, 1);
+#endif
 }
 
-static INLINE void unblock_collector(const sigset_t *set)
+static INLINE void unblock_collector(lua_State *L)
 {
+#if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
 
   sigfillset(&mask);
   pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
+#else
+  thr_State *pt = luaC_get_per_thread();
+
+  ck_pr_store_32(&pt->in_barrier, 0);
+#endif
 }
 
 void luaC_writebarrierov(lua_State *L, GCheader *object,
@@ -227,20 +246,19 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue)
 {
   GCheader *ro = iscollectable(rvalue) ? gcvalue(rvalue) : NULL;
-  sigset_t set;
 
   if (ro) {
     set_xref(L, object, ro, 0);
     mark_object(L, ro);
   }
 
-  block_collector(&set);
+  block_collector(L);
   lvalue->value = rvalue->value;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
    * the collector */
   lvalue->tt = rvalue->tt;
-  unblock_collector(&set);
+  unblock_collector(L);
 }
 
 void luaC_writebarrier(lua_State *L, GCheader *object,
@@ -587,12 +605,16 @@ static void prune_dead_thread_states(void)
 }
 
 /* MUST be async signal safe */
-static int signal_all_threads(int sig)
+static int signal_all_threads(lua_State *L, int sig)
 {
   thr_State *pt;
   pthread_t me = pthread_self();
   int nthreads = 0;
   int r;
+
+#if !BLOCK_COLLECTOR_USING_SIGNALS
+  ck_pr_store_32(&G(L)->intend_to_stop, sig == LUA_SIG_SUSPEND ? 1 : 0);
+#endif
 
   TAILQ_FOREACH(pt, &all_threads, threads) {
     if (pthread_equal(me, pt->tid)) {
@@ -602,6 +624,17 @@ static int signal_all_threads(int sig)
     if (pt->dead) {
       continue;
     }
+#if !BLOCK_COLLECTOR_USING_SIGNALS
+    if (sig == LUA_SIG_SUSPEND) {
+      ck_backoff_t backoff = CK_BACKOFF_INITIALIZER;
+
+      /* wait for thread to leave its barrier */
+      while (ck_pr_load_32(&pt->in_barrier) == 1) {
+        ck_backoff_eb(&backoff);
+      }
+    }
+#endif
+
     r = pthread_kill(pt->tid, sig);
     if (r == 0) {
       nthreads++;
@@ -615,9 +648,9 @@ static int signal_all_threads(int sig)
 }
 
 /* MUST be async signal safe */
-static void stop_all_threads(void)
+static void stop_all_threads(lua_State *L)
 {
-  signal_all_threads(LUA_SIG_SUSPEND);
+  signal_all_threads(L, LUA_SIG_SUSPEND);
   while (parked_threads < num_threads - 1) {
     sched_yield();
   }
@@ -625,9 +658,9 @@ static void stop_all_threads(void)
 
 /* caller MUST hold all_threads_lock */
 /* MUST be async signal safe */
-static int resume_threads(void)
+static int resume_threads(lua_State *L)
 {
-  signal_all_threads(LUA_SIG_RESUME);
+  signal_all_threads(L, LUA_SIG_RESUME);
   while (parked_threads) {
     sched_yield();
   }
@@ -1332,7 +1365,7 @@ static void global_collection(lua_State *L)
   if (!try_lock_all_threads()) {
     return;
   }
-  stop_all_threads();
+  stop_all_threads(L);
 //  VALGRIND_PRINTF_BACKTRACE("STOP'd threads; setting stopped flag, flipping xref\n");
 
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN
@@ -1365,7 +1398,7 @@ static void global_collection(lua_State *L)
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 #endif
 
-  resume_threads();
+  resume_threads(L);
 
   unlock_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");

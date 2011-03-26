@@ -83,6 +83,8 @@ struct thr_State {
   /* so that we can avoid deadlock during thread destruction */
   unsigned int dead;
 
+  /** indicates that the thread is in a write barrier */
+  uint32_t in_barrier;
 };
 typedef struct thr_State thr_State;
 
@@ -97,8 +99,10 @@ struct global_State {
    * lua_State */
   uint32_t isxref;
   uint32_t notxref;
-  /* if true, the world is stopped */
+  /** if true, the world is stopped */
   uint32_t stopped;
+  /** if true, we intend to stop the world */
+  uint32_t intend_to_stop;
 
   lua_Alloc2 alloc;
   void *allocdata;
