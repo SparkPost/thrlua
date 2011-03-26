@@ -656,8 +656,8 @@ static int signal_all_threads(lua_State *L, int sig)
 static void stop_all_threads(lua_State *L)
 {
   signal_all_threads(L, LUA_SIG_SUSPEND);
-  while (parked_threads < num_threads - 1) {
-    sched_yield();
+  while (ck_pr_load_32(&parked_threads) < ck_pr_load_32(&num_threads) - 1) {
+    ck_pr_stall();
   }
 }
 
@@ -666,8 +666,8 @@ static void stop_all_threads(lua_State *L)
 static int resume_threads(lua_State *L)
 {
   signal_all_threads(L, LUA_SIG_RESUME);
-  while (parked_threads) {
-    sched_yield();
+  while (ck_pr_load_32(&parked_threads)) {
+    ck_pr_stall();
   }
 }
 
