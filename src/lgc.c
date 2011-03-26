@@ -723,7 +723,6 @@ thr_State *luaC_get_per_thread(void)
   pt = pthread_getspecific(tls_key);
   if (pt == NULL) {
     pt = calloc(1, sizeof(*pt));
-    ck_sequence_init(&pt->memlock);
     pthread_setspecific(tls_key, pt);
     pt->tid = pthread_self();
 
@@ -746,16 +745,16 @@ static inline void sum_usage(struct lua_memtype_alloc_info *dest,
 int64_t luaC_count(lua_State *L)
 {
   uint32_t vers;
-  thr_State *pt;
+  GCheap *h;
   int64_t tot = 0;
 
   lock_all_threads();
-  TAILQ_FOREACH(pt, &all_threads, threads) {
+  TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     int64_t v;
     do {
-      vers = ck_sequence_read_begin(&pt->memlock);
-      v = pt->mem.bytes;
-    } while (ck_sequence_read_retry(&pt->memlock, vers));
+      vers = ck_sequence_read_begin(&h->owner->memlock);
+      v = h->owner->mem.bytes;
+    } while (ck_sequence_read_retry(&h->owner->memlock, vers));
     tot += v;
   }
   unlock_all_threads();
@@ -765,21 +764,21 @@ int64_t luaC_count(lua_State *L)
 void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data)
 {
   uint32_t vers;
-  thr_State *pt;
+  GCheap *h;
   int i;
 
   memset(data, 0, sizeof(*data));
 
   lock_all_threads();
-  TAILQ_FOREACH(pt, &all_threads, threads) {
+  TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     struct lua_memtype_alloc_info mem;
     struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 
     do {
-      vers = ck_sequence_read_begin(&pt->memlock);
-      memcpy(&mem, &pt->mem, sizeof(mem));
-      memcpy(memtype, pt->memtype, sizeof(memtype));
-    } while (ck_sequence_read_retry(&pt->memlock, vers));
+      vers = ck_sequence_read_begin(&h->owner->memlock);
+      memcpy(&mem, &h->owner->mem, sizeof(mem));
+      memcpy(memtype, h->owner->memtype, sizeof(memtype));
+    } while (ck_sequence_read_retry(&h->owner->memlock, vers));
 
     sum_usage(&data->global, &mem);
     for (i = 0; i < LUA_MEM__MAX; i++) {
@@ -844,6 +843,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   L->gch.tt = LUA_TTHREAD;
   L->gch.owner = L->heap;
   G(L) = g;
+  ck_sequence_init(&L->memlock);
 
   TAILQ_INIT(&g->all_heaps);
 
@@ -898,6 +898,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       /* threads own themselves. their creators hold an xref */
       n->heap = new_heap(n);
       n->gch.owner = n->heap;
+      ck_sequence_init(&n->memlock);
       TAILQ_INSERT_HEAD(&n->heap->objects, &n->gch, allocd);
       make_grey(n, &n->gch);
       o = &n->gch;
@@ -948,77 +949,6 @@ void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size)
   return o;
 }
 
-#if 0
-static int is_finalizable_on_close(lua_State *L, GCheader *o)
-{
-  /* Note: we ignore pinned refs in this case */
-
-  if (o->owner != L->heap) {
-    return 0;
-  }
-
-  if (o->tt == LUA_TUSERDATA && !gco2u(o)->finalized) {
-    return 1;
-  }
-  return 0;
-}
-
-static int is_non_root_on_close(lua_State *L, GCheader *o)
-{
-  if (o == &L->gch || o == &G(L)->gch) {
-    return 0;
-  }
-  return 1;
-}
-
-static void move_matching_objects_to(lua_State *L, GCheader *src, GCheader *target,
-  int (*func)(lua_State *L, GCheader *o))
-{
-  GCheader *o, *next;
-
-  next = src->next;
-  if (next == NULL) return;
-  while (next != src) {
-    o = next;
-    next = o->next;
-
-    lua_assert(o->owner == L->heapid);
-
-    if (func(L, o)) {
-      append_list(target, o);
-    }
-  }
-}
-
-
-static void claim_objects_from_list(lua_State *L,
-  lua_State *old, GCheader *list)
-{
-  if (!list->next) return;
-  while (list->next != list) {
-    GCheader *obj = list->next;
-
-    printf("claiming obj=%p owner=%d old->heapid=%d new->heapid=%d\n",
-      obj, obj->owner, old->heapid, L->heapid);
-    lua_assert(obj->owner == old->heapid);
-    ck_pr_store_32(&obj->owner, L->heapid);
-    /* make it Grey; will be freed next cycle */
-    obj->marked = (obj->marked & ~BLACKBIT) | L->black;
-    append_list(&L->Grey, obj);
-  }
-}
-
-/* When collecting a dead thread, claim the objects in its gc lists */
-static void claim_objects(lua_State *L, lua_State *old)
-{
-  claim_objects_from_list(L, old, &old->B0);
-  claim_objects_from_list(L, old, &old->B1);
-  claim_objects_from_list(L, old, &old->Weak);
-  claim_objects_from_list(L, old, &old->Grey);
-  claim_objects_from_list(L, old, &old->Finalize);
-}
-#endif
-
 static void reclaim_object(lua_State *L, GCheader *o)
 {
   TAILQ_REMOVE(&L->heap->objects, o, allocd);
@@ -1061,6 +991,7 @@ static void reclaim_object(lua_State *L, GCheader *o)
       {
         lua_State *th = gco2th(o);
         GCheader *steal, *tmp;
+        int i;
 
         if (th == G(L)->mainthread) {
           return;
@@ -1069,25 +1000,28 @@ static void reclaim_object(lua_State *L, GCheader *o)
          * need to steal its contents */
         lock_all_threads();
 
+        ck_sequence_write_begin(&th->memlock);
+        ck_sequence_write_begin(&L->memlock);
+        L->gcestimate += th->gcestimate;
+        sum_usage(&L->mem, &th->mem);
+        for (i = 0; i < LUA_MEM__MAX; i++) {
+          sum_usage(&L->memtype[i], &th->memtype[i]);
+        }
+
+        ck_sequence_write_end(&L->memlock);
+        ck_sequence_write_end(&th->memlock);
+
         TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
           TAILQ_REMOVE(&th->heap->objects, steal, allocd);
 
           steal->owner = L->heap;
           TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
         }
-        /* FIXME: accounting */
         unlock_all_threads();
 
         free(th->heap);
         th->heap = NULL;
 
-#if 0
-        lock_all_threads();
-        claim_objects(L, th);
-        if (th->prev) th->prev->next = th->next;
-        if (th->next) th->next->prev = th->prev;
-        unlock_all_threads();
-#endif
         luaE_freethread(L, th);
         break;
       }

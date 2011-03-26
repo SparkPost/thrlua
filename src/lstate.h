@@ -83,10 +83,6 @@ struct thr_State {
   /* so that we can avoid deadlock during thread destruction */
   unsigned int dead;
 
-  /* memory usage accounting */
-  ck_sequence_t memlock;
-  struct lua_memtype_alloc_info mem;
-  struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 };
 typedef struct thr_State thr_State;
 
@@ -198,6 +194,11 @@ struct lua_State {
 
   /* if not nil, encapsulates thread local storage */
   TValue tls;
+
+  /* memory usage accounting */
+  ck_sequence_t memlock;
+  struct lua_memtype_alloc_info mem;
+  struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 };
 
 

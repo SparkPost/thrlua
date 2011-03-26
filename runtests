@@ -95,16 +95,16 @@ if ($valgrind) {
           }
           print $_;
         }
-      }
-      if (m/Invalid (read|write) of size/) {
-        $bad++;
-        if (!$out) {
-          print "\n$test:\n";
-          $out = 1;
-        }
-        if (!$badmem) {
-          print "$_\n";
-          $badmem++;
+        if (m/Invalid (read|write) of size/) {
+          $bad++;
+          if (!$out) {
+            print "\n$test:\n";
+            $out = 1;
+          }
+          if (!$badmem) {
+            print "$_\n";
+            $badmem++;
+          }
         }
       }
     }

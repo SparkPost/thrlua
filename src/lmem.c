@@ -71,7 +71,6 @@ void *luaM_toobig (lua_State *L) {
 static inline void *call_allocator(lua_State *L, enum lua_memtype objtype,
   void *block, size_t oldsize, size_t size)
 {
-  thr_State *pt = luaC_get_per_thread();
   void *res;
   int64_t delta;
 
@@ -82,17 +81,17 @@ static inline void *call_allocator(lua_State *L, enum lua_memtype objtype,
   /* metrics for local collection */
   L->gcestimate += delta;
 
-  ck_sequence_write_begin(&pt->memlock);
+  ck_sequence_write_begin(&L->memlock);
 
   if (objtype < LUA_MEM__VSIZE) {
     /* fixed size allocs */
-    pt->mem.allocs += size ? 1 : -1;
-    pt->memtype[objtype].allocs += size ? 1 : -1;
+    L->mem.allocs += size ? 1 : -1;
+    L->memtype[objtype].allocs += size ? 1 : -1;
   }
 
-  pt->mem.bytes += delta;
-  pt->memtype[objtype].bytes += delta;
-  ck_sequence_write_end(&pt->memlock);
+  L->mem.bytes += delta;
+  L->memtype[objtype].bytes += delta;
+  ck_sequence_write_end(&L->memlock);
 
   return res;
 }
@@ -111,19 +110,6 @@ void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype, void *block,
   lua_assert((nsize == 0) == (block == NULL));
   return block;
 }
-
-#if 0
-LUA_API lua_Alloc lua_getallocf (lua_State *L, void **ud)
-{
-  if (ud) *ud = G(L)->allocdata;
-  return G(L)->alloc;
-}
-
-LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
-{
-  luaG_runerror(L, "it is not safe to change the allocator");
-}
-#endif
 
 void *luaM_realloc(lua_State *L, enum lua_memtype objtype,
   void *block, size_t oldsize, size_t size)

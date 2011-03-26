@@ -26,6 +26,7 @@
 #define LUA_TDEADKEY	(LAST_TAG+3)
 #define LUA_TGLOBAL (LAST_TAG+4)
 
+/* this enum saves some brainpower when debugging */
 enum lua_obj_type {
   luat_none = LUA_TNONE,
   luat_nil = LUA_TNIL,
@@ -50,9 +51,6 @@ typedef struct GCheap {
    * only remaining thread is safe to traverse (but not modify!)
    * the list */
   TAILQ_HEAD(GCheaderList, GCheader) objects;
-
-  /** Records how much memory has been allocated against this heap */
-  uint64_t allocd;
 
   /** backref to owning thread */
   struct lua_State *owner;
