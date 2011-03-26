@@ -99,10 +99,10 @@ struct global_State {
 
   /** xref bits are safe to read so long as you have locked at least one
    * lua_State */
-  uint8_t isxref;
-  uint8_t notxref;
+  uint32_t isxref;
+  uint32_t notxref;
   /* if true, the world is stopped */
-  lu_byte stopped;
+  uint32_t stopped;
 
   lua_Alloc2 alloc;
   void *allocdata;
@@ -124,6 +124,8 @@ struct global_State {
   /* if not nil, encapsulates os-thread local storage. Keys are the udata
    * associated with thr_States */
   TValue ostls;
+
+  TAILQ_HEAD(GCheapList, GCheap) all_heaps;
 
   struct lua_State *mainthread;
   /** size of additional space to allocate after each lua_State.

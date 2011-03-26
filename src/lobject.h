@@ -11,7 +11,6 @@
 #include "queue.h"
 #include "ck_pr.h"
 #include "ck_stack.h"
-typedef uint32_t scpt_atomic_t;
 
 /* tags for values visible from Lua */
 #define LAST_TAG	LUA_TTHREAD
@@ -26,6 +25,23 @@ typedef uint32_t scpt_atomic_t;
 #define LUA_TUPVAL	(LAST_TAG+2)
 #define LUA_TDEADKEY	(LAST_TAG+3)
 #define LUA_TGLOBAL (LAST_TAG+4)
+
+enum lua_obj_type {
+  luat_none = LUA_TNONE,
+  luat_nil = LUA_TNIL,
+  luat_bool = LUA_TBOOLEAN,
+  luat_ludata = LUA_TLIGHTUSERDATA,
+  luat_num = LUA_TNUMBER,
+  luat_str = LUA_TSTRING,
+  luat_table = LUA_TTABLE,
+  luat_func = LUA_TFUNCTION,
+  luat_udata = LUA_TUSERDATA,
+  luat_thread = LUA_TTHREAD,
+  luat_proto = LUA_TPROTO,
+  luat_upval = LUA_TUPVAL,
+  luat_deadkey = LUA_TDEADKEY,
+  luat_global = LUA_TGLOBAL
+};
 
 typedef struct GCheap {
   /** list of all objects allocated against this heap.
@@ -54,15 +70,21 @@ typedef struct GCheap {
   /** a stack of weak tables.
    * When we mark a table with weak keys, we add it to this stack. */
   ck_stack_t weak;
-
-  /** a stack of objects that need finalizing */
-  ck_stack_t finalize;
 } GCheap;
 
 /*
 ** Common header in struct form
 */
 typedef struct GCheader {
+  /** external reference status */
+  uint32_t xref;
+
+  /** object type */
+  enum lua_obj_type tt;
+
+  /** finalized, black, white, grey etc. */
+  lu_byte marked;
+
   /** linkage into allocd object list */
   TAILQ_ENTRY(GCheader) allocd;
 
@@ -70,17 +92,12 @@ typedef struct GCheader {
   ck_stack_entry_t instack;
 
   /** if pinned from C, count of number of pins */
-  scpt_atomic_t ref;
+  uint32_t ref;
 
   /** the owning heap */
   GCheap *owner;
 
   /** object type: LUA_TXXX */
-  lu_byte tt;
-  /** finalized, black, white, grey etc. */
-  lu_byte marked;
-  /** external reference status */
-  lu_byte xref;
 } GCheader;
 
 /*
@@ -100,7 +117,7 @@ typedef union {
 
 typedef struct lua_TValue {
   Value value;
-  int tt;
+  enum lua_obj_type tt;
 } TValue;
 
 typedef TValue *StkId;  /* index to stack elements */
@@ -170,7 +187,6 @@ typedef union Udata {
     GCheader /*struct Table*/ *metatable;
     GCheader /*struct Table*/ *env;
     size_t len;
-//    lu_byte finalized;
   } uv;
 } Udata;
 

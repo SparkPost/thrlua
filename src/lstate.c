@@ -242,10 +242,8 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
     return NULL;
   }
   L = g->mainthread;
-  /* L->black is implicitly 0, so this object is implicitly black */
   ck_pr_inc_32(&L->gch.ref);
   preinit_state(L, g);
-  g->panic = NULL;
 
   if (luaD_rawrunprotected(L, f_luaopen, NULL) != 0) {
     /* memory allocation error: free partial state */

@@ -29,18 +29,17 @@
 # define DEF_LUA_SIG_RESUME  SIGUSR2
 #endif
 
-int LUAI_EXTRASPACE = 0;
 static int LUA_SIG_SUSPEND = DEF_LUA_SIG_SUSPEND;
 static int LUA_SIG_RESUME  = DEF_LUA_SIG_RESUME;
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
 static pthread_key_t tls_key;
+
+/* we use these to track the threads so that we can stop the world */
 static pthread_mutex_t all_threads_lock; /* initialized via pthread_once */
-static scpt_atomic_t num_threads = 0;
-static scpt_atomic_t parked_threads = 0;
+static uint32_t num_threads = 0;
+static uint32_t parked_threads = 0;
 static TAILQ_HEAD(thr_StateList, thr_State)
   all_threads = TAILQ_HEAD_INITIALIZER(all_threads);
-static TAILQ_HEAD(GCheapList, GCheap)
-  all_heaps = TAILQ_HEAD_INITIALIZER(all_heaps);
 static sigset_t suspend_handler_mask;
 
 
@@ -85,9 +84,28 @@ CK_STACK_CONTAINER(GCheader, instack, GCheader_from_stack);
 
 static GCheader *pop_obj(ck_stack_t *stack)
 {
-  ck_stack_entry_t *ent = ck_stack_pop_upmc(stack);
+  ck_stack_entry_t *ent = ck_stack_pop_npsc(stack);
+  GCheader *o;
   if (!ent) return NULL;
-  return GCheader_from_stack(ent);
+  o = GCheader_from_stack(ent);
+  lua_assert(&o->instack == ent);
+  ent->next = NULL;
+  return o;
+}
+
+static void push_obj(ck_stack_t *stack, GCheader *o)
+{
+#if DEBUG_ALLOC
+  if (o->instack.next) {
+    VALGRIND_PRINTF_BACKTRACE(
+      "push stack=%p obj=%p ALREADY IN A STACK!\n", stack, o);
+  }
+#endif
+  lua_assert_obj(o->instack.next == NULL, o);
+#if DEBUG_ALLOC
+  VALGRIND_PRINTF_BACKTRACE("push stack=%p obj=%p\n", stack, o);
+#endif
+  ck_stack_push_spnc(stack, &o->instack);
 }
 
 static void removeentry(Node *n)
@@ -100,25 +118,32 @@ static void removeentry(Node *n)
 static INLINE int is_unknown_xref(lua_State *L, GCheader *o)
 {
   if ((G(L)->isxref & 3) == 1) {
-    return (ck_pr_load_8(&o->xref) & 2) == 2;
+    return (ck_pr_load_32(&o->xref) & 2) == 2;
   }
-  return (ck_pr_load_8(&o->xref) & 2) == 0;
+  return (ck_pr_load_32(&o->xref) & 2) == 0;
+}
+
+static INLINE int is_not_xref(lua_State *L, GCheader *o)
+{
+  return ck_pr_load_32(&o->xref) == ck_pr_load_32(&G(L)->notxref);
 }
 
 static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   int force)
 {
   if (lval->owner != rval->owner) {
-    ck_pr_store_8(&rval->xref, G(L)->isxref);
+    ck_pr_store_32(&rval->xref, G(L)->isxref);
   } else if (force && is_unknown_xref(L, rval)) {
-    ck_pr_store_8(&rval->xref, G(L)->notxref);
+    ck_pr_store_32(&rval->xref, G(L)->notxref);
   }
 }
 
 static INLINE void make_grey(lua_State *L, GCheader *obj)
 {
+  lua_assert_obj(obj->owner == L->heap, obj);
+  if ((obj->marked & GREYBIT) == GREYBIT) return;
   obj->marked |= GREYBIT;
-  ck_stack_push_upmc(&L->heap->grey, &obj->instack);
+  push_obj(&L->heap->grey, obj);
 }
 
 static INLINE void make_black(lua_State *L, GCheader *obj)
@@ -130,11 +155,12 @@ static INLINE void mark_object(lua_State *L, GCheader *obj)
 {
   if (L->heap != obj->owner) {
     /* external reference */
-    ck_pr_store_8(&obj->xref, G(L)->isxref);
+    ck_pr_store_32(&obj->xref, G(L)->isxref);
     return;
   }
 
   lua_assert_obj(!is_free(obj), obj);
+  lua_assert_obj(obj->owner == L->heap, obj);
 
   if (is_grey(obj) || is_black(L, obj)) {
     /** already marked */
@@ -187,10 +213,11 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
 {
   GCheader *ro = gcvalue(rvalue);
 
-  if (ro) {
-    set_xref(L, object, ro, 0);
-    mark_object(L, ro);
-  }
+  lua_assert(ro != NULL);
+  checkconsistency(rvalue);
+
+  set_xref(L, object, ro, 0);
+  mark_object(L, ro);
 
   *lvalue = ro;
 }
@@ -210,7 +237,8 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
   block_collector(&set);
   lvalue->value = rvalue->value;
   /* RACE: a global trace can trigger here and catch us pants-down
-   * wrt ->tt != value->tt */
+   * wrt ->tt != value->tt; so this section must be protected by blocking
+   * the collector */
   lvalue->tt = rvalue->tt;
   unblock_collector(&set);
 }
@@ -229,7 +257,7 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
 /* broken out into a function to allow us to suppress it from drd */
 static INLINE int is_world_stopped(lua_State *L)
 {
-  return G(L)->stopped;
+  return ck_pr_load_32(&G(L)->stopped);
 }
 
 
@@ -247,10 +275,10 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
       {
         Udata *ud = rawgco2u(o);
         if (ud->uv.metatable) {
-          traverse_obj(L, o, (GCheader*)ud->uv.metatable, objfunc);
+          traverse_obj(L, o, ud->uv.metatable, objfunc);
         }
         if (ud->uv.env) {
-          traverse_obj(L, o, (GCheader*)ud->uv.env, objfunc);
+          traverse_obj(L, o, ud->uv.env, objfunc);
         }
         break;
       }
@@ -426,7 +454,8 @@ static void grey_object(lua_State *L, GCheader *lval, GCheader *rval)
 static void blacken_object(lua_State *L, GCheader *o)
 {
   lua_assert_obj(!is_free(o), o);
-  lua_assert(o->owner == L->heap);
+  lua_assert_obj(o->owner == L->heap, o);
+  lua_assert_obj(is_grey(o) || is_black(L, o), o);
   make_black(L, o);
 
   traverse_object(L, o, grey_object);
@@ -437,10 +466,20 @@ static void blacken_object(lua_State *L, GCheader *o)
     if (o->marked & (WEAKVALBIT|WEAKKEYBIT)) {
       /* remember that it had weak bits, as we will need to fixup the table
        * contents if we collect them */
-      ck_stack_push_upmc(&L->heap->weak, &o->instack);
+      push_obj(&L->heap->weak, o);
     }
   }
 }
+
+static void propagate(lua_State *L)
+{
+  GCheader *o;
+
+  while ((o = pop_obj(&L->heap->grey)) != NULL) {
+    blacken_object(L, o);
+  }
+}
+
 
 static INLINE void lock_all_threads(void)
 {
@@ -750,15 +789,15 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data)
   unlock_all_threads();
 }
 
-static void init_heap(GCheap *h)
+static void init_heap(lua_State *L, GCheap *h)
 {
   TAILQ_INIT(&h->objects);
   ck_stack_init(&h->grey);
   ck_stack_init(&h->weak);
-  ck_stack_init(&h->finalize);
+  h->owner = L;
 
   lock_all_threads();
-  TAILQ_INSERT_HEAD(&all_heaps, h, heaps);
+  TAILQ_INSERT_HEAD(&G(L)->all_heaps, h, heaps);
   unlock_all_threads();
 }
 
@@ -766,7 +805,7 @@ static GCheap *new_heap(lua_State *L)
 {
   GCheap *h = calloc(1, sizeof(*h));
 
-  init_heap(h);
+  init_heap(L, h);
   return h;
 }
 
@@ -797,18 +836,42 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->on_state_create = p->on_state_create;
   g->on_state_finalize = p->on_state_finalize;
   g->isxref = 1; /* g->notxref is implicitly set to 0 by memset above */
-  
+
   L = (lua_State*)(g + 1);
   g->mainthread = L;
   memset(L, 0, sizeof(*L) + g->extraspace);
-  L->gch.tt = LUA_TTHREAD;
   L->heap = &g->gheap;
-  init_heap(L->heap);
+  L->gch.tt = LUA_TTHREAD;
+  L->gch.owner = L->heap;
+  G(L) = g;
+
+  TAILQ_INIT(&g->all_heaps);
+
+  init_heap(L, L->heap);
+  TAILQ_INSERT_HEAD(&L->heap->objects, &g->gch, allocd);
+  TAILQ_INSERT_HEAD(&L->heap->objects, &L->gch, allocd);
+  g->gch.owner = L->heap;
 
   return g;
 }
 
-void *luaC_newobj(lua_State *L, lu_byte tt)
+static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
+  enum lua_memtype objtype, size_t size)
+{
+  GCheader *o;
+
+  o = luaM_realloc(L, objtype, NULL, 0, size);
+  memset(o, 0, size);
+  o->owner = L->heap;
+  o->tt = tt;
+  o->marked = !L->black;
+  TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
+  make_grey(L, o);
+
+  return o;
+}
+
+void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
 {
   GCheader *o;
 
@@ -816,11 +879,7 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_realloc(L, objtype, NULL, 0, sizeof(b)); \
-      memset(o, 0, sizeof(b)); \
-      o->owner = L->heap; \
-      o->tt = a; \
-      make_grey(L, o); \
+      o = new_obj(L, tt, objtype, sizeof(b)); \
       lua_unlock(L); \
       break
     NEWIMPL(LUA_TUPVAL, UpVal, LUA_MEM_UPVAL);
@@ -835,11 +894,16 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
           sizeof(lua_State) + G(L)->extraspace);
       memset(n, 0, sizeof(lua_State) + G(L)->extraspace);
       n->gch.tt = LUA_TTHREAD;
+      G(n) = G(L);
+      /* threads own themselves. their creators hold an xref */
       n->heap = new_heap(n);
-      n->gch.owner = L->heap;
-      make_grey(L, &n->gch);
-      n->gch.xref = G(L)->isxref;
+      n->gch.owner = n->heap;
+      TAILQ_INSERT_HEAD(&n->heap->objects, &n->gch, allocd);
+      make_grey(n, &n->gch);
       o = &n->gch;
+      o->marked = !n->black;
+
+      n->gch.xref = G(L)->isxref;
 
       lua_unlock(L);
       break;
@@ -857,7 +921,7 @@ void *luaC_newobj(lua_State *L, lu_byte tt)
   return o;
 }
 
-void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size)
+void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size)
 {
   GCheader *o = NULL;
 
@@ -866,11 +930,7 @@ void *luaC_newobjv(lua_State *L, lu_byte tt, size_t size)
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = luaM_realloc(L, objtype, NULL, 0, size); \
-      memset(o, 0, size); \
-      o->owner = L->heap; \
-      o->tt = a; \
-      make_grey(L, o); \
+      o = new_obj(L, tt, objtype, size); \
       lua_unlock(L); \
       break
     NEWIMPL(LUA_TFUNCTION, Closure, LUA_MEM_FUNCTION);
@@ -1000,8 +1060,27 @@ static void reclaim_object(lua_State *L, GCheader *o)
     case LUA_TTHREAD:
       {
         lua_State *th = gco2th(o);
+        GCheader *steal, *tmp;
 
-        lua_assert(th != G(L)->mainthread);
+        if (th == G(L)->mainthread) {
+          return;
+        }
+        /* when a thread is reclaimed, the executing thread
+         * need to steal its contents */
+        lock_all_threads();
+
+        TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
+          TAILQ_REMOVE(&th->heap->objects, steal, allocd);
+
+          steal->owner = L->heap;
+          TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
+        }
+        /* FIXME: accounting */
+        unlock_all_threads();
+
+        free(th->heap);
+        th->heap = NULL;
+
 #if 0
         lock_all_threads();
         claim_objects(L, th);
@@ -1041,13 +1120,13 @@ static void reclaim_white(lua_State *L, int final_close)
 
 #if HAVE_VALGRIND && DEBUG_ALLOC
     VALGRIND_PRINTF_BACKTRACE(
-      "reclaim %s at %p (marked=%x xref=%d isxref=%d)\n",
+      "reclaim %s at %p (marked=%x isxref=%d)\n",
       lua_typename(NULL, o->tt), o, o->marked,
-      o->xref, G(L)->isxref);
+      !is_not_xref(L, o));
 #endif
 
     lua_assert(o->owner == L->heap);
-    lua_assert(final_close == 1 || o->xref == G(L)->notxref);
+    lua_assert(final_close == 1 || is_not_xref(L, o));
     lua_assert(o->ref == 0);
 
     reclaim_object(L, o);
@@ -1083,14 +1162,28 @@ static void run_finalize(lua_State *L)
 {
   GCheader *o;
 
-  while ((o = pop_obj(&L->heap->finalize)) != NULL) {
+  lua_assert(CK_STACK_FIRST(&L->heap->grey) == NULL);
 
+  TAILQ_FOREACH(o, &L->heap->objects, allocd) {
     lua_assert(o->owner == L->heap);
-    lua_assert(!is_finalized(o));
 
-    /* make it Black; will be freed next cycle */
-    make_black(L, o);
-    call_finalize(L, o);
+    if (is_black(L, o) || o->ref || !is_not_xref(L, o)) {
+      continue;
+    }
+
+    if (o->tt == LUA_TUSERDATA && !is_finalized(o)) {
+      lua_assert(!is_finalized(o));
+
+      /* make it grey; will be freed next cycle.
+       * Need to make it grey because it is an aggregate and
+       * may reference an env or a metatable. If we leave it
+       * white here, those will be deemed as white on this sweep,
+       * but because we blacken the aggregate, when we later trace,
+       * we will still have references to the now-collected env
+       * and metatables */
+      mark_object(L, o);
+      call_finalize(L, o);
+    }
   }
 }
 
@@ -1117,35 +1210,21 @@ static void whitelist_non_root(lua_State *L)
 #endif
 }
 
-static void propagate(lua_State *L)
+static void check_references(lua_State *L)
 {
   GCheader *o;
 
-  while ((o = pop_obj(&L->heap->grey)) != NULL) {
-    blacken_object(L, o);
-  }
-}
-
-static void check_references(lua_State *L)
-{
-  GCheader *o, *tmp;
-
   lua_assert(CK_STACK_FIRST(&L->heap->grey) == NULL);
 
-  TAILQ_FOREACH_SAFE(o, &L->heap->objects, allocd, tmp) {
+  TAILQ_FOREACH(o, &L->heap->objects, allocd) {
     if (is_black(L, o)) continue;
 
     lua_assert(o->owner == L->heap);
 
     /* anything explicitly ref'd from C, or that might be
      * ref'd externally is grey */
-    if (o->ref || o->xref != G(L)->notxref) {
+    if (o->ref || !is_not_xref(L, o)) {
       mark_object(L, o);
-      continue;
-    }
-
-    if (o->tt == LUA_TUSERDATA && !is_finalized(o)) {
-      ck_stack_push_upmc(&L->heap->finalize, &o->instack);
       continue;
     }
   }
@@ -1214,10 +1293,17 @@ static void fixup_weak_refs(lua_State *L)
 
 static void sanity_check_mark_status(lua_State *L)
 {
+  GCheader *o;
+  GCheap *h;
+
   /* These lists must be empty */
-  lua_assert(CK_STACK_FIRST(&L->heap->finalize) == NULL);
   lua_assert(CK_STACK_FIRST(&L->heap->weak) == NULL);
   lua_assert(CK_STACK_FIRST(&L->heap->grey) == NULL);
+
+  TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+    lua_assert_obj(o->owner == L->heap, o);
+    lua_assert_obj(!is_black(L, o), o);
+  }
 }
 
 static void local_collection(lua_State *L)
@@ -1225,13 +1311,13 @@ static void local_collection(lua_State *L)
   if (L->in_gc) {
     return; // happens during finalizers
   }
+//  printf("LOCAL marked=%x is_blac=%d\n", L->gch.marked, is_black(L, &L->gch));
   L->in_gc = 1;
 
   luaE_flush_stringtable(L);
 
   /* mark roots */
-  L->gch.marked = (L->gch.marked & ~BLACKBIT) | (!L->black);
-  mark_object(L, &L->gch);
+  make_grey(L, &L->gch);
 
   /* trace and make things grey or black */
   propagate(L);
@@ -1293,7 +1379,7 @@ static void global_collection(lua_State *L)
   ANNOTATE_IGNORE_READS_AND_WRITES_BEGIN();
 #endif
 
-  G(L)->stopped = 1;
+  ck_pr_store_32(&G(L)->stopped, 1);
 
   /* flip sense of definitive xref bit */
   if (G(L)->isxref == 1) {
@@ -1305,7 +1391,7 @@ static void global_collection(lua_State *L)
   }
 
   /* now trace all objects and fix the xref bit */
-  TAILQ_FOREACH(h, &all_heaps, heaps) {
+  TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     GCheader *o;
 
     TAILQ_FOREACH(o, &h->objects, allocd) {
@@ -1313,7 +1399,8 @@ static void global_collection(lua_State *L)
     }
   }
 
-  G(L)->stopped = 0;
+  ck_pr_store_32(&G(L)->stopped, 0);
+
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 #endif
@@ -1356,20 +1443,21 @@ LUA_API void lua_close (lua_State *L)
   lua_assert(!is_free(&L->gch));
   L->gch.ref = 1;
 
+  /* attempt a graceful first pass */
   lua_pop(L, lua_gettop(L));
   local_collection(L);
   global_collection(L);
   local_collection(L);
 
   /* force all finalizers to run */
-  TAILQ_FOREACH(h, &all_heaps, heaps) {
+  TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     TAILQ_FOREACH(o, &h->objects, allocd) {
       call_finalize(h->owner, o);
     }
   }
 
   /* now everything is garbage */
-  TAILQ_FOREACH_SAFE(h, &all_heaps, heaps, htmp) {
+  TAILQ_FOREACH_SAFE(h, &G(L)->all_heaps, heaps, htmp) {
     TAILQ_FOREACH_SAFE(o, &h->objects, allocd, n) {
       reclaim_object(L, o);
     }
