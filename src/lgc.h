@@ -30,6 +30,8 @@ LUAI_FUNC void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size);
 LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 LUAI_FUNC void luaC_checkGC(lua_State *L);
 LUAI_FUNC int64_t luaC_count(lua_State *L);
+LUAI_FUNC void luaC_fullgc (lua_State *L);
+LUAI_FUNC void luaC_localgc (lua_State *L);
 
 #endif
 /* vim:ts=2:sw=2:et:

@@ -1365,10 +1365,15 @@ void luaC_checkGC(lua_State *L)
   }
 }
 
-void luaC_fullgc (lua_State *L)
+void luaC_localgc (lua_State *L)
 {
   local_collection(L);
+}
+
+void luaC_fullgc (lua_State *L)
+{
   global_collection(L);
+  local_collection(L);
 }
 
 void luaC_move_thread(lua_State *L)

@@ -182,13 +182,13 @@ static int luaB_collectgarbage (lua_State *L) {
       "meminfo", "meminfo:global",
       "stop", "restart", "collect",
       "count", "step", "setpause",
-      "setstepmul", NULL
+      "setstepmul", "globaltrace", NULL
   };
   static const int optsnum[] = {
       LUA_MEM_SCOPE_LOCAL, LUA_MEM_SCOPE_GLOBAL,
       LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
       LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE,
-      LUA_GCSETSTEPMUL
+      LUA_GCSETSTEPMUL, LUA_GCGLOBALTRACE
   };
   int o = luaL_checkoption(L, 1, "collect", opts);
   int ex = luaL_optint(L, 2, 0);
@@ -210,7 +210,7 @@ static int luaB_collectgarbage (lua_State *L) {
     lua_createtable(L, 0, LUA_MEM__MAX + 1);
 
     lua_pushinteger(L, data.global.bytes);
-    lua_setfield(L, -2, "global");
+    lua_setfield(L, -2, "total");
     for (i = 0; i < LUA_MEM__MAX; i++) {
       if (data.bytype[i].bytes) {
         lua_pushinteger(L, data.bytype[i].bytes);

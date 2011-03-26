@@ -1115,8 +1115,13 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         break;
 
       case LUA_GCCOLLECT:
+        luaC_localgc(L);
+        break;
+
+      case LUA_GCGLOBALTRACE:
         luaC_fullgc(L);
         break;
+
       default:
         res = -1;  /* invalid option */
     }

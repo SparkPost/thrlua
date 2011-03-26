@@ -75,6 +75,44 @@ local uvm = thread.mutex();
 
 local t = {};
 
+local statkeys = {
+"callinfo",
+"function",
+"global",
+"proto",
+"proto_data",
+"stack",
+"string",
+"stringtable",
+"stringtable_node",
+"table",
+"table_node",
+"thread",
+"upval",
+"userdata",
+"zbuf",
+"total"
+};
+
+local function showmeminfo(stats)
+  for _, l in ipairs(statkeys) do
+    if stats[l] then
+      print(string.format("%18s %16d", l, stats[l]));
+    end
+  end
+end
+
+local function diffmeminfo(before, after)
+  for _, l in ipairs(statkeys) do
+    local b = before[l] or 0;
+    local a = after[l] or 0;
+    local d = b - a;
+    if d ~= 0 then
+      print(string.format("%18s %16d", l, d))
+    end
+  end
+end
+
 local function upvaltestfunc(me)
   -- want to demonstrate that increments on uv1, which are
   -- done without a mutex, may end up with indeterminate end
@@ -98,6 +136,14 @@ local function upvaltestfunc(me)
       tbl[j] = string.rep(tostring(i), i);
     end
   end
+  local before = collectgarbage 'meminfo';
+  collectgarbage 'collect'
+  local after = collectgarbage 'meminfo';
+  uvm:lock();
+  print("in thread:");
+  showmeminfo(after)
+  diffmeminfo(before, after);
+  uvm:unlock();
 end
 
 for i = 1, 4 do
@@ -107,6 +153,21 @@ end
 for _, thr in pairs(t) do
   thr:join();
 end
+local stats = collectgarbage 'meminfo';
+print("main thread:");
+showmeminfo(stats);
+stats = collectgarbage 'meminfo:global';
+print("global:");
+showmeminfo(stats);
+
+collectgarbage 'globaltrace';
+collectgarbage 'collect';
+
+local after = collectgarbage 'meminfo:global';
+print("diff: after collect:");
+diffmeminfo(stats, after);
+print("totals after collect");
+showmeminfo(after)
 
 is(uv2, 404, "steady counter value");
 cmp_ok(uv1, '<=', uv2, "unreliable value " .. uv1);
