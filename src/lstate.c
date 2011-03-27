@@ -44,11 +44,6 @@ void lua_lock(lua_State *L)
 {
   int r;
 
-  /* when entering an interpreter, ensure that the current thread
-   * is added to the list of those that will be stopped when we
-   * need to stop the world */
-  luaC_get_per_thread();
-
   do {
     r = pthread_mutex_lock(&L->lock);
   } while (r == EINTR || r == EAGAIN);
@@ -57,11 +52,18 @@ void lua_lock(lua_State *L)
     luaL_error(L, "lua_lock(%p) failed with errno %d: %s\n",
       L, r, strerror(r));
   }
+  /* when entering an interpreter, ensure that the current thread
+   * is added to the list of those that will be stopped when we
+   * need to stop the world */
+  L->pt = luaC_get_per_thread(NULL);
+
 }
 
 void lua_unlock(lua_State *L)
 {
   int r;
+
+  L->pt = NULL;
   do {
     r = pthread_mutex_unlock(&L->lock);
   } while (r == EINTR || r == EAGAIN);
@@ -107,7 +109,7 @@ static int do_tls_access(lua_State *L)
   }
   if (!strcmp(key, "_OSTLS")) {
     global_State *g = G(L);
-    thr_State *pt = luaC_get_per_thread();
+    thr_State *pt = luaC_get_per_thread(L);
 
     lua_checkstack(L, 3);
 
@@ -267,7 +269,7 @@ LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p)
   int i;
   lua_State *L;
   global_State *g;
- 
+
   g = luaC_newglobal(p);
   if (!g) {
     return NULL;

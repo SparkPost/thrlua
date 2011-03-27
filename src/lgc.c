@@ -260,7 +260,7 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
 void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue)
 {
-  thr_State *pt = luaC_get_per_thread();
+  thr_State *pt = luaC_get_per_thread(L);
 
   if (iscollectable(rvalue)) {
     GCheader *ro = gcvalue(rvalue);
@@ -879,7 +879,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   thr_State *pt;
 
   /* this performs once-init stuff */
-  pt = luaC_get_per_thread();
+  pt = luaC_get_per_thread(NULL);
 
   g = p->allocfunc(p->allocdata, LUA_MEM_GLOBAL_STATE, NULL, 0,
         sizeof(*g) + sizeof(lua_State) + p->extraspace);

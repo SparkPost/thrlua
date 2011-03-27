@@ -138,24 +138,6 @@ struct global_State {
   void (*on_state_finalize)(lua_State *L);
 };
 
-#define LUA_USE___THREAD 1
-
-LUAI_FUNC thr_State *luaC_get_per_thread_(void);
-#if LUA_USE___THREAD
-LUAI_FUNC __thread thr_State *lua_tls_State;
-#define luaC_get_per_thread_raw() lua_tls_State
-#else
-LUAI_FUNC pthread_key_t lua_tls_key;
-#define luaC_get_per_thread_raw() pthread_getspecific(lua_tls_key)
-#endif
-
-static inline thr_State *luaC_get_per_thread(void)
-{
-  thr_State *st = luaC_get_per_thread_raw();
-  if (st) return st;
-  return luaC_get_per_thread_();
-}
-
 
 /*
 ** `per thread' state
@@ -163,6 +145,8 @@ static inline thr_State *luaC_get_per_thread(void)
 struct lua_State {
   GCheader gch;
   GCheap *heap;
+  /* a cache to avoid TLS while inside the VM executor */
+  thr_State *pt;
 
   lu_byte status;
   int in_gc;
@@ -221,6 +205,27 @@ struct lua_State {
   struct lua_memtype_alloc_info mem;
   struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 };
+
+#define LUA_USE___THREAD 1
+
+LUAI_FUNC thr_State *luaC_get_per_thread_(void);
+#if LUA_USE___THREAD
+LUAI_FUNC __thread thr_State *lua_tls_State;
+#define luaC_get_per_thread_raw() lua_tls_State
+#else
+LUAI_FUNC pthread_key_t lua_tls_key;
+#define luaC_get_per_thread_raw() pthread_getspecific(lua_tls_key)
+#endif
+
+static inline thr_State *luaC_get_per_thread(lua_State *L)
+{
+  thr_State *st;
+  if (L && L->pt) return L->pt;
+  st = luaC_get_per_thread_raw();
+  if (st) return st;
+  return luaC_get_per_thread_();
+}
+
 
 
 #define G(L)	(L->l_G)

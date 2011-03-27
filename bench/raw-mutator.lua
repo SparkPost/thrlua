@@ -33,7 +33,7 @@ local es, eu = posix.gettimeofday()
 function difftime(ss, su, es, eu)
   local u = eu - su;
   local s = es - ss;
-  if u < 1 then
+  if u < 0 then
 	s = s - 1
 	u = u + 1000000
   end
