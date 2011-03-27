@@ -209,12 +209,18 @@ struct lua_longjmp {
   unsigned int line;
 };
 
+#if LUA_OS_DARWIN
+# define LUA_ASMNAME(x) x
+#else
+# define LUA_ASMNAME(x) _##x
+#endif
+
 #if LUA_ARCH_X86_64
-# define lua_do_setjmp  _lua_setjmp_amd64
-# define lua_do_longjmp _lua_longjmp_amd64
+# define lua_do_setjmp  LUA_ASMNAME(lua_setjmp_amd64)
+# define lua_do_longjmp LUA_ASMNAME(lua_longjmp_amd64)
 #elif LUA_ARCH_I386
-# define lua_do_setjmp  _lua_setjmp_i386
-# define lua_do_longjmp _lua_longjmp_i386
+# define lua_do_setjmp  LUA_ASMNAME(lua_setjmp_i386)
+# define lua_do_longjmp LUA_ASMNAME(lua_longjmp_i386)
 #endif
 #ifdef lua_do_setjmp
 extern int lua_do_setjmp(luai_jmpbuf env);

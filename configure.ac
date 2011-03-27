@@ -18,14 +18,15 @@ case $host in
 		USE___THREAD=1
 		;;
 	x86_64*linux*)
-		MD_FILES=src/amd64/*.S
 		arch=x86_64
 		USE___THREAD=1
 		;;
 	i*86*linux*)
-		MD_FILES=src/i386/*.S
 		arch=i386
 		USE___THREAD=1
+		;;
+	*darwin*)
+		arch=x86_64
 		;;
 esac
 if test "$USE___THREAD" ; then

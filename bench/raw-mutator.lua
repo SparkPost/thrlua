@@ -15,6 +15,9 @@ if not posix then
 		print("os.time is", t)
 		return t, 0;
 	end
+else
+	print "attach now"
+--	posix.sleep(10)
 end
 
 print 'starting iteration test'
