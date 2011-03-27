@@ -62,7 +62,7 @@ static sigset_t suspend_handler_mask;
 #define FREEDBIT    (1<<7)
 
 static void local_collection(lua_State *L);
-static void global_collection(lua_State *L);
+static void global_trace(lua_State *L);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
 {
@@ -890,6 +890,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->alloc = p->allocfunc;
   g->gcstepmul = LUAI_GCMUL;
   g->gcpause = LUAI_GCPAUSE;
+  g->global_trace_thresh = 10;
   g->allocdata = p->allocdata;
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
@@ -1048,6 +1049,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
   free(th->heap);
   th->heap = NULL;
+
+  ck_pr_inc_32(&G(L)->need_global_trace);
 }
 
 static void reclaim_object(lua_State *L, GCheader *o)
@@ -1064,19 +1067,6 @@ static void reclaim_object(lua_State *L, GCheader *o)
         size_t size;
 
         Closure *c = gco2cl(o);
-#if HAVE_VALGRIND && DEBUG_ALLOC
-        if (c->c.isC) {
-          VALGRIND_PRINTF("reclaiming C function %s %p\n", c->c.fname, c->c.f);
-        } else {
-          VALGRIND_PRINTF("reclaiming lua function %p proto=%p\n", o, c->l.p);
-        }
-#elif 0
-        if (c->c.isC) {
-          printf("reclaiming C function %s %p\n", c->c.fname, c->c.f);
-        } else {
-          printf("reclaiming lua function %p proto=%p xref=%x (isxref=%x notxref=%x)\n", o, c->l.p, o->xref, G(L)->isxref, G(L)->notxref);
-        }
-#endif
         size = (c->c.isC) ? sizeCclosure(c->c.nupvalues) :
           sizeLclosure(c->l.nupvalues);
         luaM_freemem(L, LUA_MEM_FUNCTION, c, size);
@@ -1153,7 +1143,11 @@ static void call_finalize(lua_State *L, GCheader *o)
     ud = rawgco2u(o);
     tm = gfasttm(G(L), gch2h(ud->uv.metatable), TM_GC);
     if (tm) {
-      /* FIXME: prevent GC, debug hooks during finalizer */
+      lu_byte hook = L->allowhook;
+
+      /* turn off hooks during finalizer */
+      L->allowhook = 0;
+
       setobj2s(L, L->top, tm);
       setuvalue(L, L->top + 1, ud);
       L->top += 2;
@@ -1162,6 +1156,7 @@ static void call_finalize(lua_State *L, GCheader *o)
         luaD_call(L, L->top - 2, 0);
       } LUAI_TRY_CATCH(L) {
       } LUAI_TRY_END(L);
+      L->allowhook = hook;
       lua_unlock(L);
     }
   }
@@ -1349,7 +1344,7 @@ static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
 
 /* Global collection must only use async-signal safe functions,
  * or it will lead to a deadlock (especially in printf) */
-static void global_collection(lua_State *L)
+static void global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
@@ -1385,6 +1380,7 @@ static void global_collection(lua_State *L)
     }
   }
 
+  ck_pr_store_32(&G(L)->need_global_trace, 0);
   ck_pr_store_32(&G(L)->stopped, 0);
 
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
@@ -1397,23 +1393,27 @@ static void global_collection(lua_State *L)
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
 }
 
-#define RANDOM_GC 1
-
 void luaC_checkGC(lua_State *L)
 {
   if (L->gcestimate >= L->thresh) {
+    if (ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) {
+      global_trace(L);
+    }
     local_collection(L);
   }
 }
 
 void luaC_localgc (lua_State *L)
 {
+  if (ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) {
+    global_trace(L);
+  }
   local_collection(L);
 }
 
 void luaC_fullgc (lua_State *L)
 {
-  global_collection(L);
+  global_trace(L);
   local_collection(L);
 }
 
@@ -1432,7 +1432,7 @@ LUA_API void lua_close (lua_State *L)
 
   /* attempt a graceful first pass */
   lua_pop(L, lua_gettop(L));
-  global_collection(L);
+  global_trace(L);
   local_collection(L);
 
   /* force all finalizers to run */

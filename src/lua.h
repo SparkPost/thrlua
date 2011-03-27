@@ -112,7 +112,8 @@ enum lua_mem_info_scope {
 void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
   enum lua_mem_info_scope scope);
 
-typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype, void *ptr, size_t osize, size_t nsize);
+typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype,
+  void *ptr, size_t osize, size_t nsize);
 
 /*
 ** basic types
@@ -299,7 +300,10 @@ LUA_API int  (lua_status) (lua_State *L);
 #define LUA_GCSTEP		5
 #define LUA_GCSETPAUSE		6
 #define LUA_GCSETSTEPMUL	7
+/** trigger a global trace and a local collection */
 #define LUA_GCGLOBALTRACE 8
+/** set a different global trace threshold */
+#define LUA_GCSETGLOBALTRACE 9
 
 LUA_API int (lua_gc) (lua_State *L, int what, int data);
 

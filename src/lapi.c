@@ -1108,18 +1108,30 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         res = luaC_count(L) & 0x3ff;
         break;
       case LUA_GCSTOP:
-      case LUA_GCRESTART:
-      case LUA_GCSTEP:
-      case LUA_GCSETPAUSE:
-      case LUA_GCSETSTEPMUL:
+        L->thresh = MAX_LUMEM;
         break;
-
+      case LUA_GCRESTART:
+        L->thresh = L->gcestimate;
+        break;
+      case LUA_GCSETPAUSE:
+        res = g->gcpause;
+        g->gcpause = data;
+        break;
+      case LUA_GCSETSTEPMUL:
+        res = g->gcstepmul;
+        g->gcstepmul = data;
+        break;
       case LUA_GCCOLLECT:
+      case LUA_GCSTEP:
         luaC_localgc(L);
         break;
 
       case LUA_GCGLOBALTRACE:
         luaC_fullgc(L);
+        break;
+      case LUA_GCSETGLOBALTRACE:
+        res = g->global_trace_thresh;
+        g->global_trace_thresh = data;
         break;
 
       default:

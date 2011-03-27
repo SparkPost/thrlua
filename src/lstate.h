@@ -103,14 +103,18 @@ struct global_State {
   uint32_t stopped;
   /** if true, we intend to stop the world */
   uint32_t intend_to_stop;
+  /** keeps track of events that indicate that a global trace may be needed.
+   * We won't trigger on every event, but instead based on a global trace
+   * threshold */
+  uint32_t need_global_trace;
+  /** the global trace threshold */
+  uint32_t global_trace_thresh;
 
   lua_Alloc2 alloc;
   void *allocdata;
   int exiting;
 
   int gcstepmul;
-  /* when memory utilization exceeds thresh, we'll trigger a collection */
-  uint64_t gcthresh;
   /* after a completed cycle, current memory * gcpause / 100 sets new thresh */
   int gcpause;
 

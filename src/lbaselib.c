@@ -182,19 +182,22 @@ static int luaB_collectgarbage (lua_State *L) {
       "meminfo", "meminfo:global",
       "stop", "restart", "collect",
       "count", "step", "setpause",
-      "setstepmul", "globaltrace", NULL
+      "setstepmul", "globaltrace",
+      "setglobaltrace",
+      NULL
   };
   static const int optsnum[] = {
       LUA_MEM_SCOPE_LOCAL, LUA_MEM_SCOPE_GLOBAL,
       LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
       LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE,
-      LUA_GCSETSTEPMUL, LUA_GCGLOBALTRACE
+      LUA_GCSETSTEPMUL, LUA_GCGLOBALTRACE,
+      LUA_GCSETGLOBALTRACE,
   };
   int o = luaL_checkoption(L, 1, "collect", opts);
   int ex = luaL_optint(L, 2, 0);
   int res;
 
-	if (o < 2) {
+  if (o < 2) {
     /* meminfo */
     struct lua_mem_usage_data data;
     int i;
@@ -224,7 +227,7 @@ static int luaB_collectgarbage (lua_State *L) {
   switch (optsnum[o]) {
     case LUA_GCCOUNT: {
       int64_t b = luaC_count(L);
-      /* the interface defines this is the number of KB, rounded up */
+      /* the interface defines this as the number of KB, rounded up */
       lua_pushnumber(L, ((b + 1024) >> 10));
       return 1;
     }
