@@ -159,9 +159,26 @@ LUA_API void *(lua_get_extra)(lua_State *L)
   return L + 1;
 }
 
-LUA_API void lua_delrefthread(lua_State *L)
+LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
 {
-  ck_pr_dec_32(&L->gch.ref);
+  bool last;
+  ck_pr_dec_32_zero(&L->gch.ref, &last);
+  if (!last) {
+    return;
+  }
+  lua_lock(L);
+  lua_pop(L, lua_gettop(L));
+  luaC_localgc(L);
+  /* that was the final ref; someone now gets to own us */
+  lua_lock(inheritor);
+  luaC_inherit_thread(inheritor, L);
+  lua_unlock(inheritor);
+  lua_unlock(L);
+}
+
+LUA_API void lua_addrefthread(lua_State *L)
+{
+  ck_pr_inc_32(&L->gch.ref);
 }
 
 LUA_API lua_State *lua_newthreadref (lua_State *L)
@@ -1125,7 +1142,6 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
       case LUA_GCSTEP:
         luaC_localgc(L);
         break;
-
       case LUA_GCGLOBALTRACE:
         luaC_fullgc(L);
         break;

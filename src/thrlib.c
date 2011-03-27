@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2010-2011 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any

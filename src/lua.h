@@ -75,17 +75,17 @@ typedef void *(*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
 #endif
 
 enum lua_memtype {
-  LUA_MEM_STRING, /* fixed size */
   LUA_MEM_STRING_TABLE_NODE, /* fixed size */
   LUA_MEM_TABLE, /* fixed size */
-  LUA_MEM_USERDATA, /* fixed size */
-  LUA_MEM_FUNCTION, /* fixed size */
   LUA_MEM_GLOBAL_STATE, /* fixed size */
   LUA_MEM_THREAD, /* fixed size */
   LUA_MEM_UPVAL, /* fixed size */
   LUA_MEM_PROTO, /* fixed size */
   LUA_MEM__VSIZE, /* symbolic; indicates start of variable sized types */
   LUA_MEM_STRING_TABLE = LUA_MEM__VSIZE,
+  LUA_MEM_FUNCTION,
+  LUA_MEM_STRING,
+  LUA_MEM_USERDATA,
   LUA_MEM_TABLE_NODES,
   LUA_MEM_ZBUF,
   LUA_MEM_STACK,
@@ -181,8 +181,31 @@ LUA_API void *(lua_get_extra)(lua_State *L);
 
 LUA_API void       (lua_close) (lua_State *L);
 LUA_API lua_State *(lua_newthread) (lua_State *L);
+
+/** Create a new lua_State sharing globals and so forth from the
+ * provided lua_State.  The returned lua_State is pinned with a refcount
+ * of 1, and is NOT referenced from the stack of original.
+ * The caller MUST use lua_delrefthread to dispose of the thread when it
+ * is no longer needed.
+ */
 LUA_API lua_State *(lua_newthreadref)(lua_State *L);
-LUA_API void      (lua_delrefthread)(lua_State *L);
+
+/** Add a reference to a lua_State.
+ * While the reference count is greater than zero, a lua_State will not
+ * be collected.
+ * Use lua_delrefthread to release a reference.
+ **/
+LUA_API void      (lua_addrefthread)(lua_State *L);
+
+/** Delete a reference from a lua_State.
+ * Since a lua_State may own objects with outstanding references, you
+ * must provide a reference to another lua_State that will take ownership
+ * of those objects when the reference count falls to zero.
+ * If you pass inheritor == NULL, then the main thread will be used.
+ * The inheriting thread will be locked while ownership is transferred;
+ * the inheriting thread must therefore be unlocked for this to succeed
+ * without deadlock. */
+LUA_API void      (lua_delrefthread)(lua_State *L, lua_State *inheritor);
 
 LUA_API lua_CFunction (lua_atpanic) (lua_State *L, lua_CFunction panicf);
 

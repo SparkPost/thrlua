@@ -6,11 +6,12 @@
 
 #define lgc_c
 #define LUA_CORE
+
+#define USING_DRD 0
 #define DEBUG_ALLOC 0
 
 #include "thrlua.h"
 
-#define USING_DRD 1
 
 #if USING_DRD
 # define INLINE /* not inline */
@@ -252,6 +253,7 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   checkconsistency(rvalue);
 
   mark_object(L, ro);
+  set_xref(L, object, ro, 0);
 
   *lvalue = ro;
 }
@@ -264,7 +266,7 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
 
   if (iscollectable(rvalue)) {
     GCheader *ro = gcvalue(rvalue);
-
+    set_xref(L, object, ro, 0);
     mark_object(L, ro);
   }
 
@@ -281,6 +283,7 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
   GCheader **lvalue, GCheader *rvalue)
 {
   if (rvalue) {
+    set_xref(L, object, rvalue, 0);
     mark_object(L, rvalue);
   }
 
@@ -1124,9 +1127,10 @@ static void reclaim_white(lua_State *L, int final_close)
       !is_not_xref(L, o));
 #endif
 
-    lua_assert(o->owner == L->heap);
-    lua_assert(final_close == 1 || is_not_xref(L, o));
-    lua_assert(o->ref == 0);
+    lua_assert_obj(!is_grey(o), o);
+    lua_assert_obj(o->owner == L->heap, o);
+    lua_assert_obj(final_close == 1 || is_not_xref(L, o), o);
+    lua_assert_obj(o->ref == 0, o);
 
     reclaim_object(L, o);
   }

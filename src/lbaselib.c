@@ -203,9 +203,21 @@ static int luaB_collectgarbage (lua_State *L) {
     int i;
     /* order depends on the lua_memtype enum */
     static const char *const labels[] = {
-      "string", "stringtable_node", "table", "userdata", "function",
-      "global", "thread", "upval", "proto", "stringtable", "table_node",
-      "zbuf", "stack", "callinfo", "proto_data"
+      "stringtable_node",
+      "table",
+      "global",
+      "thread",
+      "upval",
+      "proto",
+      "stringtable",
+      "function",
+      "string",
+      "userdata",
+      "table_node",
+      "zbuf",
+      "stack",
+      "callinfo",
+      "proto_data"
     };
 
     lua_mem_get_usage(L, &data, optsnum[o]);
