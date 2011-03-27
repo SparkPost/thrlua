@@ -9,11 +9,31 @@ case $host in
 	i386*solaris*)
 		CFLAGS="$CFLAGS -m64 -D__x86_64__"
 		CK_PROFILE=x86_64
+		arch=x86_64
+		USE___THREAD=1
 		;;
 	sparc*solaris*)
 		CK_PROFILE=sparcv9
+		arch=sparcv9
+		USE___THREAD=1
+		;;
+	x86_64*linux*)
+		MD_FILES=src/amd64/*.S
+		arch=x86_64
+		USE___THREAD=1
+		;;
+	i*86*linux*)
+		MD_FILES=src/i386/*.S
+		arch=i386
+		USE___THREAD=1
 		;;
 esac
+if test "$USE___THREAD" ; then
+	AC_DEFINE(LUA_USE___THREAD, 1, [have __thread tls])
+fi
+AM_CONDITIONAL(ARCH_X86_64, test "$arch" = x86_64)
+AM_CONDITIONAL(ARCH_I386, test "$arch" = i386)
+AM_CONDITIONAL(ARCH_SPARCV9, test "$arch" = sparcv9)
 case $host in
 	*solaris*)
 		CFLAGS="$CFLAGS -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -std=gnu99"

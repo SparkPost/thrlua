@@ -206,8 +206,6 @@ struct lua_State {
   struct lua_memtype_alloc_info memtype[LUA_MEM__MAX];
 };
 
-#define LUA_USE___THREAD 1
-
 LUAI_FUNC thr_State *luaC_get_per_thread_(void);
 #if LUA_USE___THREAD
 LUAI_FUNC __thread thr_State *lua_tls_State;

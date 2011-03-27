@@ -876,10 +876,9 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   pthread_condattr_t cattr;
   pthread_mutexattr_t mattr;
   lua_State *L;
-  thr_State *pt;
 
   /* this performs once-init stuff */
-  pt = luaC_get_per_thread(NULL);
+  pthread_once(&tls_init, make_tls_key);
 
   g = p->allocfunc(p->allocdata, LUA_MEM_GLOBAL_STATE, NULL, 0,
         sizeof(*g) + sizeof(lua_State) + p->extraspace);

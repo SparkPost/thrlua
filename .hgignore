@@ -41,3 +41,4 @@ ck/src/*.o
 ck/src/*.a
 ck/src/*.so
 *.vglog
+callgrind.out*

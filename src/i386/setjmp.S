@@ -18,10 +18,10 @@
 
         .text
 
-        /* _momo_setjmp_i386(__jmp_buf env) */
-.globl _momo_setjmp_i386
+        /* _lua_setjmp_i386(__jmp_buf env) */
+.globl _lua_setjmp_i386
         .align 4
-_momo_setjmp_i386:
+_lua_setjmp_i386:
         movl 4(%esp), %eax
 
         /*
@@ -43,10 +43,10 @@ _momo_setjmp_i386:
 
 /****************************************************************/
 
-        /* _momo_longjmp_i386(__jmp_buf env, int val) */
-.globl _momo_longjmp_i386
+        /* _lua_longjmp_i386(__jmp_buf env, int val) */
+.globl _lua_longjmp_i386
         .align 4
-_momo_longjmp_i386:
+_lua_longjmp_i386:
         /* First argument is jmp_buf */
         movl 4(%esp), %ecx
         /* Second argument is return value */

@@ -209,11 +209,20 @@ struct lua_longjmp {
   unsigned int line;
 };
 
-#ifdef __x86_64__
+#if LUA_ARCH_X86_64
 # define lua_do_setjmp  _lua_setjmp_amd64
 # define lua_do_longjmp _lua_longjmp_amd64
+#elif LUA_ARCH_I386
+# define lua_do_setjmp  _lua_setjmp_i386
+# define lua_do_longjmp _lua_longjmp_i386
+#endif
+#ifdef lua_do_setjmp
+extern int lua_do_setjmp(luai_jmpbuf env);
+extern void lua_do_longjmp(luai_jmpbuf env, int val)
+  LUA_NORETURN;
 #else
-# error boo
+# define lua_do_setjmp  setjmp
+# define lua_do_longjmp longjmp
 #endif
 
 /* NOTE: undefined (certainly bad!) behavior will result if the function
