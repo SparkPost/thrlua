@@ -64,7 +64,7 @@ static void *thrlib_thread_func(void *arg)
   }
 
   lua_pop(L, lua_gettop(L));
-  luaC_localgc(L);
+  luaC_localgc(L, 1);
 
   /* we exit leaving a ref to the lua_State; whoever joins will un-pin
    * and inherit that thread */

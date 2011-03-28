@@ -168,7 +168,7 @@ LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
   }
   lua_lock(L);
   lua_pop(L, lua_gettop(L));
-  luaC_localgc(L);
+  luaC_localgc(L, 1);
   /* that was the final ref; someone now gets to own us */
   lua_lock(inheritor);
   luaC_inherit_thread(inheritor, L);
@@ -269,16 +269,13 @@ LUA_API void lua_replace (lua_State *L, int idx)
     api_checkvalidindex(L, o);
     if (idx == LUA_ENVIRONINDEX) {
       Closure *func = curr_func(L);
-      api_check(L, ttistable(L->top - 1)); 
+      api_check(L, ttistable(L->top - 1));
       luaC_writebarrierov(L, &func->gch,
           &func->c.env, L->top - 1);
-      //func->c.env = hvalue(L->top - 1);
-      //luaC_barrier(L, func, L->top - 1);
     }
     else {
       if (idx < LUA_GLOBALSINDEX) {
         /* function upvalue? */
-        //      luaC_barrier(L, curr_func(L), L->top - 1);
         luaC_writebarriervv(L, &curr_func(L)->gch, o, L->top - 1);
       } else {
         setobj(L, o, L->top - 1);
@@ -614,10 +611,8 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
     L->top -= n;
     while (n--) {
       luaC_writebarriervv(L, &cl->gch, &cl->c.upvalue[n], L->top+n);
-      //    setobj2n(L, &cl->c.upvalue[n], L->top+n);
     }
     setclvalue(L, L->top, cl);
-    //  lua_assert(iswhite(obj2gco(cl)));
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
@@ -914,6 +909,8 @@ LUA_API int lua_setmetatable (lua_State *L, int objindex) {
           break;
         }
       default:
+        /* I'm not a big fan of the casts here, but such is life.
+         * I would normally do &mt->gch, but "mt" may be NULL. */
         luaC_writebarrier(L, &G(L)->gch,
           (GCheader**)&G(L)->mt[ttype(obj)], (GCheader*)mt);
         break;
@@ -1141,11 +1138,13 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         g->gcstepmul = data;
         break;
       case LUA_GCCOLLECT:
+        res = luaC_localgc(L, 1);
+        break;
       case LUA_GCSTEP:
-        luaC_localgc(L);
+        res = luaC_localgc(L, 0);
         break;
       case LUA_GCGLOBALTRACE:
-        luaC_fullgc(L);
+        res = luaC_fullgc(L);
         break;
       case LUA_GCSETGLOBALTRACE:
         res = g->global_trace_thresh;
@@ -1202,6 +1201,59 @@ LUA_API int lua_next (lua_State *L, int idx) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
   return more;
+}
+
+LUA_API void lua_pushobjref(lua_State *L, void *ref)
+{
+  GCheader *obj = ref;
+
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    if (ref) {
+      luaC_writebarriervo(L, &L->gch, L->top, obj);
+      api_incr_top(L);
+    } else {
+      lua_pushnil(L);
+    }
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+}
+
+LUA_API void *lua_addrefobj(lua_State *L, int index)
+{
+  StkId t;
+  GCheader *obj = NULL;
+
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    t = index2adr(L, index);
+    if (iscollectable(t)) {
+      obj = gcvalue(t);
+      ck_pr_inc_32(&obj->ref);
+    }
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+  return obj;
+}
+
+LUA_API void lua_delrefobj(lua_State *L, void *ref)
+{
+  if (ref) {
+    GCheader *obj = ref;
+    bool last;
+
+    ck_pr_dec_32_zero(&obj->ref, &last);
+    if (L && last) {
+      lua_lock(L);
+      LUAI_TRY_BLOCK(L) {
+        luaC_checkGC(L);
+      } LUAI_TRY_FINALLY(L) {
+        lua_unlock(L);
+      } LUAI_TRY_END(L);
+    }
+  }
 }
 
 
@@ -1292,8 +1344,6 @@ LUA_API const char *lua_setupvalue (lua_State *L, int funcindex, int n) {
     if (name) {
       L->top--;
       luaC_writebarriervv(L, &f->gch, val, L->top);
-      //    setobj(L, val, L->top);
-      //    luaC_barrier(L, clvalue(fi), L->top);
     }
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);

@@ -24,14 +24,16 @@ LUAI_FUNC void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue);
 LUAI_FUNC void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader **lvalue, const TValue *rvalue);
+LUAI_FUNC void luaC_writebarriervo(lua_State *L, GCheader *object,
+  TValue *lvalue, GCheader *rvalue);
 
 LUAI_FUNC void *luaC_newobj(lua_State *L, enum lua_obj_type tt);
 LUAI_FUNC void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size);
 LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 LUAI_FUNC void luaC_checkGC(lua_State *L);
 LUAI_FUNC int64_t luaC_count(lua_State *L);
-LUAI_FUNC void luaC_fullgc (lua_State *L);
-LUAI_FUNC void luaC_localgc (lua_State *L);
+LUAI_FUNC int luaC_fullgc (lua_State *L);
+LUAI_FUNC int luaC_localgc (lua_State *L, int greedy);
 
 #endif
 /* vim:ts=2:sw=2:et:

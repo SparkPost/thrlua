@@ -62,7 +62,7 @@ static sigset_t suspend_handler_mask;
 #define FINALBIT    (1<<4)
 #define FREEDBIT    (1<<7)
 
-static void local_collection(lua_State *L);
+static int local_collection(lua_State *L);
 static void global_trace(lua_State *L);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
@@ -256,6 +256,23 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   set_xref(L, object, ro, 0);
 
   *lvalue = ro;
+}
+
+void luaC_writebarriervo(lua_State *L, GCheader *object,
+  TValue *lvalue, GCheader *rvalue)
+{
+  thr_State *pt = luaC_get_per_thread(L);
+
+  set_xref(L, object, rvalue, 0);
+  mark_object(L, rvalue);
+
+  block_collector(L, pt);
+  lvalue->value.gc = rvalue;
+  /* RACE: a global trace can trigger here and catch us pants-down
+   * wrt ->tt != value->tt; so this section must be protected by blocking
+   * the collector */
+  lvalue->tt = rvalue->tt;
+  unblock_collector(L, pt);
 }
 
 
@@ -1112,9 +1129,10 @@ static void reclaim_object(lua_State *L, GCheader *o)
   }
 }
 
-static void reclaim_white(lua_State *L, int final_close)
+static int reclaim_white(lua_State *L, int final_close)
 {
   GCheader *o, *tmp;
+  int reclaimed = 0;
 
   TAILQ_FOREACH_SAFE(o, &L->heap->objects, allocd, tmp) {
 
@@ -1133,7 +1151,10 @@ static void reclaim_white(lua_State *L, int final_close)
     lua_assert_obj(o->ref == 0, o);
 
     reclaim_object(L, o);
+    reclaimed++;
   }
+
+  return reclaimed;
 }
 
 static void call_finalize(lua_State *L, GCheader *o)
@@ -1291,10 +1312,12 @@ static void sanity_check_mark_status(lua_State *L)
   }
 }
 
-static void local_collection(lua_State *L)
+static int local_collection(lua_State *L)
 {
+  int reclaimed;
+
   if (L->in_gc) {
-    return; // happens during finalizers
+    return 0; // happens during finalizers
   }
 //  printf("LOCAL marked=%x is_blac=%d\n", L->gch.marked, is_black(L, &L->gch));
   L->in_gc = 1;
@@ -1322,7 +1345,7 @@ static void local_collection(lua_State *L)
   fixup_weak_refs(L);
 
   /* and now we can free whatever is left in White */
-  reclaim_white(L, 0);
+  reclaimed = reclaim_white(L, 0);
 
   /* White is the new Black */
   L->black = !L->black;
@@ -1333,6 +1356,7 @@ static void local_collection(lua_State *L)
   L->thresh = L->gcestimate / 100 * G(L)->gcpause;
 
   L->in_gc = 0;
+  return reclaimed;
 }
 
 static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
@@ -1407,18 +1431,38 @@ void luaC_checkGC(lua_State *L)
   }
 }
 
-void luaC_localgc (lua_State *L)
+int luaC_localgc (lua_State *L, int greedy)
 {
+  int reclaimed = 0;
+  int x = 0;
+
   if (ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) {
     global_trace(L);
   }
-  local_collection(L);
+  if (!greedy) {
+    return local_collection(L);
+  }
+  do {
+
+    while ((x = local_collection(L)) > 0) {
+      reclaimed += x;
+    }
+
+    /* we may now find that some of the greys are now
+     * white, so do another pass */
+    x = local_collection(L);
+    if (x) {
+      reclaimed += x;
+    }
+  } while (x);
+
+  return reclaimed;
 }
 
-void luaC_fullgc (lua_State *L)
+int luaC_fullgc (lua_State *L)
 {
   global_trace(L);
-  local_collection(L);
+  return luaC_localgc(L, 1);
 }
 
 /* The semantics of lua_close are to free up everything associated

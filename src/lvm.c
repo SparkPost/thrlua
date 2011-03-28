@@ -524,8 +524,6 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       case OP_SETUPVAL: {
         UpVal *uv = cl->upvals[GETARG_B(i)];
         luaC_writebarriervv(L, &uv->gch, uv->v, ra);
-//        setobj(L, uv->v, ra);
-//        luaC_barrier(L, uv, ra);
         continue;
       }
       case OP_SETTABLE: {

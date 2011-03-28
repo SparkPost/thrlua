@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2010-2011 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any
@@ -96,20 +96,20 @@ static inline void setnilvalue(TValue *obj)
 
 static inline void setnvalue(TValue *obj, lua_Number n)
 {
-  obj->value.n = n;
   obj->tt = LUA_TNUMBER;
+  obj->value.n = n;
 }
 
 static inline void setpvalue(TValue *obj, void *ud)
 {
-  obj->value.p = ud;
   obj->tt = LUA_TLIGHTUSERDATA;
+  obj->value.p = ud;
 }
 
 static inline void setbvalue(TValue *obj, int b)
 {
-  obj->value.b = b;
   obj->tt = LUA_TBOOLEAN;
+  obj->value.b = b;
 }
 
 #if 0
@@ -129,43 +129,37 @@ static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
 
 static inline void setsvalue(lua_State *L, TValue *obj, TString *str)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &str->tsv.gch);
-  obj->tt = LUA_TSTRING;
+  luaC_writebarriervo(L, &L->gch, obj, &str->tsv.gch);
   checkliveness(G(L), obj);
 }
 
 static inline void setuvalue(lua_State *L, TValue *obj, Udata *ud)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &ud->uv.gch);
-  obj->tt = LUA_TUSERDATA;
+  luaC_writebarriervo(L, &L->gch, obj, &ud->uv.gch);
   checkliveness(G(L), obj);
 }
 
 static inline void setthvalue(lua_State *L, TValue *obj, lua_State *thr)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &thr->gch);
-  obj->tt = LUA_TTHREAD;
+  luaC_writebarriervo(L, &L->gch, obj, &thr->gch);
   checkliveness(G(L), obj);
 }
 
 static inline void setclvalue(lua_State *L, TValue *obj, Closure *cl)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &cl->gch);
-  obj->tt = LUA_TFUNCTION;
+  luaC_writebarriervo(L, &L->gch, obj, &cl->gch);
   checkliveness(G(L), obj);
 }
 
 static inline void sethvalue(lua_State *L, TValue *obj, Table *t)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &t->gch);
-  obj->tt = LUA_TTABLE;
+  luaC_writebarriervo(L, &L->gch, obj, &t->gch);
   checkliveness(G(L), obj);
 }
 
 static inline void setptvalue(lua_State *L, TValue *obj, Proto *p)
 {
-  luaC_writebarrier(L, &L->gch, &obj->value.gc, &p->gch);
-  obj->tt = LUA_TPROTO;
+  luaC_writebarriervo(L, &L->gch, obj, &p->gch);
   checkliveness(G(L), obj);
 }
 

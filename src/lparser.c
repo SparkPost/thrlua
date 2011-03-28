@@ -131,7 +131,6 @@ static int registerlocalvar (LexState *ls, TString *varname) {
   while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL;
   luaC_writebarrier(ls->L, &f->gch,
     &f->locvars[fs->nlocvars].varname, &varname->tsv.gch);
-//  luaC_objbarrier(ls->L, f, varname);
   return fs->nlocvars++;
 }
 
@@ -301,8 +300,6 @@ static void pushclosure (LexState *ls, FuncState *func, expdesc *v) {
   while (oldsize < f->sizep) f->p[oldsize++] = NULL;
   luaC_writebarrier(ls->L, &f->gch, (GCheader**)&f->p[fs->np], &func->f->gch);
   fs->np++;
-//  f->p[fs->np++] = func->f;
-//  luaC_objbarrier(ls->L, f, func->f);
   init_exp(v, VRELOCABLE, luaK_codeABx(fs, OP_CLOSURE, 0, fs->np-1));
   for (i=0; i<func->f->nups; i++) {
     OpCode o = (func->upvalues[i].k == VLOCAL) ? OP_MOVE : OP_GETUPVAL;

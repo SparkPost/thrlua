@@ -197,6 +197,33 @@ LUA_API lua_State *(lua_newthreadref)(lua_State *L);
  **/
 LUA_API void      (lua_addrefthread)(lua_State *L);
 
+/** Pin a reference to the object at the specified stack index.
+ *
+ * If the specified stack index is not a collectable type, returns
+ * NULL.
+ *
+ * Otherwise, returns a local reference to the object, preventing it
+ * from being collected until all outstanding pinned local references
+ * are released.
+ *
+ * When you have finished using the reference, you must unpin it using
+ * lua_delrefobj().
+ */
+LUA_API void *lua_addrefobj(lua_State *L, int index);
+
+/** Un-pin a reference from an object returned from lua_addrefobj.
+ * After you have un-pinned the reference, you must assume that it
+ * is no longer valid to pass to any other functions.
+ */
+LUA_API void lua_delrefobj(lua_State *L, void *ref);
+
+/** Push a reference on to the stack.
+ *
+ * The reference must be a valid reference returned from lua_addrefobj.
+ */
+LUA_API void lua_pushobjref(lua_State *L, void *ref);
+
+
 /** Delete a reference from a lua_State.
  * Since a lua_State may own objects with outstanding references, you
  * must provide a reference to another lua_State that will take ownership
