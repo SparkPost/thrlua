@@ -903,17 +903,19 @@ LUA_API int lua_setmetatable (lua_State *L, int objindex) {
         {
           Table *h;
           h = hvalue(obj);
-          luaC_writebarrier(L, &h->gch, &h->metatable, &mt->gch);
+          luaC_writebarrier(L, &h->gch, &h->metatable, (GCheader*)mt);
           break;
         }
       case LUA_TUSERDATA:
         {
           Udata *ud = rawuvalue(obj);
-          luaC_writebarrier(L, &ud->uv.gch, &ud->uv.metatable, &mt->gch);
+          luaC_writebarrier(L, &ud->uv.gch, &ud->uv.metatable,
+            (GCheader*)mt);
           break;
         }
       default:
-        G(L)->mt[ttype(obj)] = mt;
+        luaC_writebarrier(L, &G(L)->gch,
+          (GCheader**)&G(L)->mt[ttype(obj)], (GCheader*)mt);
         break;
     }
     L->top--;
