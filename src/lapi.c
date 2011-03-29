@@ -167,7 +167,7 @@ LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
     return;
   }
   lua_lock(L);
-  lua_pop(L, lua_gettop(L));
+  lua_settop(L, 0);
   luaC_localgc(L, 1);
   /* that was the final ref; someone now gets to own us */
   lua_lock(inheritor);

@@ -63,7 +63,7 @@ static void *thrlib_thread_func(void *arg)
     printf("thread pcall failed with status %d\n", st);
   }
 
-  lua_pop(L, lua_gettop(L));
+  lua_settop(L, 0);
   luaC_localgc(L, 1);
 
   /* we exit leaving a ref to the lua_State; whoever joins will un-pin

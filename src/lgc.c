@@ -1480,7 +1480,7 @@ LUA_API void lua_close (lua_State *L)
   L->gch.ref = 1;
 
   /* attempt a graceful first pass */
-  lua_pop(L, lua_gettop(L));
+  lua_settop(L, 0);
   global_trace(L);
   local_collection(L);
 
