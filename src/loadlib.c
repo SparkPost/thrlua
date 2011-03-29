@@ -319,10 +319,16 @@ static int ll_loadlib (lua_State *L) {
 
 
 static int readable (const char *filename) {
+#if 0
+  /* Solaris has broken stdio that cannot be relied upon in long running
+   * processes that work with lots of files */
   FILE *f = fopen(filename, "r");  /* try to open file */
   if (f == NULL) return 0;  /* open failed */
   fclose(f);
   return 1;
+#else
+  return access(filename, R_OK) == 0 ? 1 : 0;
+#endif
 }
 
 
