@@ -54,8 +54,8 @@ error_like(function () assert(false, nil) end,
 
 is(collectgarbage('stop'), 0, "function collectgarbage 'stop/restart/collect'")
 is(collectgarbage('restart'), 0)
-is(collectgarbage('collect'), 0)
-is(collectgarbage(), 0)
+cmp_ok(collectgarbage('collect'), ">=", 0)
+cmp_ok(collectgarbage(), ">=", 0)
 
 type_ok(collectgarbage('count'), 'number', "function collectgarbage 'count'")
 
