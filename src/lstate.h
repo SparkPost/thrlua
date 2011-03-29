@@ -140,6 +140,8 @@ struct global_State {
   void (*on_state_create)(lua_State *L);
   /** called when each lua_State is finalized */
   void (*on_state_finalize)(lua_State *L);
+  /** if not NULL, replaces core ll_loadfunc */
+  int (*loadfunc)(lua_State *L, const char *path, const char *sym);
 };
 
 

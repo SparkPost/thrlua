@@ -27,8 +27,8 @@
 
 
 /* error codes for ll_loadfunc */
-#define ERRLIB		1
-#define ERRFUNC		2
+#define ERRLIB		LUA_LOADFUNC_ERR_LIB
+#define ERRFUNC		LUA_LOADFUNC_ERR_FUNC
 
 #define setprogdir(L)		((void)0)
 
@@ -281,7 +281,13 @@ static int gctm (lua_State *L) {
 
 
 static int ll_loadfunc (lua_State *L, const char *path, const char *sym) {
-  void **reg = ll_register(L, path);
+  void **reg;
+
+  if (G(L)->loadfunc) {
+    return G(L)->loadfunc(L, path, sym);
+  }
+
+  reg = ll_register(L, path);
   if (*reg == NULL) *reg = ll_load(L, path);
   if (*reg == NULL)
     return ERRLIB;  /* unable to load library */

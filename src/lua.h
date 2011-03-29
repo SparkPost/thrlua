@@ -19,8 +19,8 @@
 # define LUA_NORETURN /* nothing */
 #endif
 
-#define LUA_VERSION	"rcLua 5.1"
-#define LUA_RELEASE	"rcLua 5.1.4"
+#define LUA_VERSION	"thrLua 5.1"
+#define LUA_RELEASE	"thrLua 5.1.4"
 #define LUA_VERSION_NUM	501
 #define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2011 Message Systems, Inc"
 #define LUA_AUTHORS 	"R. Ierusalimschy, L. H. de Figueiredo & W. Celes"
@@ -174,6 +174,16 @@ struct lua_StateParams {
   void (*on_state_create)(lua_State *L);
   /** called when each lua_State is finalized */
   void (*on_state_finalize)(lua_State *L);
+  /** called when the runtime needs to dlopen and dlsym.
+   * Returns:
+   * LUA_LOADFUNC_SUCCESS and pushes a C closure on the stack on success.
+   * LUA_LOADFUNC_ERR_LIB and pushes errmsg on stack on error opening lib.
+   * LUA_LOADFUNC_ERR_FUNC and pushes errmsg on stack on error finding func.
+   */
+  int (*loadfunc)(lua_State *L, const char *path, const char *sym);
+#define LUA_LOADFUNC_SUCCESS 0
+#define LUA_LOADFUNC_ERR_LIB 1
+#define LUA_LOADFUNC_ERR_FUNC 2
 };
 
 LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p);

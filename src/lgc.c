@@ -915,6 +915,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
   g->on_state_finalize = p->on_state_finalize;
+  g->loadfunc = p->loadfunc;
   g->isxref = 1; /* g->notxref is implicitly set to 0 by memset above */
 
   L = (lua_State*)(g + 1);

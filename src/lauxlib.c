@@ -553,6 +553,11 @@ static const char *getF (lua_State *L, void *ud, size_t *size)
     return lf->buff;
   }
   res = read(lf->fd, lf->buff, sizeof(lf->buff));
+  if (res == 0) {
+    *size = 0;
+    lf->err = 0;
+    return NULL;
+  }
   if (res > 0) {
     *size = res;
     lf->err = 0;
