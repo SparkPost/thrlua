@@ -49,8 +49,9 @@ void lua_lock(lua_State *L)
   } while (r == EINTR || r == EAGAIN);
 
   if (r) {
-    luaL_error(L, "lua_lock(%p) failed with errno %d: %s\n",
+    fprintf(stderr, "lua_lock(%p) failed with errno %d: %s\n",
       L, r, strerror(r));
+    abort();
   }
   /* when entering an interpreter, ensure that the current thread
    * is added to the list of those that will be stopped when we
@@ -68,8 +69,9 @@ void lua_unlock(lua_State *L)
     r = pthread_mutex_unlock(&L->lock);
   } while (r == EINTR || r == EAGAIN);
   if (r) {
-    luaL_error(L, "lua_unlock(%p) failed with errno %d: %s\n",
+    fprintf(stderr, "lua_unlock(%p) failed with errno %d: %s\n",
       L, r, strerror(r));
+    abort();
   }
 }
 
@@ -233,6 +235,7 @@ void luaE_flush_stringtable(lua_State *L)
       luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
     }
   }
+  L->strt.nuse = 0;
 }
 
 

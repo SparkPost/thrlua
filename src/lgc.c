@@ -492,7 +492,7 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
     default:
 #if HAVE_VALGRIND
       VALGRIND_PRINTF_BACKTRACE("marking %s not implemented o=%p\n",
-          lua_typename(NULL, o->tt), o);
+          lua_typename(L, o->tt), o);
 #endif
       fprintf(stderr, "marking for tt=%d is not implemented\n", o->tt);
       abort();
@@ -1316,6 +1316,8 @@ static void sanity_check_mark_status(lua_State *L)
 static int local_collection(lua_State *L)
 {
   int reclaimed;
+  int i;
+  struct stringtable_node *n;
 
   if (L->in_gc) {
     return 0; // happens during finalizers
@@ -1323,7 +1325,23 @@ static int local_collection(lua_State *L)
 //  printf("LOCAL marked=%x is_blac=%d\n", L->gch.marked, is_black(L, &L->gch));
   L->in_gc = 1;
 
-  luaE_flush_stringtable(L);
+  /* prune out excess string table entries.
+   * Since we don't know which ones are "best" to prune,
+   * we remove the head of each chain and repeat until we're
+   * below our threshold */
+  for (i = 0; L->strt.nuse > 1024 && i < L->strt.size; i++) {
+    if (L->strt.hash[i]) {
+      n = L->strt.hash[i];
+      L->strt.hash[i] = n->next;
+      luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+    }
+  }
+  /* anything still left in the string table is still reachable */
+  for (i = 0; i < L->strt.size; i++) {
+    for (n = L->strt.hash[i]; n; n = n->next) {
+      make_grey(L, &n->str->tsv.gch);
+    }
+  }
 
   /* mark roots */
   make_grey(L, &L->gch);
