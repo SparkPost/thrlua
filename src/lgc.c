@@ -1326,16 +1326,50 @@ static int local_collection(lua_State *L)
   L->in_gc = 1;
 
   /* prune out excess string table entries.
-   * Since we don't know which ones are "best" to prune,
-   * we remove the head of each chain and repeat until we're
+   * We don't want to be too aggressive, as we'd like to see some benefit
+   * from string interning.
+   * First pass is to find strings that are large and flush them out */
+  for (i = 0; i < L->strt.size; i++) {
+    struct stringtable_node *p;
+
+    if (!L->strt.hash[i]) continue;
+
+    p = NULL;
+    n = L->strt.hash[i];
+    while (n) {
+      if (n->str->tsv.len < 128) {
+        p = n;
+        n = n->next;
+        continue;
+      }
+      /* "too big" */
+      if (p) {
+        p->next = n->next;
+      } else {
+        L->strt.hash[i] = n->next;
+      }
+      luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+      L->strt.nuse--;
+      if (p) {
+        n = p->next;
+      } else {
+        n = L->strt.hash[i];
+      }
+    }
+  }
+
+  /* Second pass:
+   * We remove the head of each chain and repeat until we're
    * below our threshold */
-  for (i = 0; L->strt.nuse > 1024 && i < L->strt.size; i++) {
+  for (i = 0; L->strt.nuse > 128 && i < L->strt.size; i++) {
     if (L->strt.hash[i]) {
       n = L->strt.hash[i];
       L->strt.hash[i] = n->next;
       luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+      L->strt.nuse--;
     }
   }
+
   /* anything still left in the string table is still reachable */
   for (i = 0; i < L->strt.size; i++) {
     for (n = L->strt.hash[i]; n; n = n->next) {
