@@ -20,7 +20,7 @@
 #endif
 
 #define LUA_VERSION	"thrLua 5.1"
-#define LUA_RELEASE	"thrLua 5.1.4"
+#define LUA_RELEASE	"thrLua 5.1.5"
 #define LUA_VERSION_NUM	501
 #define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2011 Message Systems, Inc"
 #define LUA_AUTHORS 	"R. Ierusalimschy, L. H. de Figueiredo & W. Celes"
