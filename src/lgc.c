@@ -7,11 +7,7 @@
 #define lgc_c
 #define LUA_CORE
 
-#define USING_DRD 0
-#define DEBUG_ALLOC 0
-
 #include "thrlua.h"
-
 
 #if USING_DRD
 # define INLINE /* not inline */
@@ -412,6 +408,8 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         StkId sk, lim;
         UpVal *uv;
         CallInfo *ci;
+        int i;
+        struct stringtable_node *n;
 
         if (!is_world_stopped(L)) lua_lock(th);
         traverse_value(L, o, &th->l_gt, objfunc);
@@ -440,6 +438,12 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         for (uv = th->openupval.u.l.next;
             uv != &th->openupval; uv = uv->u.l.next) {
           traverse_obj(L, o, (GCheader*)uv, objfunc);
+        }
+        /* stringtable */
+        for (i = 0; i < th->strt.size; i++) {
+          for (n = th->strt.hash[i]; n; n = n->next) {
+            traverse_obj(L, o, &n->str->tsv.gch, objfunc);
+          }
         }
         if (!is_world_stopped(L)) lua_unlock(th);
         break;
@@ -1367,13 +1371,6 @@ static int local_collection(lua_State *L)
       L->strt.hash[i] = n->next;
       luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
       L->strt.nuse--;
-    }
-  }
-
-  /* anything still left in the string table is still reachable */
-  for (i = 0; i < L->strt.size; i++) {
-    for (n = L->strt.hash[i]; n; n = n->next) {
-      make_grey(L, &n->str->tsv.gch);
     }
   }
 

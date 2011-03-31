@@ -291,7 +291,7 @@ typedef union Closure {
 typedef union TKey {
   struct {
     Value value;
-    int tt;
+    enum lua_obj_type tt;
     struct Node *next;  /* for chaining */
   } nk;
   TValue tvk;
