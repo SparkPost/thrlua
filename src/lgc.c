@@ -1060,6 +1060,7 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
   ck_sequence_write_end(&L->memlock);
   ck_sequence_write_end(&th->memlock);
+  luaE_flush_stringtable(th);
 
   TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
     TAILQ_REMOVE(&th->heap->objects, steal, allocd);
@@ -1068,6 +1069,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     steal->instack.next = NULL;
 
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
+
+    make_grey(L, steal);
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
   unlock_all_threads();
@@ -1215,7 +1218,7 @@ static void run_finalize(lua_State *L)
        * but because we blacken the aggregate, when we later trace,
        * we will still have references to the now-collected env
        * and metatables */
-      mark_object(L, o);
+      make_grey(L, o);
       call_finalize(L, o);
     }
   }
@@ -1377,17 +1380,22 @@ static int local_collection(lua_State *L)
   /* mark roots */
   make_grey(L, &L->gch);
 
-  /* trace and make things grey or black */
-  propagate(L);
-  /* grey any externally referenced white objects */
-  check_references(L);
-  /* may have made more greys */
-  propagate(L);
+  while (CK_STACK_FIRST(&L->heap->grey) != NULL) {
+    /* trace and make things grey or black */
+    propagate(L);
+    /* grey any externally referenced white objects */
+    check_references(L);
+  }
 
   /* run any finalizers; may turn some objects grey again */
   run_finalize(L);
-  /* may have made more greys */
-  propagate(L);
+
+  while (CK_STACK_FIRST(&L->heap->grey) != NULL) {
+    /* trace and make things grey or black */
+    propagate(L);
+    /* grey any externally referenced white objects */
+    check_references(L);
+  }
 
   /* at this point, anything in the White set is garbage */
 
