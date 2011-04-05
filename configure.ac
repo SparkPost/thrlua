@@ -13,9 +13,10 @@ case $host in
 		USE___THREAD=1
 		;;
 	sparc*solaris*)
+		CFLAGS="$CFLAGS -m64 -D__sparcv9__"
 		CK_PROFILE=sparcv9
 		arch=sparcv9
-		USE___THREAD=1
+		# USE___THREAD=1  broken on sparc, don't use
 		;;
 	x86_64*linux*)
 		arch=x86_64
