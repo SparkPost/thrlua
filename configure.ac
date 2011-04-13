@@ -21,11 +21,13 @@ case $host in
 	x86_64*linux*)
 		arch=x86_64
 		CK_PROFILE=x86_64
+		CFLAGS="$CFLAGS -m64 -D__x86_64__"
 		#USE___THREAD=1
 		;;
 	i*86*linux*)
 		arch=i386
 		CK_PROFILE=x86
+		CFLAGS="$CFLAGS -m32 -D__x86__"
 		#USE___THREAD=1
 		;;
 	*darwin*)
