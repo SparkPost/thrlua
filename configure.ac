@@ -20,10 +20,12 @@ case $host in
 		;;
 	x86_64*linux*)
 		arch=x86_64
+		CK_PROFILE=x86_64
 		#USE___THREAD=1
 		;;
 	i*86*linux*)
 		arch=i386
+		CK_PROFILE=x86
 		#USE___THREAD=1
 		;;
 	*darwin*)
