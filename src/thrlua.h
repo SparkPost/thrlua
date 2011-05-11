@@ -15,8 +15,8 @@
 #define _GNU_SOURCE
 #include "luaconf.h"
 
-#define LUA_ASSERTIONS 1
-#define USING_DRD 1
+#define LUA_ASSERTIONS 0
+#define USING_DRD 0
 #define DEBUG_ALLOC 0
 
 #if HAVE__OPT_MSYS_3RDPARTY_INCLUDE_VALGRIND_VALGRIND_H
