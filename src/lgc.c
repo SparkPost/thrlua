@@ -49,6 +49,11 @@ static uint32_t parked_threads = 0;
 static TAILQ_HEAD(thr_StateList, thr_State)
   all_threads = TAILQ_HEAD_INITIALIZER(all_threads);
 static sigset_t suspend_handler_mask;
+static struct ck_stack trace_stack;
+static pthread_cond_t trace_cond;
+static pthread_mutex_t trace_mtx;
+static void *trace_thread(void *);
+static uint32_t trace_heaps = 0;
 
 
 #define BLACKBIT    (1<<0)
@@ -85,6 +90,9 @@ static INLINE int is_free(GCheader *obj)
 {
   return obj->marked & FREEDBIT;
 }
+
+/** defines GCheap_from_stack to convert a stack entry to a GCheap */
+CK_STACK_CONTAINER(GCheap, instack, GCheap_from_stack);
 
 /** defines GCheader_from_stack to convert a stack entry to a
  * GCheader */
@@ -220,8 +228,9 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
     /* tell a possible collector that we're in a write barrier */
     ck_pr_store_32(&pt->in_barrier, 1);
     ck_pr_fence_memory();
-    if (ck_pr_load_32(&G(L)->intend_to_stop) == 0)
-      break;
+    if (ck_pr_load_32(&G(L)->intend_to_stop) == 0) {
+      return;
+    }
 
     ck_pr_store_32(&pt->in_barrier, 0);
   }
@@ -748,13 +757,30 @@ static void make_tls_key(void)
 {
   struct sigaction act;
   pthread_mutexattr_t m;
+  pthread_attr_t ta;
+  int i;
 
   atexit(free_last_global_bits);
 
   pthread_mutexattr_init(&m);
+#if 0
   pthread_mutexattr_settype(&m, PTHREAD_MUTEX_ERRORCHECK);
+#endif
   pthread_mutex_init(&all_threads_lock, &m);
   pthread_mutexattr_destroy(&m);
+
+  /* spin up GC tracing threads */
+  ck_stack_init(&trace_stack);
+  pthread_cond_init(&trace_cond, NULL);
+  pthread_mutex_init(&trace_mtx, NULL);
+  pthread_attr_init(&ta);
+  pthread_attr_setdetachstate(&ta, PTHREAD_CREATE_DETACHED);
+  for (i = 0; i < 4; i++) {
+    pthread_t t;
+
+    pthread_create(&t, &ta, trace_thread, NULL);
+  }
+  pthread_attr_destroy(&ta);
 
   memset(&act, 0, sizeof(act));
   act.sa_flags = SA_RESTART;
@@ -1428,12 +1454,45 @@ static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
   }
 }
 
+static void trace_heap(GCheap *h)
+{
+  GCheader *o;
+
+  TAILQ_FOREACH(o, &h->objects, allocd) {
+    global_trace_obj(h->owner, &h->owner->gch, o);
+  }
+
+  /* one less to trace */
+  ck_pr_dec_32(&trace_heaps);
+}
+
+static void *trace_thread(void *unused)
+{
+  while (1) {
+    struct ck_stack_entry *ent;
+
+    pthread_mutex_lock(&trace_mtx);
+    pthread_cond_wait(&trace_cond, &trace_mtx);
+    pthread_mutex_unlock(&trace_mtx);
+
+    while (1) {
+      ent = ck_stack_pop_upmc(&trace_stack);
+
+      if (!ent) {
+        break;
+      }
+      trace_heap(GCheap_from_stack(ent));
+    }
+  }
+}
+
 /* Global collection must only use async-signal safe functions,
  * or it will lead to a deadlock (especially in printf) */
 static void global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
+  struct ck_stack_entry *ent;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads()) {
@@ -1459,12 +1518,30 @@ static void global_trace(lua_State *L)
 
   /* now trace all objects and fix the xref bit */
   TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
-    GCheader *o;
-
-    TAILQ_FOREACH(o, &h->objects, allocd) {
-      global_trace_obj(h->owner, &h->owner->gch, o);
-    }
+    ck_pr_inc_32(&trace_heaps);
+    ck_stack_push_upmc(&trace_stack, &h->instack);
+    /* let consumers know they have things to do */
+    pthread_cond_broadcast(&trace_cond);
   }
+
+  /* we are a consumer too */
+  while (1) {
+    ent = ck_stack_pop_upmc(&trace_stack);
+
+    if (!ent) {
+      break;
+    }
+    trace_heap(GCheap_from_stack(ent));
+  }
+
+  /* we couldn't get any more heaps, now we wait for the pending
+   * number of heaps to return to zero, indicating that the trace_threads
+   * are all done */
+  while (ck_pr_load_32(&trace_heaps) != 0) {
+    ck_pr_stall();
+  }
+
+  /* all heaps are traced */
 
   ck_pr_store_32(&G(L)->need_global_trace, 0);
   ck_pr_store_32(&G(L)->stopped, 0);

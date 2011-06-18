@@ -69,6 +69,9 @@ typedef struct GCheap {
   /** a stack of weak tables.
    * When we mark a table with weak keys, we add it to this stack. */
   ck_stack_t weak;
+
+  /** position in tracing stack */
+  ck_stack_entry_t instack;
 } GCheap;
 
 /*
