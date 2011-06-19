@@ -1,5 +1,5 @@
 /*
- * Copyright 2009-2011 Samy Al Bahra.
+ * Copyright 2011 Samy Al Bahra.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -24,55 +24,75 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _CK_GCC_CC_H
-#define _CK_GCC_CC_H
+#ifndef _CK_RWLOCK_H
+#define _CK_RWLOCK_H
 
-#include <ck_md.h>
+#include <ck_pr.h>
+#include <stdbool.h>
+#include <stddef.h>
 
-#ifdef __SUNPRO_C
-#define CK_CC_UNUSED
-#define CK_CC_USED
-#define CK_CC_IMM
-#else
-#define CK_CC_UNUSED __attribute__((unused))
-#define CK_CC_USED   __attribute__((used))
-#define CK_CC_IMM "i"
-#endif
+struct ck_rwlock {
+	unsigned int writer;
+	unsigned int n_readers;
+};
+typedef struct ck_rwlock ck_rwlock_t;
 
-/*
- * If optimizations are turned on, then force inlining.
- */
-#ifdef __OPTIMIZE__
-#define CK_CC_INLINE CK_CC_UNUSED inline
-#else
-#define CK_CC_INLINE CK_CC_UNUSED 
-#endif
+#define CK_RWLOCK_INITIALIZER {false, 0}
 
-/*
- * Packed attribute.
- */
-#define CK_CC_PACKED __attribute__((packed))
+CK_CC_INLINE static void
+ck_rwlock_init(struct ck_rwlock *rw)
+{
 
-/*
- * Weak reference.
- */
-#define CK_CC_WEAKREF __attribute__((weakref))
+	rw->writer = 0;
+	rw->n_readers = 0;
+	ck_pr_fence_memory();
+	return;
+}
 
-/*
- * Alignment attribute.
- */
-#define CK_CC_ALIGN(B) __attribute__((aligned(B)))
+CK_CC_INLINE static void
+ck_rwlock_write_lock(ck_rwlock_t *rw)
+{
 
-/*
- * Cache align.
- */
-#define CK_CC_CACHELINE CK_CC_ALIGN(CK_MD_CACHELINE)
+	while (ck_pr_fas_uint(&rw->writer, true) == true)
+		ck_pr_stall();
 
-/*
- * These are functions which should be avoided.
- */
-#ifdef __freestanding__
-#pragma GCC poison malloc free
-#endif
+	while (ck_pr_load_uint(&rw->n_readers) != 0)
+		ck_pr_stall();
 
-#endif /* _CK_GCC_CC_H */
+	return;
+}
+
+CK_CC_INLINE static void
+ck_rwlock_write_unlock(ck_rwlock_t *rw)
+{
+
+	ck_pr_store_uint(&rw->writer, false);
+	return;
+}
+
+CK_CC_INLINE static void
+ck_rwlock_read_lock(ck_rwlock_t *rw)
+{
+
+	for (;;) {
+		while (ck_pr_load_uint(&rw->writer) == true)
+			ck_pr_stall();
+
+		ck_pr_inc_uint(&rw->n_readers);
+		if (ck_pr_load_uint(&rw->writer) == false)
+			break;
+		ck_pr_dec_uint(&rw->n_readers);
+	}
+
+	return;
+}
+
+CK_CC_INLINE static void
+ck_rwlock_read_unlock(ck_rwlock_t *rw)
+{
+
+	ck_pr_dec_uint(&rw->n_readers);
+	return;
+}
+
+#endif /* _CK_RWLOCK_H */

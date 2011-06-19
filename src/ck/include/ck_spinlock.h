@@ -50,7 +50,8 @@ struct ck_spinlock_anderson {
 	struct ck_spinlock_anderson_thread *slots;
 	unsigned int count;
 	unsigned int wrap;
-	char pad[CK_MD_CACHELINE - sizeof(unsigned int) * 2 - sizeof(void *)];
+	unsigned int mask;
+	char pad[CK_MD_CACHELINE - sizeof(unsigned int) * 3 - sizeof(void *)];
 	unsigned int next;
 };
 typedef struct ck_spinlock_anderson ck_spinlock_anderson_t;
@@ -71,6 +72,7 @@ ck_spinlock_anderson_init(struct ck_spinlock_anderson *lock,
 
 	lock->slots = slots;
 	lock->count = count;
+	lock->mask = count - 1;
 	lock->next = 0;
 
 	/*
@@ -107,12 +109,13 @@ ck_spinlock_anderson_lock(struct ck_spinlock_anderson *lock,
 				next = lock->wrap;
 			else
 				next = position + 1;
-		} while (ck_pr_cas_uint_value(&lock->next, position, next, &position) == false);
+		} while (ck_pr_cas_uint_value(&lock->next, position,
+					      next, &position) == false);
 
 		position %= count;
 	} else {
 		position = ck_pr_faa_uint(&lock->next, 1);
-		position &= count - 1;
+		position &= lock->mask;
 	}
 
 	/* Spin until slot is marked as unlocked. First slot is initialized to false. */
@@ -135,9 +138,12 @@ ck_spinlock_anderson_unlock(struct ck_spinlock_anderson *lock,
 	unsigned int position;
 
 	/* Mark next slot as available. */
-	position = (slot->position + 1) % lock->count;
-	ck_pr_store_uint(&lock->slots[position].locked, false);
+	if (lock->wrap == 0)
+		position = (slot->position + 1) & lock->mask;
+	else
+		position = (slot->position + 1) % lock->count;
 
+	ck_pr_store_uint(&lock->slots[position].locked, false);
 	return;
 }
 #endif /* CK_F_SPINLOCK_ANDERSON */
@@ -505,7 +511,8 @@ ck_spinlock_mcs_unlock(struct ck_spinlock_mcs **queue, struct ck_spinlock_mcs *n
 		 * that we are the current tail. In this case, we may just
 		 * mark the spinlock queue as empty.
 		 */
-		if (ck_pr_load_ptr(queue) == node && ck_pr_cas_ptr(queue, node, NULL) == true)
+		if (ck_pr_load_ptr(queue) == node &&
+		    ck_pr_cas_ptr(queue, node, NULL) == true)
 			return;
 
 		/*
