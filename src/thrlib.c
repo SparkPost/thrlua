@@ -12,6 +12,7 @@
 
 #define THRLIB_THREAD "thread.thread"
 #define THRLIB_MUTEX  "thread.mutex"
+#define THRLIB_COND  "thread.cond"
 
 struct thrlib_thread {
   pthread_t osthr;
@@ -39,7 +40,6 @@ static int traceback(lua_State *L)
     lua_pop(L, 2);
     return 1;
   }
-  printf("TRACEBACK: should have seen the traceback here?\n");
   lua_pushvalue(L, 1);  /* pass error message */
   lua_pushinteger(L, 2);  /* skip this function and traceback */
   lua_call(L, 2, 1);  /* call debug.traceback */
@@ -72,39 +72,91 @@ static void *thrlib_thread_func(void *arg)
   return 0;
 }
 
+static void *thrlib_detached_thread_func(void *arg)
+{
+  lua_State *L = arg;
+  int st;
+
+  /* on entry, stack looks like this:
+   * [1] traceback
+   * [2] closure
+   * [3] closure argument
+   * Therefore, we call pcall with 1 arg and a base of 1 (traceback) */
+
+  st = lua_pcall(L, 1, 0, 1);
+  if (st != 0) {
+    printf("thread pcall failed with status %d\n", st);
+  }
+
+  lua_settop(L, 0);
+  luaC_localgc(L, 1);
+
+  lua_delrefthread(L, NULL);
+  return 0;
+}
+
 static int thrlib_create(lua_State *L)
 {
   struct thrlib_thread *th;
   int err;
+  int nargs = lua_gettop(L);
+  int joinable = 1;
+  lua_State *newL;
 
   luaL_argcheck(L, lua_isfunction(L, 1), 1,
     "function expected");
 
-  th = lua_newuserdata(L, sizeof(*th));
-  memset(th, 0, sizeof(*th));
+  if (nargs >= 3) {
+    luaL_checktype(L, 3, LUA_TBOOLEAN);
+    joinable = lua_toboolean(L, 3);
+    lua_pop(L, 1);
+  }
 
-  th->L = lua_newthread(L);
+  if (joinable) {
+    th = lua_newuserdata(L, sizeof(*th));
+    memset(th, 0, sizeof(*th));
+  }
+
+  newL = lua_newthread(L);
+
+  if (joinable) {
+    th->L = newL;
+  }
+
   /* one ref for the OS-level thread */
-  ck_pr_inc_32(&th->L->gch.ref);
+  ck_pr_inc_32(&newL->gch.ref);
 
   /* trace function is on the top of the stack */
-  lua_pushcfunction(th->L, traceback);
+  lua_pushcfunction(newL, traceback);
 
   /* make a copy of 1st function parameter; put on top of stack */
   lua_pushvalue(L, 1);
   /* move function over to new thread */
-  lua_xmove(L, th->L, 1);
-  /* pop lua state from this stack */
+  lua_xmove(L, newL, 1);
+  /* pop new lua state from this stack */
   lua_pop(L, 1);
   /* copy userdata over to new thread; it will be the first arg
    * to the function */
   lua_pushvalue(L, -1);
-  lua_xmove(L, th->L, 1);
+  lua_xmove(L, newL, 1);
 
-  luaL_getmetatable(L, THRLIB_THREAD);
-  lua_setmetatable(L, -2);
+  if (joinable) {
+    luaL_getmetatable(L, THRLIB_THREAD);
+    lua_setmetatable(L, -2);
 
-  err = pthread_create(&th->osthr, NULL, thrlib_thread_func, th);
+    err = pthread_create(&th->osthr, NULL, thrlib_thread_func, th);
+  } else {
+    pthread_attr_t attr;
+    pthread_t osthr;
+
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+    err = pthread_create(&osthr, &attr, thrlib_detached_thread_func, newL);
+
+    pthread_attr_destroy(&attr);
+  }
+
   if (err) {
     return luaL_error(L, "thread.create failed: %d %s", err, strerror(err));
   }
@@ -242,6 +294,150 @@ static int thrlib_mutex_gc(lua_State *L)
   return 0;
 }
 
+struct thrlib_cond {
+  pthread_cond_t cond;
+  pthread_mutex_t *mtx;
+  pthread_mutex_t mymtx;
+  void *mtxref;
+};
+
+static int thrlib_cond_gc(lua_State *L)
+{
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+
+  pthread_cond_destroy(&c->cond);
+  if (c->mtxref) {
+    lua_delrefobj(L, c->mtxref);
+  } else {
+    pthread_mutex_destroy(&c->mymtx);
+  }
+
+  return 0;
+}
+
+static int thrlib_cond_broadcast(lua_State *L)
+{
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+  int res;
+
+  res = pthread_cond_broadcast(&c->cond);
+  if (res == 0) {
+    return 0;
+  }
+
+  luaL_error(L, "cond:broadcast failed %s", strerror(res));
+  return 0;
+}
+
+static int thrlib_cond_wait(lua_State *L)
+{
+  int nargs = lua_gettop(L);
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+  int res;
+  struct timespec ts;
+
+#define NANOSECONDS_PER_SECOND 1000000000
+
+  if (nargs > 1) {
+    struct timeval tv;
+    lua_Number n = luaL_checknumber(L, 2);
+
+    ts.tv_sec = floor(n);
+    ts.tv_nsec = (n - ts.tv_sec) * NANOSECONDS_PER_SECOND;
+
+    gettimeofday(&tv, NULL);
+    ts.tv_nsec += tv.tv_usec * 1000;
+    while (ts.tv_nsec > NANOSECONDS_PER_SECOND) {
+      ts.tv_sec++;
+      ts.tv_nsec -= NANOSECONDS_PER_SECOND;
+    }
+    ts.tv_sec += tv.tv_sec;
+
+    res = pthread_cond_timedwait(&c->cond, c->mtx, &ts);
+
+    switch (res) {
+      case ETIMEDOUT:
+        lua_pushboolean(L, 0);
+        break;
+      case 0:
+        lua_pushboolean(L, 1);
+        break;
+      default:
+        luaL_error(L, "cond:wait failed %s", strerror(res));
+    }
+  }
+
+  /* not timed */
+
+  res = pthread_cond_wait(&c->cond, c->mtx);
+
+  if (res == 0) {
+    return 0;
+  }
+
+  luaL_error(L, "cond:wait failed %s", strerror(res));
+  return 0;
+}
+
+static int thrlib_cond_signal(lua_State *L)
+{
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+  int res;
+
+  res = pthread_cond_signal(&c->cond);
+  if (res == 0) {
+    return 0;
+  }
+
+  luaL_error(L, "cond:signal failed %s", strerror(res));
+  return 0;
+}
+
+static int thrlib_cond_lock(lua_State *L)
+{
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+  int ret;
+
+  ret = pthread_mutex_lock(c->mtx);
+
+  return handle_mutex_return(L, "lock", ret);
+}
+
+static int thrlib_cond_unlock(lua_State *L)
+{
+  struct thrlib_cond *c = luaL_checkudata(L, 1, THRLIB_COND);
+  int ret;
+
+  ret = pthread_mutex_unlock(c->mtx);
+
+  return handle_mutex_return(L, "unlock", ret);
+}
+
+static int thrlib_cond_new(lua_State *L)
+{
+  int nargs = lua_gettop(L);
+  struct thrlib_cond *c = lua_newuserdata(L, sizeof(*c));
+
+  memset(c, 0, sizeof(*c));
+  pthread_cond_init(&c->cond, NULL);
+
+  if (nargs) {
+    pthread_mutex_t *mtx = luaL_checkudata(L, 1, THRLIB_MUTEX);
+
+    c->mtxref = lua_addrefobj(L, 1);
+    c->mtx = mtx;
+
+  } else {
+    pthread_mutex_init(&c->mymtx, NULL);
+    c->mtx = &c->mymtx;
+  }
+
+  luaL_getmetatable(L, THRLIB_COND);
+  lua_setmetatable(L, -2);
+
+  return 1;
+}
+
 static const luaL_Reg mutex_funcs[] = {
   {"lock", thrlib_mutex_lock },
   {"unlock", thrlib_mutex_unlock },
@@ -250,10 +446,21 @@ static const luaL_Reg mutex_funcs[] = {
   {NULL, NULL}
 };
 
+static const luaL_Reg cond_funcs[] = {
+  {"acquire", thrlib_cond_lock },
+  {"release", thrlib_cond_unlock },
+  {"broadcast", thrlib_cond_broadcast },
+  {"signal", thrlib_cond_signal },
+  {"wait", thrlib_cond_wait },
+  {"__gc", thrlib_cond_gc },
+  {NULL, NULL}
+};
+
 static const luaL_Reg thrlib[] = {
   {"create", thrlib_create },
   {"sleep", thrlib_sleep },
   {"mutex", thrlib_mutex_new },
+  {"condition", thrlib_cond_new },
   {NULL, NULL}
 };
 
@@ -270,6 +477,12 @@ LUALIB_API int luaopen_thread(lua_State *L)
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, mutex_funcs);
+
+  /* cond metatable */
+  luaL_newmetatable(L, THRLIB_COND);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_register(L, NULL, cond_funcs);
 
   luaL_register(L, LUA_THREADLIBNAME, thrlib);
 
