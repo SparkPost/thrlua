@@ -15,21 +15,6 @@
 # define INLINE inline
 #endif
 
-#if 0
-#ifdef LUA_OS_LINUX
-# define DEF_LUA_SIG_SUSPEND SIGPWR
-# define DEF_LUA_SIG_RESUME  SIGXCPU
-#elif defined(LUA_OS_DARWIN)
-# define DEF_LUA_SIG_SUSPEND SIGINFO
-# define DEF_LUA_SIG_RESUME  SIGXCPU
-#else
-# define DEF_LUA_SIG_SUSPEND SIGUSR1
-# define DEF_LUA_SIG_RESUME  SIGUSR2
-#endif
-
-static int LUA_SIG_SUSPEND = DEF_LUA_SIG_SUSPEND;
-static int LUA_SIG_RESUME  = DEF_LUA_SIG_RESUME;
-#endif
 static pthread_once_t tls_init = PTHREAD_ONCE_INIT;
 pthread_key_t lua_tls_key;
 
@@ -622,62 +607,6 @@ static INLINE void unlock_all_threads(void)
   }
 }
 
-#if 0
-/* given the nature of stopping the world, we MUST ensure that we
- * only use async-safe functions in this handler; printf very likely
- * to lead to a deadlock */
-static void thread_suspend_requested(int sig)
-{
-  int save = errno;
-  thr_State *pt;
-  int r;
-
-  pt = luaC_get_per_thread_raw();
-
-  /* there are some edges where we may no longer have a valid pt; for instance,
-   * we may be exiting this thread and have already destroyed the pt. In this
-   * case, we actually have nothing to contribute any more, so we simply
-   * return from the handler */
-  if (!pt) {
-    errno = save;
-    return;
-  }
-
-  ck_pr_store_uint(&pt->wake, 0);
-  ck_pr_inc_32(&parked_threads);
-
-  /* signal the thread that is doing the global collection that we
-   * are considered stopped */
-//  VALGRIND_PRINTF_BACKTRACE("suspend requested\n");
-  while (!ck_pr_load_uint(&pt->wake)) {
-    sigsuspend(&suspend_handler_mask);
-  }
-
-  /* before we can safely resume, all resume threads MUST check back
-   * in with the global collector, otherwise another thread may attempt
-   * to start a new global sweep while some of the threads are still
-   * waking up; this can result in some weird re-entrancy issues that
-   * cause threads to get stuck */
-
-  ck_pr_dec_32(&parked_threads);
-//  VALGRIND_PRINTF_BACKTRACE("resumed!\n");
-
-  errno = save;
-}
-
-/* MUST be async signal safe */
-static void thread_resume_requested(int sig)
-{
-  thr_State *pt;
-  int save = errno;
-
-  pt = luaC_get_per_thread_raw();
-  ck_pr_store_uint(&pt->wake, 1);
-
-  errno = save;
-}
-#endif
-
 static void prune_dead_thread_states(void)
 {
   thr_State *pt, *pttmp;
@@ -695,81 +624,6 @@ static void prune_dead_thread_states(void)
   }
   unlock_all_threads();
 }
-
-#if 0
-static int is_trace_thread(pthread_t thr)
-{
-  int i;
-
-  for (i = 0; i < MAX_TRACE_THREADS; i++) {
-    if (pthread_equal(thr, trace_thread_ids[i])) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-/* MUST be async signal safe */
-static int signal_all_threads(lua_State *L, int sig)
-{
-  thr_State *pt;
-  pthread_t me = pthread_self();
-  int nthreads = 0;
-  int r;
-
-  ck_pr_store_32(&G(L)->intend_to_stop, sig == LUA_SIG_SUSPEND ? 1 : 0);
-  ck_pr_fence_memory();
-
-  TAILQ_FOREACH(pt, &all_threads, threads) {
-    if (pthread_equal(me, pt->tid) || is_trace_thread(pt->tid)) {
-      /* can't stop myself */
-      continue;
-    }
-    if (pt->dead) {
-      continue;
-    }
-    if (sig == LUA_SIG_SUSPEND) {
-      /* wait for thread to leave its barrier */
-      while (ck_pr_load_32(&pt->in_barrier) == 1) {
-        ck_pr_stall();
-      }
-    }
-
-    r = pthread_kill(pt->tid, sig);
-    if (r == 0) {
-      nthreads++;
-    } else if (r != ESRCH) {
-      fprintf(stderr, "signal_all_threads: pthread_kill %s\n", strerror(r));
-      abort();
-    } else {
-      fprintf(stderr, "Got ESRCH when sending sig %d\n", sig);
-    }
-  }
-
-  return nthreads;
-}
-
-/* MUST be async signal safe */
-static void stop_all_threads(lua_State *L)
-{
-  signal_all_threads(L, LUA_SIG_SUSPEND);
-  while (ck_pr_load_32(&parked_threads) < ck_pr_load_32(&num_threads) - 1) {
-    ck_pr_stall();
-  }
-}
-
-/* caller MUST hold all_threads_lock */
-/* MUST be async signal safe */
-static int resume_threads(lua_State *L)
-{
-  uint8_t i = 0;
-
-  signal_all_threads(L, LUA_SIG_RESUME);
-  while (ck_pr_load_32(&parked_threads)) {
-    ck_pr_stall();
-  }
-}
-#endif
 
 static void thread_exited(void *p)
 {
@@ -829,44 +683,6 @@ static void make_tls_key(void)
 
   /* spin up GC tracing threads */
   ck_stack_init(&trace_stack);
-#if 0
-  pthread_cond_init(&trace_cond, NULL);
-  pthread_mutex_init(&trace_mtx, NULL);
-  pthread_attr_init(&ta);
-  pthread_attr_setdetachstate(&ta, PTHREAD_CREATE_DETACHED);
-  for (i = 0; i < MAX_TRACE_THREADS; i++) {
-//    pthread_create(&trace_thread_ids[i], &ta, trace_thread, NULL);
-  }
-  pthread_attr_destroy(&ta);
-
-  memset(&act, 0, sizeof(act));
-  act.sa_flags = SA_RESTART;
-  sigfillset(&act.sa_mask);
-  allowed_sigs(&act.sa_mask);
-
-  act.sa_handler = thread_suspend_requested;
-  if (sigaction(LUA_SIG_SUSPEND, &act, NULL) != 0) {
-    fprintf(stderr,
-      "failed to prepare thread suspend handler for signal %d: %s\n",
-      LUA_SIG_SUSPEND,
-      strerror(errno));
-    abort();
-  }
-
-  act.sa_handler = thread_resume_requested;
-  if (sigaction(LUA_SIG_RESUME, &act, NULL) != 0) {
-    fprintf(stderr,
-      "failed to prepare thread resume handler for signal %d: %s\n",
-      LUA_SIG_RESUME,
-      strerror(errno));
-    abort();
-  }
-
-  sigfillset(&suspend_handler_mask);
-  allowed_sigs(&suspend_handler_mask);
-  sigdelset(&suspend_handler_mask, LUA_SIG_RESUME);
-#endif
-
   pthread_key_create(&lua_tls_key, thread_exited);
 }
 
@@ -1518,30 +1334,6 @@ static void trace_heap(GCheap *h)
   /* one less to trace */
   ck_pr_dec_32(&trace_heaps);
 }
-
-#if 0
-static void *trace_thread(void *unused)
-{
-  sigset_t set;
-
-  sigfillset(&set);
-  pthread_sigmask(SIG_SETMASK, &set, NULL);
-
-  while (1) {
-    struct ck_stack_entry *ent;
-
-    pthread_mutex_lock(&trace_mtx);
-    pthread_cond_wait(&trace_cond, &trace_mtx);
-    pthread_mutex_unlock(&trace_mtx);
-
-    ent = ck_stack_pop_upmc(&trace_stack);
-
-    if (ent) {
-      trace_heap(GCheap_from_stack(ent));
-    }
-  }
-}
-#endif
 
 /* Global collection must only use async-signal safe functions,
  * or it will lead to a deadlock (especially in printf) */
