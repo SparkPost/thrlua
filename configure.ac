@@ -10,33 +10,26 @@ case $host in
 		CFLAGS="$CFLAGS -m64 -D__x86_64__"
 		CK_PROFILE=x86_64
 		arch=x86_64
-		#USE___THREAD=1
 		;;
 	sparc*solaris*)
 		CFLAGS="$CFLAGS -m64 -D__sparcv9__"
 		CK_PROFILE=sparcv9
 		arch=sparcv9
-		# USE___THREAD=1  broken on sparc, don't use
 		;;
 	x86_64*linux*)
 		arch=x86_64
 		CK_PROFILE=x86_64
 		CFLAGS="$CFLAGS -m64 -D__x86_64__"
-		#USE___THREAD=1
 		;;
 	i*86*linux*)
 		arch=i386
 		CK_PROFILE=x86
 		CFLAGS="$CFLAGS -m32 -D__x86__"
-		#USE___THREAD=1
 		;;
 	*darwin*)
 		arch=x86_64
 		;;
 esac
-if test "$USE___THREAD" ; then
-	AC_DEFINE(LUA_USE___THREAD, 1, [have __thread tls])
-fi
 AM_CONDITIONAL(ARCH_X86_64, test "$arch" = x86_64)
 AM_CONDITIONAL(ARCH_I386, test "$arch" = i386)
 AM_CONDITIONAL(ARCH_SPARCV9, test "$arch" = sparcv9)
