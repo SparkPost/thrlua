@@ -698,10 +698,8 @@ LUA_API void lua_rawget (lua_State *L, int idx) {
     t = index2adr(L, idx);
     api_check(L, ttistable(t));
     table = hvalue(t);
-    luaH_rdlock(L, table);
-    setobj2s(L, L->top - 1, luaH_get(table, L->top - 1));
+    luaH_load(L, table, L->top - 1, L->top - 1, &L->gch, 1);
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_rdunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -716,11 +714,9 @@ LUA_API void lua_rawgeti (lua_State *L, int idx, int n) {
     o = index2adr(L, idx);
     api_check(L, ttistable(o));
     table = hvalue(o);
-    luaH_rdlock(L, table);
-    setobj2s(L, L->top, luaH_getnum(table, n));
+    luaH_load_num(L, table, n, L->top, &L->gch, 1);
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_rdunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -845,12 +841,9 @@ LUA_API void lua_rawset (lua_State *L, int idx) {
     t = index2adr(L, idx);
     api_check(L, ttistable(t));
     table = hvalue(t);
-    luaH_wrlock(L, table);
-    p = luaH_set(L, table, L->top-2);
-    luaC_writebarriervv(L, &table->gch, p, L->top - 1);
+    luaH_store(L, table, L->top - 2, L->top - 1, 1);
     L->top -= 2;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_wrunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }
@@ -867,12 +860,9 @@ LUA_API void lua_rawseti (lua_State *L, int idx, int n) {
     o = index2adr(L, idx);
     api_check(L, ttistable(o));
     table = hvalue(o);
-    luaH_wrlock(L, table);
-    p = luaH_setnum(L, table, n);
-    luaC_writebarriervv(L, &table->gch, p, L->top - 1);
+    luaH_store_num(L, table, n, L->top - 1, 1);
     L->top--;
   } LUAI_TRY_FINALLY(L) {
-    if (table) luaH_wrunlock(L, table);
     lua_unlock(L);
   } LUAI_TRY_END(L);
 }

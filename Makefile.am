@@ -16,7 +16,7 @@ hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lfunc.h src/lgc.h src/llex.h src/llimits.h src/lmem.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
-	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
+	src/lstring.h src/ltable.h src/lundump.h src/lvm.h src/lzio.h
 
 CFLAGS += -Isrc/ck/include -Isrc
 

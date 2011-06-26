@@ -193,18 +193,19 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
 #if defined(LUA_COMPAT_VARARG)
   if (p->is_vararg & VARARG_NEEDSARG) { /* compat. with old-style vararg? */
     int nvar = actual - nfixargs;  /* number of extra arguments */
+    TValue nval;
+
     lua_assert(p->is_vararg & VARARG_HASARG);
     luaC_checkGC(L);
     htab = luaH_new(L, nvar, 1);  /* create `arg' table */
-    luaH_wrlock(L, htab);
-    LUAI_TRY_BLOCK(L) {
-      for (i=0; i<nvar; i++)  /* put extra arguments into `arg' table */
-        setobj2n(L, luaH_setnum(L, htab, i+1), L->top - nvar + i);
-      /* store counter in field `n' */
-      setnvalue(luaH_setstr(L, htab, luaS_newliteral(L, "n")), cast_num(nvar));
-    } LUAI_TRY_FINALLY(L) {
-      luaH_wrunlock(L, htab);
-    } LUAI_TRY_END(L);
+
+    /* put extra arguments into `arg' table */
+    for (i = 0; i < nvar; i++) {
+      luaH_store_num(L, htab, i + 1, L->top - nvar + i, 1);
+    }
+    /* store counter in field `n' */
+    setnvalue(&nval, cast_num(nvar));
+    luaH_store_str(L, htab, luaS_newliteral(L, "n"), &nval, 1);
   }
 #endif
   /* move fixed parameters to final position */
@@ -224,16 +225,19 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
 
 
 static StkId tryfuncTM (lua_State *L, StkId func) {
-  const TValue *tm = luaT_gettmbyobj(L, func, TM_CALL);
+  TValue tm;
   StkId p;
   ptrdiff_t funcr = savestack(L, func);
-  if (!ttisfunction(tm))
+
+  if (!luaT_gettmbyobj(L, func, TM_CALL, &tm) || !ttisfunction(&tm)) {
     luaG_typeerror(L, func, "call");
+  }
+
   /* Open a hole inside the stack at `func' */
   for (p = L->top; p > func; p--) setobjs2s(L, p, p-1);
   incr_top(L);
   func = restorestack(L, funcr);  /* previous call may change stack */
-  setobj2s(L, func, tm);  /* tag method is the new function to be called */
+  setobj2s(L, func, &tm);  /* tag method is the new function to be called */
   return func;
 }
 

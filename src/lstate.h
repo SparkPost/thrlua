@@ -12,6 +12,40 @@
 
 struct lua_longjmp;  /* defined in ldo.c */
 
+/*
+* WARNING: if you change the order of this enumeration,
+* grep "ORDER TM"
+*/
+typedef enum {
+  TM_INDEX,
+  TM_NEWINDEX,
+  TM_GC,
+  TM_MODE,
+  TM_EQ,  /* last tag method with `fast' access */
+  TM_ADD,
+  TM_SUB,
+  TM_MUL,
+  TM_DIV,
+  TM_MOD,
+  TM_POW,
+  TM_UNM,
+  TM_LEN,
+  TM_LT,
+  TM_LE,
+  TM_CONCAT,
+  TM_CALL,
+#if defined(LUA_BITWISE_OPERATORS)
+  TM_BOR,
+  TM_BAND,
+  TM_BXOR,
+  TM_BLSHFT,
+  TM_BRSHFT,
+  TM_BNOT,
+  TM_INTDIV,
+#endif
+  TM_N		/* number of elements in the enum */
+} TMS;
+
 
 /* table of globals */
 #define gt(L)	(&L->l_gt)
@@ -250,6 +284,22 @@ LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
 LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
 LUAI_FUNC void luaE_flush_stringtable(lua_State *L);
 LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
+
+LUAI_DATA const char *const luaT_typenames[];
+LUAI_FUNC const TValue *luaT_gettm (Table *events, TMS event, TString *ename);
+LUAI_FUNC int luaT_load_tm(lua_State *L, Table *events, TMS event,
+    TValue *tm, GCheader *barrier, int nilok);
+LUAI_FUNC int luaT_gettmbyobj(lua_State *L, const TValue *o,
+    TMS event, TValue *tm);
+LUAI_FUNC void luaT_init (lua_State *L);
+
+static inline int fasttm(lua_State *L, Table *t, TMS event, TValue *tm)
+{
+  return t == NULL ? 0 :
+    t->flags & (1u << event) ? 0 :
+    luaT_load_tm(L, t, event, tm, NULL, 0);
+}
+
 
 #endif
 

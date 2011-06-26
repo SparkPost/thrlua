@@ -31,29 +31,26 @@ void luaT_init (lua_State *L) {
   int i;
   for (i=0; i<TM_N; i++) {
     G(L)->tmname[i] = luaS_new(L, luaT_eventname[i]);
-//    luaS_fix(G(L)->tmname[i]);  /* never collect these names */
   }
 }
 
 
-/*
-** function to be used with macro "fasttm": optimized for absence of
-** tag methods
-*/
-/* assumption: that the table is appropriately locked! */
-const TValue *luaT_gettm (Table *events, TMS event, TString *ename) {
-  const TValue *tm = luaH_getstr(events, ename);
-  lua_assert(event <= TM_EQ);
-  if (ttisnil(tm)) {  /* no tag method? */
-    events->flags |= cast_byte(1u<<event);  /* cache this fact */
-    return NULL;
+int luaT_load_tm(lua_State *L, Table *events, TMS event,
+    TValue *tm, GCheader *barrier, int nilok)
+{
+  if (luaH_load_str(L, events, G(L)->tmname[event], tm, barrier, nilok)) {
+    return 1;
   }
-  else return tm;
+  if (event <= TM_EQ) {
+    /* remember the miss so that fasttm won't need to work so hard */
+    events->flags |= cast_byte(1u << event);
+  }
+  return 0;
 }
 
-
 /* assumption: that the table is appropriately locked! */
-const TValue *luaT_gettmbyobj (lua_State *L, const TValue *o, TMS event) {
+int luaT_gettmbyobj(lua_State *L, const TValue *o, TMS event, TValue *tm)
+{
   Table *mt;
   switch (ttype(o)) {
     case LUA_TTABLE:
@@ -65,6 +62,11 @@ const TValue *luaT_gettmbyobj (lua_State *L, const TValue *o, TMS event) {
     default:
       mt = G(L)->mt[ttype(o)];
   }
-  return (mt ? luaH_getstr(mt, G(L)->tmname[event]) : luaO_nilobject);
+  if (!mt) {
+    return 0;
+  }
+  return luaT_load_tm(L, mt, event, tm, NULL, 0);
 }
 
+/* vim:ts=2:sw=2:et:
+ */

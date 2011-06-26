@@ -213,29 +213,25 @@ static void freeexp (FuncState *fs, expdesc *e) {
 
 static int addk (FuncState *fs, TValue *k, TValue *v) {
   lua_State *L = fs->L;
-  TValue *idx;
+  TValue idx;
   Proto *f = fs->f;
   int oldsize = f->sizek;
   int retval;
 
-  luaH_wrlock(L, fs->h);
-  LUAI_TRY_BLOCK(L) {
-    idx = luaH_set(L, fs->h, k);
-    if (ttisnumber(idx)) {
-      lua_assert(luaO_rawequalObj(&fs->f->k[cast_int(nvalue(idx))], v));
-      retval = cast_int(nvalue(idx));
-    }
-    else {  /* constant not found; create a new entry */
-      setnvalue(idx, cast_num(fs->nk));
-      luaM_growvector(L, LUA_MEM_PROTO_DATA, f->k, fs->nk, f->sizek, TValue,
-          MAXARG_Bx, "constant table overflow");
-      while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
-      luaC_writebarriervv(L, &f->gch, &f->k[fs->nk], v);
-      retval = fs->nk++;
-    }
-  } LUAI_TRY_FINALLY(L) {
-    luaH_wrunlock(L, fs->h);
-  } LUAI_TRY_END(L);
+  if (luaH_load(L, fs->h, k, &idx, NULL, 0) && ttisnumber(&idx)) {
+    lua_assert(luaO_rawequalObj(&fs->f->k[cast_int(nvalue(&idx))], v));
+    retval = cast_int(nvalue(&idx));
+  } else {
+    /* constant not found; create a new entry */
+    setnvalue(&idx, cast_num(fs->nk));
+    luaH_store(L, fs->h, k, &idx, 1);
+
+    luaM_growvector(L, LUA_MEM_PROTO_DATA, f->k, fs->nk, f->sizek, TValue,
+        MAXARG_Bx, "constant table overflow");
+    while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
+    luaC_writebarriervv(L, &f->gch, &f->k[fs->nk], v);
+    retval = fs->nk++;
+  }
   return retval;
 }
 

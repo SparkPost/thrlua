@@ -23,6 +23,12 @@
 
 #include "thrlua.h"
 
+#define STRATEGY_RW 1
+#define STRATEGY_SEQ 2
+
+#define STRATEGY STRATEGY_RW
+
+
 /*
 ** max size of array part is 2^MAXBITS
 */
@@ -56,6 +62,9 @@
 */
 #define numints		cast_int(sizeof(lua_Number)/sizeof(int))
 
+static TValue *luaH_setnum(lua_State *L, Table *t, int key);
+static TValue *luaH_setstr(lua_State *L, Table *t, const TString *key);
+static TValue *luaH_set(lua_State *L, Table *t, const TValue *key);
 
 
 #define dummynode		(&dummynode_)
@@ -351,6 +360,9 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
   Table *t = luaC_newobj(L, LUA_TTABLE);
 
   ck_rwlock_init(&t->lock);
+  ck_sequence_init(&t->seq);
+  ck_spinlock_cas_init(&t->caslock);
+
   t->flags = cast_byte(~0);
   t->node = cast(Node *, dummynode);
   setarrayvector(L, t, narray);
@@ -419,7 +431,7 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
 /*
 ** search function for integers
 */
-const TValue *luaH_getnum (Table *t, int key) {
+static const TValue *luaH_getnum (Table *t, int key) {
   /* (1 <= key && key <= t->sizearray) */
   if (cast(unsigned int, key-1) < cast(unsigned int, t->sizearray))
     return &t->array[key-1];
@@ -435,11 +447,10 @@ const TValue *luaH_getnum (Table *t, int key) {
   }
 }
 
-
 /*
 ** search function for strings
 */
-const TValue *luaH_getstr (Table *t, TString *key) {
+static const TValue *luaH_getstr (Table *t, const TString *key) {
   Node *n = hashstr(t, key);
   do {  /* check whether `key' is somewhere in the chain */
     if (ttisstring(gkey(n))) {
@@ -460,11 +471,10 @@ const TValue *luaH_getstr (Table *t, TString *key) {
   return luaO_nilobject;
 }
 
-
 /*
 ** main search function
 */
-const TValue *luaH_get (Table *t, const TValue *key) {
+static const TValue *luaH_get (Table *t, const TValue *key) {
   switch (ttype(key)) {
     case LUA_TNIL: return luaO_nilobject;
     case LUA_TSTRING: return luaH_getstr(t, rawtsvalue(key));
@@ -489,7 +499,7 @@ const TValue *luaH_get (Table *t, const TValue *key) {
 }
 
 
-TValue *luaH_set (lua_State *L, Table *t, const TValue *key) {
+static TValue *luaH_set (lua_State *L, Table *t, const TValue *key) {
   const TValue *p = luaH_get(t, key);
   t->flags = 0;
   if (p != luaO_nilobject)
@@ -503,7 +513,7 @@ TValue *luaH_set (lua_State *L, Table *t, const TValue *key) {
 }
 
 
-TValue *luaH_setnum (lua_State *L, Table *t, int key) {
+static TValue *luaH_setnum (lua_State *L, Table *t, int key) {
   const TValue *p = luaH_getnum(t, key);
   if (p != luaO_nilobject)
     return cast(TValue *, p);
@@ -514,8 +524,7 @@ TValue *luaH_setnum (lua_State *L, Table *t, int key) {
   }
 }
 
-
-TValue *luaH_setstr (lua_State *L, Table *t, TString *key) {
+static TValue *luaH_setstr (lua_State *L, Table *t, const TString *key) {
   const TValue *p = luaH_getstr(t, key);
   if (p != luaO_nilobject)
     return cast(TValue *, p);
@@ -525,7 +534,6 @@ TValue *luaH_setstr (lua_State *L, Table *t, TString *key) {
     return newkey(L, t, &k);
   }
 }
-
 
 static int unbound_search (Table *t, unsigned int j) {
   unsigned int i = j;  /* i is zero or a present index */
@@ -572,6 +580,168 @@ int luaH_getn (Table *t) {
     return j;  /* that is easy... */
   else return unbound_search(t, j);
 }
+
+void luaH_wrlock(lua_State *L, Table *t)
+{
+  ck_rwlock_write_lock(&(t)->lock);
+//  ck_spinlock_cas_lock(&t->caslock);
+#if STRATEGY == STRATEGY_SEQ
+  ck_sequence_write_begin(&t->seq);
+#endif
+}
+
+void luaH_wrunlock(lua_State *L, Table *t)
+{
+#if STRATEGY == STRATEGY_SEQ
+  ck_sequence_write_end(&t->seq);
+#endif
+  ck_rwlock_write_unlock(&(t)->lock);
+//  ck_spinlock_cas_unlock(&t->caslock);
+}
+
+void luaH_rdlock(lua_State *L, Table *t)
+{
+  ck_rwlock_read_lock(&(t)->lock);
+}
+
+void luaH_rdunlock(lua_State *L, Table *t)
+{
+  ck_rwlock_read_unlock(&(t)->lock);
+}
+
+/* only some days do I wish that C had templates ala C++ */
+enum key_type {
+  kt_TValue,
+  kt_TString,
+  kt_int
+};
+union key_info {
+  int i;
+  const TValue *tv;
+  const TString *ts;
+};
+
+static inline int luaH_loader(enum key_type kt,
+  lua_State *L, Table *t, union key_info key,
+  TValue *val, GCheader *barrier, int nilok)
+{
+  const TValue *v;
+  int res = 0;
+#if STRATEGY == STRATEGY_SEQ
+  uint32_t vers;
+
+  do {
+    vers = ck_sequence_read_begin(&t->seq);
+#elif STRATEGY == STRATEGY_RW
+    luaH_rdlock(L, t);
+#endif
+
+    switch (kt) {
+      case kt_TValue:
+        v = luaH_get(t, key.tv);
+        break;
+      case kt_TString:
+        v = luaH_getstr(t, key.ts);
+        break;
+      case kt_int:
+        v = luaH_getnum(t, key.i);
+        break;
+    }
+
+    res = !ttisnil(v);
+
+    if (res || nilok) {
+      if (barrier) {
+        luaC_writebarriervv(L, barrier, val, v);
+      } else {
+        *val = *v;
+      }
+    }
+#if STRATEGY == STRATEGY_SEQ
+  } while (ck_sequence_read_retry(&t->seq, vers));
+#elif STRATEGY == STRATEGY_RW
+  luaH_rdunlock(L, t);
+#endif
+
+  return res;
+}
+
+static inline int luaH_storer(enum key_type kt,
+    lua_State *L, Table *t, union key_info key,
+		const TValue *rval, int create)
+{
+  TValue *oldval;
+  int done = 0;
+
+  luaH_wrlock(L, t);
+  /* do a primitive set */
+  LUAI_TRY_BLOCK(L) {
+    switch (kt) {
+      case kt_TValue:
+        oldval = luaH_set(L, t, key.tv);
+        break;
+      case kt_TString:
+        oldval = luaH_setstr(L, t, key.ts);
+        break;
+      case kt_int:
+        oldval = luaH_setnum(L, t, key.i);
+        break;
+    }
+    if (create || !ttisnil(oldval)) {
+      luaC_writebarriervv(L, &t->gch, oldval, rval);
+      done = 1;
+    }
+  } LUAI_TRY_FINALLY(L) {
+    luaH_wrunlock(L, t);
+  } LUAI_TRY_END(L);
+
+  return done;
+}
+
+int luaH_load(lua_State *L, Table *t, const TValue *key,
+		TValue *val, GCheader *barrier, int nilok)
+{
+  union key_info k = { .tv = key };
+  return luaH_loader(kt_TValue, L, t, k, val, barrier, nilok);
+}
+
+int luaH_load_num(lua_State *L, Table *t, int key, TValue *val,
+    GCheader *barrier, int nilok)
+{
+  union key_info k = { .i = key };
+  return luaH_loader(kt_int, L, t, k, val, barrier, nilok);
+}
+
+int luaH_load_str(lua_State *L, Table *t, const TString *key,
+		TValue *val, GCheader *barrier, int nilok)
+{
+  union key_info k = { .ts = key };
+  return luaH_loader(kt_TString, L, t, k, val, barrier, nilok);
+}
+
+int luaH_store(lua_State *L, Table *t, const TValue *key,
+		const TValue *rval, int create)
+{
+  union key_info k = { .tv = key };
+  return luaH_storer(kt_TValue, L, t, k, rval, create);
+}
+
+
+int luaH_store_num(lua_State *L, Table *t, int key,
+		const TValue *rval, int create)
+{
+  union key_info k = { .i = key };
+  return luaH_storer(kt_int, L, t, k, rval, create);
+}
+
+
+int luaH_store_str(lua_State *L, Table *t, const TString *key,
+		const TValue *rval, int create)
+{
+  union key_info k = { .ts = key };
+  return luaH_storer(kt_TString, L, t, k, rval, create);
+}
+
 
 #if defined(LUA_DEBUG)
 

@@ -170,15 +170,14 @@ static void collectvalidlines (lua_State *L, Closure *f) {
     Table *t = luaH_new(L, 0, 0);
     int *lineinfo = f->l.p->lineinfo;
     int i;
+    TValue bval;
 
-    luaH_wrlock(L, t);
-    LUAI_TRY_BLOCK(L) {
-      for (i=0; i<f->l.p->sizelineinfo; i++)
-        setbvalue(luaH_setnum(L, t, lineinfo[i]), 1);
-      sethvalue(L, L->top, t);
-    } LUAI_TRY_FINALLY(L) {
-      luaH_wrunlock(L, t);
-    } LUAI_TRY_END(L);
+    setbvalue(&bval, 1);
+
+    for (i =0 ; i < f->l.p->sizelineinfo; i++) {
+      luaH_store_num(L, t, lineinfo[i], &bval, 1);
+    }
+    sethvalue(L, L->top, t);
   }
   incr_top(L);
 }

@@ -9,7 +9,7 @@
 
 #include "thrlua.h"
 
-#if USING_DRD
+#if 0
 # define INLINE /* not inline */
 #else
 # define INLINE inline
@@ -377,17 +377,17 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
       {
         Table *h = gco2h(o);
         int weakkey = 0, weakvalue = 0;
-        const TValue *mode;
+        TValue mode;
 
         if (!is_world_stopped(L)) luaH_rdlock(L, h);
         if (h->metatable) {
           traverse_obj(L, o, h->metatable, objfunc);
         }
         o->marked &= ~(WEAKKEYBIT|WEAKVALBIT);
-        mode = gfasttm(G(L), gch2h(h->metatable), TM_MODE);
-        if (mode && ttisstring(mode)) {
-          weakkey = (strchr(svalue(mode), 'k') != NULL);
-          weakvalue = (strchr(svalue(mode), 'v') != NULL);
+        if (fasttm(L, gch2h(h->metatable), TM_MODE, &mode) &&
+            ttisstring(&mode)) {
+          weakkey = (strchr(svalue(&mode), 'k') != NULL);
+          weakvalue = (strchr(svalue(&mode), 'v') != NULL);
           if (weakkey) o->marked |= WEAKKEYBIT;
           if (weakvalue) o->marked |= WEAKVALBIT;
         }
@@ -1064,19 +1064,18 @@ static void call_finalize(lua_State *L, GCheader *o)
 {
   if (o->tt == LUA_TUSERDATA && !is_finalized(o)) {
     Udata *ud;
-    const TValue *tm;
+    TValue tm;
 
     o->marked |= FINALBIT;
 
     ud = rawgco2u(o);
-    tm = gfasttm(G(L), gch2h(ud->uv.metatable), TM_GC);
-    if (tm) {
+    if (fasttm(L, gch2h(ud->uv.metatable), TM_GC, &tm)) {
       lu_byte hook = L->allowhook;
 
       /* turn off hooks during finalizer */
       L->allowhook = 0;
 
-      setobj2s(L, L->top, tm);
+      setobj2s(L, L->top, &tm);
       setuvalue(L, L->top + 1, ud);
       L->top += 2;
       lua_lock(L);

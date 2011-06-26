@@ -88,40 +88,31 @@ static void callTM (lua_State *L, const TValue *f, const TValue *p1,
 
 void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
   int loop;
+  TValue tm;
+
   for (loop = 0; loop < MAXTAGLOOP; loop++) {
-    const TValue *tm;
+
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
-      const TValue *res;
-      int done;
 
-      luaH_rdlock(L, h);
-      LUAI_TRY_BLOCK(L) {
-        res = luaH_get(h, key); /* do a primitive get */
-        if (!ttisnil(res) ||  /* result is no nil? */
-            (tm = fasttm(L, gch2h(h->metatable), TM_INDEX)) == NULL) {
-          /* or no TM? */
-          setobj2s(L, val, res);
-          /* will return out of the loop after we have unlocked below */
-          done = 1;
-        } else {
-          /* will try the tag method */
-          done = 0;
-        }
-      } LUAI_TRY_FINALLY(L) {
-        luaH_rdunlock(L, h);
-      } LUAI_TRY_END(L);
-      if (done) {
+      if (luaH_load(L, h, key, val, &L->gch, 0)) {
+        /* value is not nil */
         return;
       }
-    }
-    else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_INDEX)))
+
+      if (!fasttm(L, gch2h(h->metatable), TM_INDEX, &tm)) {
+        /* value is nil and there is no registered __index handler */
+        setobj2s(L, val, luaO_nilobject);
+        return;
+      }
+    } else if (!luaT_gettmbyobj(L, t, TM_INDEX, &tm)) {
       luaG_typeerror(L, t, "index");
-    if (ttisfunction(tm)) {
-      callTMres(L, val, tm, t, key);
+    }
+    if (ttisfunction(&tm)) {
+      callTMres(L, val, &tm, t, key);
       return;
     }
-    t = tm;  /* else repeat with `tm' */ 
+    t = &tm;  /* else repeat with `tm' */
   }
   luaG_runerror(L, "loop in gettable");
 }
@@ -129,42 +120,27 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
 
 void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
   int loop;
+  TValue tm;
   TValue temp;
 
   for (loop = 0; loop < MAXTAGLOOP; loop++) {
-    const TValue *tm;
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
-      TValue *oldval;
-      int done;
+      int havetm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX, &tm);
 
-      luaH_wrlock(L, h);
-      LUAI_TRY_BLOCK(L) {
-        oldval = luaH_set(L, h, key); /* do a primitive set */
-        if (!ttisnil(oldval) ||  /* result is no nil? */
-            (tm = fasttm(L, gch2h(h->metatable), TM_NEWINDEX)) == NULL) {
-          /* or no TM? */
-          luaC_writebarriervv(L, &h->gch, oldval, val);
-          done = 1;
-        } else {
-          /* else will try the tag method */
-          done = 0;
-        }
-      } LUAI_TRY_FINALLY(L) {
-        luaH_wrunlock(L, h);
-      } LUAI_TRY_END(L);
-      if (done) {
+      if (luaH_store(L, h, key, val, !havetm)) {
         return;
       }
-    }
-    else if (ttisnil(tm = luaT_gettmbyobj(L, t, TM_NEWINDEX)))
+    } else if (!luaT_gettmbyobj(L, t, TM_NEWINDEX, &tm)) {
       luaG_typeerror(L, t, "index");
-    if (ttisfunction(tm)) {
-      callTM(L, tm, t, key, val);
+    }
+    if (ttisfunction(&tm)) {
+      callTM(L, &tm, t, key, val);
       return;
     }
     /* else repeat with `tm' */
-    setobj(L, &temp, tm); /* avoid pointing inside table (may rehash) */
+    /* avoid pointing inside table (may rehash) */
+    setobj(L, &temp, &tm);
     t = &temp;
   }
   luaG_runerror(L, "loop in settable");
@@ -173,38 +149,66 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
 
 static int call_binTM (lua_State *L, const TValue *p1, const TValue *p2,
                        StkId res, TMS event) {
-  const TValue *tm = luaT_gettmbyobj(L, p1, event);  /* try first operand */
-  if (ttisnil(tm))
-    tm = luaT_gettmbyobj(L, p2, event);  /* try second operand */
-  if (ttisnil(tm)) return 0;
-  callTMres(L, res, tm, p1, p2);
+  TValue tm;
+
+  if (!luaT_gettmbyobj(L, p1, event, &tm)) {
+    if (!luaT_gettmbyobj(L, p2, event, &tm)) {
+      return 0;
+    }
+  }
+  callTMres(L, res, &tm, p1, p2);
   return 1;
 }
 
 
-static const TValue *get_compTM (lua_State *L, Table *mt1, Table *mt2,
-                                  TMS event) {
-  const TValue *tm1 = fasttm(L, mt1, event);
-  const TValue *tm2;
-  if (tm1 == NULL) return NULL;  /* no metamethod */
-  if (mt1 == mt2) return tm1;  /* same metatables => same metamethods */
-  tm2 = fasttm(L, mt2, event);
-  if (tm2 == NULL) return NULL;  /* no metamethod */
-  if (luaO_rawequalObj(tm1, tm2))  /* same metamethods? */
-    return tm1;
-  return NULL;
+static int get_compTM(lua_State *L, Table *mt1, Table *mt2, TMS event,
+    TValue *tm)
+{
+  TValue tm2;
+
+  if (!fasttm(L, mt1, event, tm)) {
+    /* no metamethod */
+    return 0;
+  }
+
+  if (mt1 == mt2) {
+    /* same metatables means same metamethods */
+    return 1;
+  }
+
+  if (!fasttm(L, mt2, event, &tm2)) {
+    /* no metamethod */
+    return 0;
+  }
+
+  if (luaO_rawequalObj(tm, &tm2)) {
+    /* same metamethods */
+    return 1;
+  }
+
+  return 0;
 }
 
 
 static int call_orderTM (lua_State *L, const TValue *p1, const TValue *p2,
-                         TMS event) {
-  const TValue *tm1 = luaT_gettmbyobj(L, p1, event);
-  const TValue *tm2;
-  if (ttisnil(tm1)) return -1;  /* no metamethod? */
-  tm2 = luaT_gettmbyobj(L, p2, event);
-  if (!luaO_rawequalObj(tm1, tm2))  /* different metamethods? */
+                         TMS event)
+{
+  TValue tm1;
+  TValue tm2;
+
+  if (!luaT_gettmbyobj(L, p1, event, &tm1)) {
+    /* no metamethod */
     return -1;
-  callTMres(L, L->top, tm1, p1, p2);
+  }
+  if (!luaT_gettmbyobj(L, p2, event, &tm2)) {
+    /* different metamethods (p2 has none) */
+    return -1;
+  }
+  if (!luaO_rawequalObj(&tm1, &tm2)) {
+    /* different metamethods */
+    return -1;
+  }
+  callTMres(L, L->top, &tm1, p1, p2);
   return !l_isfalse(L->top);
 }
 
@@ -271,7 +275,8 @@ static int lessequal (lua_State *L, const TValue *l, const TValue *r) {
 
 
 int luaV_equalval (lua_State *L, const TValue *t1, const TValue *t2) {
-  const TValue *tm;
+  TValue tm;
+
   lua_assert(ttype(t1) == ttype(t2));
   switch (ttype(t1)) {
     case LUA_TNIL: return 1;
@@ -280,14 +285,18 @@ int luaV_equalval (lua_State *L, const TValue *t1, const TValue *t2) {
     case LUA_TLIGHTUSERDATA: return pvalue(t1) == pvalue(t2);
     case LUA_TUSERDATA: {
       if (uvalue(t1) == uvalue(t2)) return 1;
-      tm = get_compTM(L, gch2h(uvalue(t1)->metatable),
-            gch2h(uvalue(t2)->metatable), TM_EQ);
+      if (!get_compTM(L, gch2h(uvalue(t1)->metatable),
+            gch2h(uvalue(t2)->metatable), TM_EQ, &tm)) {
+        return 0;
+      }
       break;  /* will try TM */
     }
     case LUA_TTABLE: {
       if (hvalue(t1) == hvalue(t2)) return 1;
-      tm = get_compTM(L, gch2h(hvalue(t1)->metatable),
-            gch2h(hvalue(t2)->metatable), TM_EQ);
+      if (!get_compTM(L, gch2h(hvalue(t1)->metatable),
+            gch2h(hvalue(t2)->metatable), TM_EQ, &tm)) {
+        return 0;
+      }
       break;  /* will try TM */
     }
     case LUA_TSTRING:
@@ -296,8 +305,7 @@ int luaV_equalval (lua_State *L, const TValue *t1, const TValue *t2) {
     default:
       return gcvalue(t1) == gcvalue(t2);
   }
-  if (tm == NULL) return 0;  /* no TM? */
-  callTMres(L, L->top, tm, t1, t2);  /* call TM */
+  callTMres(L, L->top, &tm, t1, t2);  /* call TM */
   return !l_isfalse(L->top);
 }
 
@@ -824,18 +832,19 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         runtime_check(L, ttistable(ra));
         h = hvalue(ra);
         last = ((c-1)*LFIELDS_PER_FLUSH) + n;
+
         luaH_wrlock(L, h);
         LUAI_TRY_BLOCK(L) {
           if (last > h->sizearray)  /* needs more space? */
             luaH_resizearray(L, h, last);  /* pre-alloc it at once */
-          for (; n > 0; n--) {
-            TValue *val = ra+n;
-            TValue *src = luaH_setnum(L, h, last--);
-            luaC_writebarriervv(L, &h->gch, src, val);
-          }
         } LUAI_TRY_FINALLY(L) {
           luaH_wrunlock(L, h);
         } LUAI_TRY_END(L);
+
+        for (; n > 0; n--) {
+          luaH_store_num(L, h, last--, ra + n, 1);
+        }
+
         continue;
       }
       case OP_CLOSE: {

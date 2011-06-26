@@ -9,4 +9,4 @@ case `uname` in
 	  ;;
 esac
 export LD_LIBRARY_PATH DYLD_LIBRARY_PATH RCLUA_CPATH RCLUA_PATH
-exec valgrind --tool=callgrind $dsymutil --dump-line=yes --dump-instr=yes .libs/rclua $*
+exec valgrind --tool=callgrind $dsymutil --separate-callers=2 --collect-bus=yes --dump-line=yes --dump-instr=yes .libs/rclua $*

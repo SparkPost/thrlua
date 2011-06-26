@@ -128,18 +128,10 @@ void luaX_syntaxerror (LexState *ls, const char *msg) {
 TString *luaX_newstring (LexState *ls, const char *str, size_t l) {
   lua_State *L = ls->L;
   TString *ts = luaS_newlstr(L, str, l);
-  TValue *o;
+  TValue o;
 
-  luaH_wrlock(L, ls->fs->h);
-  LUAI_TRY_BLOCK(L) {
-    o = luaH_setstr(L, ls->fs->h, ts);  /* entry for `str' */
-    if (ttisnil(o)) {
-      setbvalue(o, 1);  /* make sure `str' will not be collected */
-    }
-  } LUAI_TRY_FINALLY(L) {
-    luaH_wrunlock(L, ls->fs->h);
-  } LUAI_TRY_END(L);
-//  luaC_checkGC(L);
+  setbvalue(&o, 1);  /* make sure `str' will not be collected */
+  luaH_store_str(L, ls->fs->h, ts, &o, 1);
   return ts;
 }
 

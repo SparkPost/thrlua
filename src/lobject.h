@@ -13,6 +13,7 @@
 #include "ck_stack.h"
 #include "ck_spinlock.h"
 #include "ck_rwlock.h"
+#include "ck_sequence.h"
 
 /* tags for values visible from Lua */
 #define LAST_TAG	LUA_TTHREAD
@@ -312,6 +313,9 @@ typedef struct Table {
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */ 
   lu_byte lsizenode;  /* log2 of size of `node' array */
   struct ck_rwlock lock;
+  ck_sequence_t seq;
+  ck_spinlock_cas_t caslock;
+
   GCheader /*struct Table*/ *metatable;
   TValue *array;  /* array part */
   Node *node;

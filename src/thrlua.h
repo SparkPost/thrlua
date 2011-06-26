@@ -79,7 +79,6 @@ typedef struct global_State global_State;
 #include "lopcodes.h"
 #include "lparser.h"
 #include "lcode.h"
-#include "ltm.h"
 #include "lstate.h"
 #include "ldebug.h"
 #include "ldo.h"
@@ -129,9 +128,9 @@ static inline void setobj(lua_State *L, TValue *obj1, const TValue *obj2)
   checkliveness(G(L), obj1);
 }
 
-static inline void setsvalue(lua_State *L, TValue *obj, TString *str)
+static inline void setsvalue(lua_State *L, TValue *obj, const TString *str)
 {
-  luaC_writebarriervo(L, &L->gch, obj, &str->tsv.gch);
+  luaC_writebarriervo(L, &L->gch, obj, (GCheader*)&str->tsv.gch);
   checkliveness(G(L), obj);
 }
 
