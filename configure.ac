@@ -7,24 +7,16 @@ AC_PROG_CC
 # for libraries
 case $host in
 	i386*solaris*)
-		CFLAGS="$CFLAGS -m64 -D__x86_64__"
-		CK_PROFILE=x86_64
 		arch=x86_64
 		;;
 	sparc*solaris*)
-		CFLAGS="$CFLAGS -m64 -D__sparcv9__"
-		CK_PROFILE=sparcv9
 		arch=sparcv9
 		;;
 	x86_64*linux*)
 		arch=x86_64
-		CK_PROFILE=x86_64
-		CFLAGS="$CFLAGS -m64 -D__x86_64__"
 		;;
 	i*86*linux*)
 		arch=i386
-		CK_PROFILE=x86
-		CFLAGS="$CFLAGS -m32 -D__x86__"
 		;;
 	*darwin*)
 		arch=x86_64
@@ -33,6 +25,7 @@ esac
 AM_CONDITIONAL(ARCH_X86_64, test "$arch" = x86_64)
 AM_CONDITIONAL(ARCH_I386, test "$arch" = i386)
 AM_CONDITIONAL(ARCH_SPARCV9, test "$arch" = sparcv9)
+
 case $host in
 	*solaris*)
 		CFLAGS="$CFLAGS -D_XOPEN_SOURCE=600 -D_BSD_SOURCE -std=gnu99"
@@ -75,6 +68,9 @@ PCRE_LIBS=`pcre-config --libs`
 PCRE_CFLAGS=`pcre-config --cflags`
 AC_SUBST(PCRE_LIBS)
 AC_SUBST(PCRE_CFLAGS)
+
+CK_CFLAGS=`pkg-config --cflags ck`
+AC_SUBST(CK_CFLAGS)
 
 AC_CHECK_LIB(dl,dlopen)
 AC_CHECK_LIB(rt,clock_gettime)
@@ -156,19 +152,6 @@ case $host in
 esac
 AC_SUBST(JAVA_CFLAGS)
 AC_SUBST(JAVA_LIBS)
-
-cd src/ck
-if test -f Makefile ; then
-  make clean
-fi
-if test -n "$CK_PROFILE" ; then
-	./configure --profile=$CK_PROFILE
-else
-	./configure
-fi
-make
-rm src/*.so
-cd ../..
 
 AC_CONFIG_HEADERS([rcluaconfig.h])
 AC_CONFIG_FILES([Makefile etc/rclua.pc])
