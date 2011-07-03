@@ -8,7 +8,7 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la posix.la xml.la luacurl.la
+cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la posix.la xml.la curl.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -70,10 +70,10 @@ xml_la_SOURCES = modules/xml.c
 xml_la_LDFLAGS = -module @XML_LIBS@
 xml_la_CPPFLAGS = $(commonCFLAGS) @XML_CFLAGS@
 
-# luacurl 
-luacurl_la_SOURCES = modules/luacurl.c
-luacurl_la_LDFLAGS = -module @CURL_LIBS@
-luacurl_la_CPPFLAGS = $(commonCFLAGS) @CURL_CFLAGS@
+# curl 
+curl_la_SOURCES = modules/curl.c
+curl_la_LDFLAGS = -module @CURL_LIBS@
+curl_la_CPPFLAGS = $(commonCFLAGS) @CURL_CFLAGS@
 
 # javabridge
 javabridge_la_SOURCES = modules/java.c

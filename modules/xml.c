@@ -420,7 +420,7 @@ LUALIB_API int luaopen_xml(lua_State *L)
   lua_pushcfunction(L, lua_xpathiter_gc);
   lua_setfield(L, -2, "__gc");
 
-  luaL_register(L, LUA_XMLLIBNAME, reg_libxml);
+  luaL_register(L, "xml", reg_libxml);
 
   return 1;
 }

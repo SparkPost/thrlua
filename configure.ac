@@ -72,13 +72,13 @@ AC_SUBST(PCRE_CFLAGS)
 CK_CFLAGS=`pkg-config --cflags ck`
 AC_SUBST(CK_CFLAGS)
 
-XML_LIBS="-L/opt/msys/3rdParty/lib64 -lxml2"
-XML_CFLAGS="-I/opt/msys/3rdParty/include/libxml2"
+XML_LIBS=`xml2-config --libs`
+XML_CFLAGS=`xml2-config --cflags`
 AC_SUBST(XML_LIBS)
 AC_SUBST(XML_CFLAGS)
 
-CURL_LIBS="-L/opt/msys/3rdParty/lib64 -lcurl"
-CURL_CFLAGS="-I/opt/msys/3rdParty/include"
+CURL_LIBS=`curl-config --libs`
+CURL_CFLAGS=`curl-config --cflags`
 AC_SUBST(CURL_LIBS)
 AC_SUBST(CURL_CFLAGS)
 
