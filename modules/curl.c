@@ -1,5 +1,4 @@
-/* luacurl.c
- *
+/*
  * author      : Alexander Marinov (alekmarinov@gmail.com)
  * project     : luacurl
  * description : Binds libCURL to Lua
@@ -8,7 +7,11 @@
  * todo        : multipart formpost building,
  *               curl multi
  *
- * Contributors: Thomas Harning added support for tables/threads as the CURLOPT_*DATA items.
+ * Contributors: Thomas Harning added support for tables/threads as the
+ *               CURLOPT_*DATA items.
+ *               Significant overhaul to improve implementation and support
+ *               for threaded lua by Wez @ Message Systems.
+ * Copyright (c) 2003-2006 AVIQ Systems AG
  * Copyright (c) 2011 Message Systems, Inc. All rights reserved
  **************************************************************************/
 
@@ -44,13 +47,14 @@
 /* wrap curl option with simple option type */
 #define C_OPT(n, t)
 /* wrap curl option with string list type */
-#define C_OPT_SL(n) static const char* KEY_##n = #n;
+#define C_OPT_SL(n)
 /* wrap the other curl options not included above */
 #define C_OPT_SPECIAL(n)
 
 /* describes all currently supported curl options available to curl 7.15.2 */
 #define ALL_CURL_OPT \
 	C_OPT_SPECIAL(WRITEDATA) \
+	C_OPT_SPECIAL(SEEKDATA) \
 	C_OPT(URL, string) \
 	C_OPT(PORT, number) \
 	C_OPT(PROXY, string) \
@@ -60,6 +64,7 @@
 	C_OPT_SPECIAL(READDATA) \
 	C_OPT_SPECIAL(WRITEFUNCTION) \
 	C_OPT_SPECIAL(READFUNCTION) \
+	C_OPT_SPECIAL(SEEKFUNCTION) \
 	C_OPT(TIMEOUT, number) \
 	C_OPT(INFILESIZE, number) \
 	C_OPT(POSTFIELDS, string) \
@@ -222,17 +227,33 @@ union luaValueT
 	void *ptr;
 };
 
+struct lua_curl_func {
+	void *func;
+	int dtype;
+	union luaValueT data;
+};
+
 /* CURL object wrapper type */
 typedef struct
 {
 	CURL* curl;
 	/* lua_State must ONLY be set during perform for thread safety purposes */
 	lua_State* L;
-	void *fwriterRef;	  int wudtype; union luaValueT wud;
-	void *freaderRef;   int rudtype; union luaValueT rud;
-	void *fprogressRef; int pudtype; union luaValueT pud;
-	void *fheaderRef;   int hudtype; union luaValueT hud;
-	void *fioctlRef;    int iudtype; union luaValueT iud;
+	struct lua_curl_func
+		writer,
+		reader,
+		progress,
+		header,
+		ioctler,
+		seeker;
+
+	/* emit storage for all the lists that we'll cache */
+#undef C_OPT
+#define C_OPT(n, t)
+#undef C_OPT_SL
+#define C_OPT_SL(n) struct curl_slist *list_##n;
+	ALL_CURL_OPT
+
 } curlT;
 
 static inline is_ref_type(int t)
@@ -243,6 +264,7 @@ static inline is_ref_type(int t)
 		case LUA_TUSERDATA:
 		case LUA_TTABLE:
 		case LUA_TTHREAD:
+		case LUA_TSTRING:
 			return 1;
 		default:
 			return 0;
@@ -258,31 +280,30 @@ static void clear_ref(lua_State *L, void **refp)
 }
 
 /* push correctly luaValue to Lua stack */
-static void pushLuaValueT(lua_State* L, int t, union luaValueT v)
+static void push_func_and_data(lua_State* L, struct lua_curl_func *func)
 {
-	switch (t)
-	{
+	lua_pushobjref(L, func->func);
+
+	switch (func->dtype) {
 		case LUA_TNIL:
 			lua_pushnil(L);
 			break;
 		case LUA_TBOOLEAN:
-			lua_pushboolean(L, v.nval);
+			lua_pushboolean(L, func->data.nval);
 			break;
 		case LUA_TTABLE:
 		case LUA_TFUNCTION:
 		case LUA_TTHREAD:
 		case LUA_TUSERDATA:
 		case LUA_TLIGHTUSERDATA:
-			lua_pushobjref(L, v.ptr);
+		case LUA_TSTRING:
+			lua_pushobjref(L, func->data.ptr);
 			break;
 		case LUA_TNUMBER:
-			lua_pushnumber(L, v.nval);
-			break;
-		case LUA_TSTRING:
-			lua_pushstring(L, v.sval);
+			lua_pushnumber(L, func->data.nval);
 			break;
 		default:
-			luaL_error(L, "invalid type %s\n", lua_typename(L, t));
+			luaL_error(L, "invalid type %s\n", lua_typename(L, func->dtype));
 	}
 }
 
@@ -292,8 +313,7 @@ static size_t readerCallback(void *ptr, size_t size, size_t nmemb, void *stream)
 	const char *readBytes;
 	curlT *c = stream;
 
-	lua_pushobjref(c->L, c->freaderRef);
-	pushLuaValueT(c->L, c->rudtype, c->rud);
+	push_func_and_data(c->L, &c->reader);
 	lua_pushnumber(c->L, size * nmemb);
 	lua_call(c->L, 2, 1);
 	readBytes = lua_tostring(c->L, -1);
@@ -308,20 +328,18 @@ static size_t writerCallback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
 	curlT *c = stream;
 
-	lua_pushobjref(c->L, c->fwriterRef);
-	pushLuaValueT(c->L, c->wudtype, c->wud);
+	push_func_and_data(c->L, &c->writer);
 	lua_pushlstring(c->L, ptr, size * nmemb);
 	lua_call(c->L, 2, 1);
 	return (size_t)lua_tointeger(c->L, -1);
 }
 
-int progressCallback(void *clientp, double dltotal, double dlnow,
+static int progressCallback(void *clientp, double dltotal, double dlnow,
 		double ultotal, double ulnow)
 {
 	curlT *c = clientp;
 
-	lua_pushobjref(c->L, c->fprogressRef);
-	pushLuaValueT(c->L, c->pudtype, c->pud);
+	push_func_and_data(c->L, &c->progress);
 	lua_pushnumber(c->L, dltotal);
 	lua_pushnumber(c->L, dlnow);
 	lua_pushnumber(c->L, ultotal);
@@ -334,25 +352,32 @@ static size_t headerCallback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
 	curlT *c = stream;
 	
-	lua_pushobjref(c->L, c->fheaderRef);
-	pushLuaValueT(c->L, c->hudtype, c->hud);
+	push_func_and_data(c->L, &c->header);
 	lua_pushlstring(c->L, ptr, size * nmemb);
 	lua_call(c->L, 2, 1);
 	return (size_t)lua_tointeger(c->L, -1);
 }
 
-#if CURL_NEWER(7,12,3)
-curlioerr ioctlCallback(CURL *handle, int cmd, void *clientp)
+static curlioerr ioctlCallback(CURL *handle, int cmd, void *clientp)
 {
 	curlT *c = clientp;
 
-	lua_pushobjref(c->L, c->fioctlRef);
-	pushLuaValueT(c->L, c->iudtype, c->iud);
+	push_func_and_data(c->L, &c->ioctler);
 	lua_pushnumber(c->L, cmd);
 	lua_call(c->L, 2, 1);
 	return (curlioerr)lua_tointeger(c->L, -1);
 }
-#endif
+
+static int seekCallback(void *stream, curl_off_t offset, int origin)
+{
+	curlT *c = stream;
+	
+	push_func_and_data(c->L, &c->seeker);
+	lua_pushinteger(c->L, offset);
+	lua_pushinteger(c->L, origin);
+	lua_call(c->L, 3, 1);
+	return lua_tointeger(c->L, -1);
+}
 
 /* Initializes CURL connection */
 static int lcurl_easy_init(lua_State* L)
@@ -485,7 +510,7 @@ static int lcurl_easy_getinfo(lua_State* L)
 static union luaValueT get_string(lua_State* L, int n)
 {
 	union luaValueT v;
-	v.sval=(char*)lua_tostring(L, 3);
+	v.sval = (char*)lua_tostring(L, 3);
 	return v;
 }
 
@@ -509,56 +534,54 @@ static union luaValueT get_boolean(lua_State* L, int n)
 	return v;
 }
 
-/* remove and free old slist from registry if any associated with the given
- * key */
-static void free_slist(lua_State* L, const char** key)
+/* after argument number n combine all arguments to the curl type curl_slist,
+ * then apply that to the curl easy handle.
+ * We maintain a pointer to this slist in our curl handle state; curl
+ * requires that we keep it alive until after perform has completed */
+static CURLcode apply_slist(lua_State* L, curlT *c, struct curl_slist **list,
+		int n, int opt)
 {
-	struct curl_slist *slist;
-	lua_pushlightuserdata(L, (void *)key);
-	lua_rawget(L, LUA_REGISTRYINDEX);
-	slist=(struct curl_slist *)lua_topointer(L, -1);
-	if (slist)
-	{
-		curl_slist_free_all(slist);
-	}
-}
-
-/* after argument number n combine all arguments to the curl type curl_slist */
-static union luaValueT get_slist(lua_State* L, int n, const char** key)
-{
+	CURLcode code;
 	int i;
-	union luaValueT v;
-	struct curl_slist *slist=0;
+	struct curl_slist *slist = NULL;
 
-	/* free the previous slist if any */
-	free_slist(L, key);
+	if (*list) {
+		/* kill any prior list */
+		curl_slist_free_all(*list);
+	}
 
 	/* check if all parameters are strings */
-	for (i=n; i<lua_gettop(L); i++) luaL_checkstring(L, i);
-	for (i=n; i<lua_gettop(L); i++)
-	{
+	for (i = n; i <= lua_gettop(L); i++) {
+		/* allow nil, so that we can explicitly clear out the list */
+		if (lua_isnil(L, i)) continue;
+		luaL_checkstring(L, i);
+	}
+
+	for (i = n; i <= lua_gettop(L); i++) {
+		if (lua_isnil(L, i)) continue;
 		slist = curl_slist_append(slist, lua_tostring(L, i));
 	}
 
-	/* set the new slist in registry */
-	lua_pushlightuserdata(L, (void*)key);
-	lua_pushlightuserdata(L, (void *)slist);
-	lua_rawset(L, LUA_REGISTRYINDEX);
+	code = curl_easy_setopt(c->curl, opt, slist);
 
-	v.slist=slist;
-	return v;
+	/* save it for later */
+	*list = slist;
+
+	return code;
 }
 
 
-static int apply_func_option(lua_State *L, curlT *c, void **refp,
+static int apply_func_option(lua_State *L, curlT *c, struct lua_curl_func *f,
 		int funccode, void *callback, int datacode)
 {
 	CURLcode code;
 
-	luaL_checktype(L, 3, LUA_TFUNCTION);
+	if (!lua_isnil(L, 3)) {
+		luaL_checktype(L, 3, LUA_TFUNCTION);
+	}
 
-	clear_ref(L, refp);
-	*refp = lua_addrefobj(L, 3);
+	clear_ref(L, &f->func);
+	f->func = lua_addrefobj(L, 3);
 
 	code = curl_easy_setopt(c->curl, funccode, callback);
 	if (code == CURLE_OK) {
@@ -575,23 +598,29 @@ static int apply_func_option(lua_State *L, curlT *c, void **refp,
 	return 3;
 }
 
-static int apply_func_data_option(lua_State *L, curlT *c, int *typep,
-		union luaValueT *vp)
+static int apply_func_data_option(lua_State *L, curlT *c,
+		struct lua_curl_func *f)
 {
-	if (is_ref_type(*typep)) {
-		clear_ref(L, &vp->ptr);
+	if (is_ref_type(f->dtype)) {
+		clear_ref(L, &f->data.ptr);
 	}
-	*typep = lua_type(L, 3);
-	switch (*typep) {
+	f->dtype = lua_type(L, 3);
+	f->data.ptr = NULL;
+	switch (f->dtype) {
 		case LUA_TTABLE:
 		case LUA_TUSERDATA:
 		case LUA_TTHREAD:
 		case LUA_TFUNCTION:
 		case LUA_TLIGHTUSERDATA:
-			vp->ptr = lua_addrefobj(L, 3);
+		case LUA_TSTRING:
+			f->data.ptr = lua_addrefobj(L, 3);
 			break;
-		default:
-			vp->ptr = NULL;
+		case LUA_TNUMBER:
+			f->data.nval = lua_tointeger(L, 3);
+			break;
+		case LUA_TBOOLEAN:
+			f->data.nval = lua_toboolean(L, 3);
+			break;
 	}
 	lua_pushboolean(L, 1);
 	return 1;
@@ -619,43 +648,51 @@ static int lcurl_easy_setopt(lua_State* L)
 	{
 		case CURLOPT_WRITEFUNCTION:
 			return apply_func_option(L, c,
-					&c->fwriterRef, CURLOPT_WRITEFUNCTION,
+					&c->writer, CURLOPT_WRITEFUNCTION,
 					writerCallback, CURLOPT_WRITEDATA);
 
 		case CURLOPT_PROGRESSFUNCTION:
 			return apply_func_option(L, c,
-					&c->fprogressRef, CURLOPT_PROGRESSFUNCTION,
+					&c->progress, CURLOPT_PROGRESSFUNCTION,
 					progressCallback, CURLOPT_PROGRESSDATA);
 
 		case CURLOPT_READFUNCTION:
 			return apply_func_option(L, c,
-					&c->freaderRef, CURLOPT_READFUNCTION,
+					&c->reader, CURLOPT_READFUNCTION,
 					readerCallback, CURLOPT_READDATA);
 
 		case CURLOPT_HEADERFUNCTION:
 			return apply_func_option(L, c,
-					&c->fheaderRef, CURLOPT_HEADERFUNCTION,
+					&c->header, CURLOPT_HEADERFUNCTION,
 					headerCallback, CURLOPT_HEADERDATA);
 
 		case CURLOPT_IOCTLFUNCTION:
 			return apply_func_option(L, c,
-					&c->fioctlRef, CURLOPT_IOCTLFUNCTION,
+					&c->ioctler, CURLOPT_IOCTLFUNCTION,
 					ioctlCallback, CURLOPT_IOCTLDATA);
+		
+		case CURLOPT_SEEKFUNCTION:
+			return apply_func_option(L, c,
+					&c->seeker, CURLOPT_SEEKFUNCTION,
+					seekCallback, CURLOPT_SEEKDATA);
 
 		case CURLOPT_READDATA:
-			return apply_func_data_option(L, c, &c->rudtype, &c->rud);
+			return apply_func_data_option(L, c, &c->reader);
 
 		case CURLOPT_WRITEDATA:
-			return apply_func_data_option(L, c, &c->wudtype, &c->wud);
+			return apply_func_data_option(L, c, &c->writer);
 
 		case CURLOPT_PROGRESSDATA:
-			return apply_func_data_option(L, c, &c->pudtype, &c->pud);
+			return apply_func_data_option(L, c, &c->progress);
 
 		case CURLOPT_HEADERDATA:
-			return apply_func_data_option(L, c, &c->hudtype, &c->hud);
+			return apply_func_data_option(L, c, &c->header);
 
 		case CURLOPT_IOCTLDATA:
-			return apply_func_data_option(L, c, &c->iudtype, &c->iud);
+			return apply_func_data_option(L, c, &c->ioctler);
+		
+		case CURLOPT_SEEKDATA:
+			return apply_func_data_option(L, c, &c->seeker);
 
 		/* Handle all supported curl options differently according the specific
 		 * option argument type */
@@ -668,8 +705,8 @@ static int lcurl_easy_setopt(lua_State* L)
 #undef C_OPT_SL
 #define C_OPT_SL(n) \
 		case CURLOPT_##n: \
-			v = get_slist(L, 3, &KEY_##n); \
-			break;
+			code = apply_slist(L, c, &c->list_##n, 3, curlOpt); \
+			goto process_result;
 
 		/* Expands all the list of switch-case's here */
 		ALL_CURL_OPT
@@ -678,21 +715,9 @@ static int lcurl_easy_setopt(lua_State* L)
 			luaL_error(L, "Not supported curl option %d", curlOpt);
 	}
 
-	/* additional check if the option value has compatible type with the option
-	 * code */
-	switch (lua_type(L, 3)) {
-		case LUA_TFUNCTION:
-		case LUA_TTABLE:
-		case LUA_TUSERDATA:
-		case LUA_TLIGHTUSERDATA:
-				luaL_error(L,
-						"argument #2 type %s is not compatible with this option",
-						lua_typename(L, 3));
-			break;
-	}
-
 	/* set easy the curl option with the processed value */
 	code = curl_easy_setopt(c->curl, curlOpt, v.nval);
+process_result:
 
 	if (CURLE_OK == code) {
 		/* on success return true */
@@ -730,52 +755,42 @@ static int lcurl_easy_perform(lua_State* L)
 	return 3;
 }
 
+static inline void clear_func_and_data(lua_State *L, struct lua_curl_func *func)
+{
+	clear_ref(L, &func->func);
+	if (is_ref_type(func->dtype)) {
+		clear_ref(L, &func->data.ptr);
+	}
+}
+
 /* Finalizes CURL */
 static int lcurl_easy_close(lua_State* L)
 {
-	curlT* c = (curlT*)luaL_checkudata(L, 1, CURLHANDLE);
-
-	if (!c) {
-		return 0;
-	}
+	curlT* c = luaL_checkudata(L, 1, CURLHANDLE);
 
 	if (c->curl) {
 		curl_easy_cleanup(c->curl);
 		c->curl = NULL;
 	}
 
-	clear_ref(L, &c->freaderRef);
-	clear_ref(L, &c->fwriterRef);
-	clear_ref(L, &c->fprogressRef);
-	clear_ref(L, &c->fheaderRef);
-	clear_ref(L, &c->fioctlRef);
-	if (is_ref_type(c->rudtype)) {
-		clear_ref(L, &c->rud.ptr);
-	}
-	if (is_ref_type(c->wudtype)) {
-		clear_ref(L, &c->wud.ptr);
-	}
-	if (is_ref_type(c->pudtype)) {
-		clear_ref(L, &c->pud.ptr);
-	}
-	if (is_ref_type(c->hudtype)) {
-		clear_ref(L, &c->hud.ptr);
-	}
-	if (is_ref_type(c->iudtype)) {
-		clear_ref(L, &c->iud.ptr);
-	}
+	clear_func_and_data(L, &c->reader);
+	clear_func_and_data(L, &c->writer);
+	clear_func_and_data(L, &c->progress);
+	clear_func_and_data(L, &c->header);
+	clear_func_and_data(L, &c->ioctler);
+	clear_func_and_data(L, &c->seeker);
 
 #undef C_OPT
-#undef C_OPT_SL
-#undef C_OPT_SPECIAL
 #define C_OPT(n, t)
-#define C_OPT_SL(n) free_slist(L, &KEY_##n);
-#define C_OPT_SPECIAL(n)
+#undef C_OPT_SL
+#define C_OPT_SL(n) if (c->list_##n) { \
+	curl_slist_free_all(c->list_##n); \
+	c->list_##n = NULL; \
+}
 
 	ALL_CURL_OPT
 
-	lua_pushboolean(L, 1);
-	return 1;
+	return 0;
 }
 
 static const struct luaL_reg luacurl_meths[] =
@@ -900,7 +915,7 @@ static void setcurloptions(lua_State* L)
 #define C_OPT_SL(n) C_OPT(n, dummy)
 #define C_OPT_SPECIAL(n) C_OPT(n, dummy)
 
-ALL_CURL_OPT
+	ALL_CURL_OPT
 }
 
 static void setcurlvalues(lua_State* L)
