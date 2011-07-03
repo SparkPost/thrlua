@@ -8,7 +8,8 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la posix.la xml.la curl.la
+cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la \
+	posix.la xml.la curl.la socket.la
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
@@ -99,6 +100,11 @@ posix_la_SOURCES = modules/lposix.c
 posix_la_LDFLAGS = -module
 posix_la_CPPFLAGS = $(commonCFLAGS)
 
+# socket
+socket_la_SOURCES = modules/socket.c
+socket_la_LDFLAGS = -module
+socket_la_CPPFLAGS = $(commonCFLAGS)
+
 EXTRA_DIST = COPYING HISTORY INSTALL README
 
 smod_HEADERS = etc/strict.lua etc/tap.lua
@@ -112,7 +118,7 @@ test:
 
 lcov:
 	-find . -name \*.gcda -o -name \*.da -o -name \*.bbg\? -o -name \*.lcovinfo | xargs rm -f
-	-LUA_LCOV=./coverage/lcov ./runtests
+	-LUA_LCOV=./coverage/lcov ./runtests $(COV_TESTS)
 	-rm -rf lcovhtml
 	mkdir -p lcovhtml
 	-find . -name \*.gcov | xargs rm -f

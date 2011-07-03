@@ -9,7 +9,8 @@
  *               curl multi
  *
  * Contributors: Thomas Harning added support for tables/threads as the CURLOPT_*DATA items.
- *******************************************************************************************/
+ * Copyright (c) 2011 Message Systems, Inc. All rights reserved
+ **************************************************************************/
 
 #include <string.h>
 #include <stdlib.h>
@@ -403,95 +404,80 @@ static curlT* tocurl (lua_State *L, int cindex)
 /* Request internal information from the curl session */
 static int lcurl_easy_getinfo(lua_State* L)
 {
-	curlT* c=tocurl(L, 1);
+	curlT* c = tocurl(L, 1);
 	CURLINFO nInfo;
-	CURLcode code=-1;
-	luaL_checktype(L, 2, LUA_TNUMBER);   /* accept info code number only */
-	nInfo=lua_tonumber(L, 2);
-	if (nInfo>CURLINFO_SLIST)
-	{
-		/* string list */
-		struct curl_slist *slist=0;
-		if (CURLE_OK == (code=curl_easy_getinfo(c->curl, nInfo, &slist)))
-		{
-			if (slist)
-			{
-				int i;
-				lua_newtable(L);
-				for (i=1; slist; i++, slist=slist->next)
-				{
-					lua_pushnumber(L, i);
-					lua_pushstring(L, slist->data);
-					lua_settable(L, -3);
+	CURLcode code = -1;
+	int i;
+	struct curl_slist *slist = NULL, *ent;
+	double dval;
+	long lval;
+	const char *sval;
+
+	/* accept info code number only */
+	luaL_checktype(L, 2, LUA_TNUMBER);
+	nInfo = lua_tointeger(L, 2);
+
+	switch (nInfo & CURLINFO_TYPEMASK) {
+		case CURLINFO_SLIST:
+			/* string list */
+			code = curl_easy_getinfo(c->curl, nInfo, &slist);
+			if (code == CURLE_OK) {
+				if (slist) {
+					lua_newtable(L);
+					for (i = 1, ent = slist; ent; i++, ent = ent->next)
+					{
+						lua_pushnumber(L, i);
+						lua_pushstring(L, ent->data);
+						lua_settable(L, -3);
+					}
+					curl_slist_free_all(slist);
+				} else {
+					lua_pushnil(L);
 				}
-				curl_slist_free_all(slist);
-			} else
-			{
-				lua_pushnil(L);
+				return 1;
 			}
-			return 1;
-		} else
-		{
-			/* curl_easy_getinfo returns error */
-		}
-	} else
-	if (nInfo>CURLINFO_DOUBLE)
-	{
-		/* double */
-		double value;
-		if (CURLE_OK == (code=curl_easy_getinfo(c->curl, nInfo, &value)))
-		{
-			lua_pushnumber(L, value);
-			return 1;
-		} else
-		{
-			/* curl_easy_getinfo returns error */
-		}
-	} else
-	if (nInfo>CURLINFO_LONG)
-	{
-		/* long */
-		long value;
-		if (CURLE_OK == (code=curl_easy_getinfo(c->curl, nInfo, &value)))
-		{
-			lua_pushinteger(L, (lua_Integer)value);
-			return 1;
-		} else
-		{
-			/* curl_easy_getinfo returns error */
-		}
-	} else
-	if (nInfo>CURLINFO_STRING)
-	{
-		/* string */
-		char* value;
-		if (CURLE_OK == (code=curl_easy_getinfo(c->curl, nInfo, &value)))
-		{
-			lua_pushstring(L, value);
-			return 1;
-		} else
-		{
-			/* curl_easy_getinfo returns error */
-		}
+			/* go to error handling case below */
+			break;
+
+		case CURLINFO_DOUBLE:
+			code = curl_easy_getinfo(c->curl, nInfo, &dval);
+			if (code == CURLE_OK) {
+				lua_pushnumber(L, dval);
+				return 1;
+			}
+			/* go to error handling case below */
+			break;
+
+		case CURLINFO_LONG:
+			code = curl_easy_getinfo(c->curl, nInfo, &lval);
+			if (code == CURLE_OK) {
+				lua_pushinteger(L, (lua_Integer)lval);
+				return 1;
+			}
+			/* go to error handling case below */
+			break;
+
+		case CURLINFO_STRING:
+			code = curl_easy_getinfo(c->curl, nInfo, &sval);
+			if (code == CURLE_OK) {
+				lua_pushstring(L, sval);
+				return 1;
+			}
+			/* go to error handling case below */
+			break;
+
+		default:
+			lua_pushnil(L);
+			lua_pushfstring(L, "unknown CURLINFO type: %d", nInfo);
+			lua_pushinteger(L, CURLE_BAD_FUNCTION_ARGUMENT);
+			return 3;
 	}
-/* on error */
-	/* return nil, error message, error code */
+
+	/* handle the error return from curl_easy_getinfo */
 	lua_pushnil(L);
-	if (code>CURLE_OK)
-	{
-		#if CURL_NEWER(7,11,2)
-			lua_pushstring(L, curl_easy_strerror(code));
-		#else
-			lua_pushfstring(L, "Curl error: #%d", (code));
-		#endif
-		lua_pushnumber(L, code);
-		return 3;
-	}
-	else
-	{
-		lua_pushfstring(L, "Invalid CURLINFO number: %d", nInfo);
-		return 2;
-	}
+	lua_pushstring(L, curl_easy_strerror(code));
+	lua_pushinteger(L, code);
+	return 3;
 }
 
 /* convert argument n to string allowing nil values */
