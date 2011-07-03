@@ -5,7 +5,7 @@ require("thread");
 require("socket");
 require("pcre");
 
-plan(23);
+plan(29);
 
 local res, err, code;
 
@@ -135,10 +135,11 @@ res, err, code = c:setopt(curl.OPT_URL, urlbase .. "/hello");
 ok(res, "set url")
 
 local payload = '';
-res, err, code = c:setopt(curl.OPT_WRITEFUNCTION, function (h, data)
-	payload = payload .. data;
-	return #data
-end)
+function accumulate_payload(h, data)
+  payload = payload .. data
+  return #data
+end
+res, err, code = c:setopt(curl.OPT_WRITEFUNCTION, accumulate_payload)
 ok(res, "set callback")
 
 res, err, code = c:perform()
@@ -169,6 +170,20 @@ res, err, code = c:getinfo(0)
 is(res, nil, "getinfo 0 gives nil")
 is(err, "unknown CURLINFO type: 0")
 is(code, curl.BAD_FUNCTION_ARGUMENT)
+
+res, err, code = c:setopt(curl.OPT_WRITEDATA, { "boom!" });
+ok(res, "set data")
+res, err, code = c:setopt(curl.OPT_WRITEFUNCTION, function (h, data)
+  is(type(h), "table", "got data param")
+  is(h[1], "boom!", "it's definitely our table");
+	return #data
+end)
+ok(res, "set callback")
+res, err, code = c:perform()
+ok(res, "executed fetch")
+res, err, code = c:setopt(curl.OPT_WRITEFUNCTION, accumulate_payload)
+ok(res, "restored callback")
+
 
 -- we're testing that the bindings are functional in that they don't
 -- crash; we trust that curl implements the appropriate semantics so
