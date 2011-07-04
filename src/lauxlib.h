@@ -88,8 +88,34 @@ LUALIB_API const char *(luaL_gsub) (lua_State *L, const char *s, const char *p,
 LUALIB_API const char *(luaL_findtable) (lua_State *L, int idx,
                                          const char *fname, int szhint);
 
+/** this function is called whenever lua_pushuserptr is called.
+ * It allows an opportunity to for adding a reference that the metatable
+ * __gc handler will delete */
+typedef void (*luaL_UserPtrPushFunc)(lua_State *L, void *ptr);
 
+/* Creates a new named metatable and registers the provided set
+ * of functions in the table, such that it contains both metatable
+ * event handlers and runtime methods.
+ * If pushfunc is provided, it is stored as an opaque lightuserdata
+ * in the metatable.
+ * Does not modify the stack.
+ */
+LUALIB_API void luaL_registerptrtype(lua_State *L,
+	const char *metatable, const luaL_Reg *funcs,
+    luaL_UserPtrPushFunc pushfunc);
 
+/* Creates a "userptr" variant of a userdata.
+ * The userptr type can hold only a pointer and is implicitly created
+ * with the specified metatable set.
+ * If the metatable was created by luaL_registerptrtype and has a
+ * pushfunc registered, the pushfunc will be called.
+ * Pushes a userdata representation of the provided pointer on to the stack.
+ * luaL_checkudata() and lua_touserdata() will return the "ptr" argument,
+ * so the calling code will not need to dereference it as it would if was
+ * using lua_newuserdata().
+ * */
+LUALIB_API void luaL_pushuserptr(lua_State *L, const char *metatable,
+	void *ptr);
 
 /*
 ** ===============================================================

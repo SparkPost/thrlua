@@ -38,22 +38,17 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "thrlua.h"
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
 #include <libxml/tree.h>
-
 
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
 
-#define LUA_DISPATCH(n, f) \
-     if(!strcmp(k, #n)) { \
-       lua_pushlightuserdata(L, udata); \
-       lua_pushcclosure(L, f, 1); \
-       return 1; \
-     }
+#define MT_NODE "libxml2:xmlNodePtr"
+#define MT_DOC  "libxml2:xmlDocPtr"
+#define MT_XPATHITER "libxml2:xpath_iter"
 
 struct xml_buffer_ptr {
   char *buff;
@@ -126,18 +121,18 @@ static void xmlSaveToBuffer(lua_State *L, xmlDocPtr doc)
 static int lua_xml_tostring(lua_State *L)
 {
   int n;
-  xmlDocPtr *docptr = luaL_checkudata(L, 1, "xmldoc");
+  xmlDocPtr doc = luaL_checkudata(L, 1, MT_DOC);
 
   n = lua_gettop(L);
   if (n != 1) luaL_error(L, "expects no arguments, got %d", n - 1);
-  xmlSaveToBuffer(L, *docptr);
+  xmlSaveToBuffer(L, doc);
   return 1;
 }
 
 static int lua_xmlnode_tostring(lua_State *L)
 {
   int n;
-  xmlNodePtr node = *(xmlNodePtr*)luaL_checkudata(L, 1, "xmlnode");
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   xmlOutputBufferPtr out;
   xmlCharEncodingHandlerPtr enc;
   struct xml_buffer_ptr buf = { NULL, 0, 0, 0 };
@@ -168,13 +163,12 @@ static int lua_xpath_iter(lua_State *L)
   xpi = lua_touserdata(L, lua_upvalueindex(1));
   if(xpi->pobj) {
     if(xpi->idx < xpi->cnt) {
-      xmlNodePtr node, *nodeptr;
+      xmlNodePtr node;
+
       node = xmlXPathNodeSetItem(xpi->pobj->nodesetval, xpi->idx);
       xpi->idx++;
-      nodeptr = (xmlNodePtr *)lua_newuserdata(L, sizeof(node));
-      *nodeptr = node;
-      luaL_getmetatable(L, "xmlnode");
-      lua_setmetatable(L, -2);
+
+      luaL_pushuserptr(L, MT_NODE, node);
       return 1;
     }
   }
@@ -186,22 +180,22 @@ static int lua_xpath(lua_State *L)
   int n;
   const char *xpathexpr;
   xmlDocPtr doc;
-  xmlNodePtr *nodeptr = NULL;
+  xmlNodePtr node = NULL;
   xmlXPathContextPtr ctxt;
   struct xpath_iter *xpi;
 
   n = lua_gettop(L);
-  doc = *(xmlDocPtr*)luaL_checkudata(L, 1, "xmldoc");
+  doc = luaL_checkudata(L, 1, MT_DOC);
   if (n < 2 || n > 3) luaL_error(L, "expects 1 or 2 arguments, got %d", n);
   if (n == 3) {
-    nodeptr = luaL_checkudata(L, 3, "xmlnode");
+    node = luaL_checkudata(L, 3, MT_NODE);
   }
 
   xpathexpr = lua_tostring(L, 2);
   if (!xpathexpr) luaL_error(L, "no xpath expression provided");
 
   ctxt = xmlXPathNewContext(doc);
-  if (nodeptr) ctxt->node = *nodeptr;
+  if (node) ctxt->node = node;
   if (!ctxt) luaL_error(L, "invalid xpath");
 
   xpi = (struct xpath_iter *)lua_newuserdata(L, sizeof(*xpi));
@@ -211,7 +205,7 @@ static int lua_xpath(lua_State *L)
   if (xpi->pobj && xpi->pobj->type == XPATH_NODESET) {
     xpi->cnt = xmlXPathNodeSetGetLength(xpi->pobj->nodesetval);
   }
-  luaL_getmetatable(L, "xpathiter");
+  luaL_getmetatable(L, MT_XPATHITER);
   lua_setmetatable(L, -2);
   lua_pushcclosure(L, lua_xpath_iter, 1);
   return 1;
@@ -219,15 +213,15 @@ static int lua_xpath(lua_State *L)
 
 static int lua_xmlnode_name(lua_State *L)
 {
-  xmlNodePtr *nodeptr = luaL_checkudata(L, 1, "xmlnode");
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   xmlChar *v;
 
   if (lua_gettop(L) != 1) {
     luaL_error(L,"must be called with no arguments");
   }
 
-  if ((*nodeptr)->name) {
-    lua_pushstring(L, (const char *)((*nodeptr)->name));
+  if (node->name) {
+    lua_pushstring(L, (const char *)(node->name));
   } else {
     lua_pushnil(L);
   }
@@ -236,7 +230,7 @@ static int lua_xmlnode_name(lua_State *L)
 
 static int lua_xmlnode_attr(lua_State *L)
 {
-  xmlNodePtr *nodeptr = luaL_checkudata(L, 1, "xmlnode");
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   const char *attr;
   xmlChar *v = NULL;
 
@@ -247,11 +241,11 @@ static int lua_xmlnode_attr(lua_State *L)
       if (!lua_isnil(L, 3)) {
         v = (xmlChar*)lua_tostring(L, 3);
       }
-      xmlSetProp(*nodeptr, (xmlChar*)attr, v);
+      xmlSetProp(node, (xmlChar*)attr, v);
       return 0;
 
     case 2:
-      v = xmlGetProp(*nodeptr, (xmlChar*)attr);
+      v = xmlGetProp(node, (xmlChar*)attr);
       if (v) {
         lua_pushstring(L, (const char *)v);
         xmlFree(v);
@@ -265,7 +259,7 @@ static int lua_xmlnode_attr(lua_State *L)
 
 static int lua_xmlnode_contents(lua_State *L)
 {
-  xmlNodePtr node = *(xmlNodePtr*)luaL_checkudata(L, 1, "xmlnode");
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   xmlChar *v;
   const char *data;
 
@@ -292,63 +286,51 @@ static int lua_xmlnode_contents(lua_State *L)
 /* This is an iterator returned by node:children() */
 static int lua_xmlnode_next(lua_State *L)
 {
-  xmlNodePtr *nodeptr;
-  nodeptr = lua_touserdata(L, lua_upvalueindex(1));
-  if(*nodeptr) {
-    xmlNodePtr *newnodeptr;
-    newnodeptr = (xmlNodePtr *)lua_newuserdata(L, sizeof(*nodeptr));
-    *newnodeptr = *nodeptr;
-    luaL_getmetatable(L, "xmlnode");
-    lua_setmetatable(L, -2);
-    *nodeptr = (*nodeptr)->next;
+  xmlNodePtr *iter;
+
+  iter = lua_touserdata(L, lua_upvalueindex(1));
+  if (*iter) {
+    luaL_pushuserptr(L, MT_NODE, *iter);
+    *iter = (*iter)->next;
     return 1;
   }
   return 0;
 }
 
+static int lua_xmlnode_children(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  xmlNodePtr *iter;
+
+  iter = lua_newuserdata(L, sizeof(*iter));
+  *iter = node->children;
+  lua_pushcclosure(L, lua_xmlnode_next, 1);
+  return 1;
+}
+
+
 static int lua_xmlnode_addchild(lua_State *L)
 {
-  xmlNodePtr *newnodeptr;
-  xmlNodePtr node = *(xmlNodePtr*)luaL_checkudata(L, 1, "xmlnode");
+  xmlNodePtr newnode;
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   const char *v;
 
   v = luaL_checkstring(L, 2);
 
-  newnodeptr = (xmlNodePtr *)lua_newuserdata(L, sizeof(*newnodeptr));
-  *newnodeptr = xmlNewChild(node, NULL, (xmlChar *)v, NULL);
-  luaL_getmetatable(L, "xmlnode");
-  lua_setmetatable(L, -2);
-  return 1;
-}
-
-static int lua_xmlnode_children(lua_State *L)
-{
-  xmlNodePtr node, cnode;
-  xmlNodePtr *nodeptr = luaL_checkudata(L, 1, "xmlnode");
-
-  node = *nodeptr;
-  cnode = node->children;
-  nodeptr = lua_newuserdata(L, sizeof(cnode));
-  *nodeptr = cnode;
-  luaL_getmetatable(L, "xmlnode");
-  lua_setmetatable(L, -2);
-  lua_pushcclosure(L, lua_xmlnode_next, 1);
+  newnode = xmlNewChild(node, NULL, (xmlChar *)v, NULL);
+  luaL_pushuserptr(L, MT_NODE, newnode);
   return 1;
 }
 
 static int lua_xml_docroot(lua_State *L)
 {
   int n;
-  xmlDocPtr *docptr = luaL_checkudata(L, 1, "xmldoc");
-  xmlNodePtr *ptr;
+  xmlDocPtr doc = luaL_checkudata(L, 1, MT_DOC);
 
   n = lua_gettop(L);
-  if(n != 1) luaL_error(L, "expects no arguments, got %d", n - 1);
+  if (n != 1) luaL_error(L, "expects no arguments, got %d", n - 1);
 
-  ptr = lua_newuserdata(L, sizeof(*ptr));
-  *ptr = xmlDocGetRootElement(*docptr);
-  luaL_getmetatable(L, "xmlnode");
-  lua_setmetatable(L, -2);
+  luaL_pushuserptr(L, MT_NODE, xmlDocGetRootElement(doc));
   return 1;
 }
 
@@ -363,31 +345,28 @@ static int lua_xpathiter_gc(lua_State *L)
 
 static int nl_parsexml(lua_State *L)
 {
-  xmlDocPtr *docptr, doc;
+  xmlDocPtr doc;
   const char *in;
   size_t inlen;
 
-  if(lua_gettop(L) != 1) luaL_error(L, "parsexml requires one argument");
+  if (lua_gettop(L) != 1) luaL_error(L, "parsexml requires one argument");
 
   in = lua_tolstring(L, 1, &inlen);
   doc = xmlParseMemory(in, inlen);
-  if(!doc) {
+  if (!doc) {
     lua_pushnil(L);
     return 1;
   }
 
-  docptr = (xmlDocPtr *)lua_newuserdata(L, sizeof(doc));
-  *docptr = doc;
-  luaL_getmetatable(L, "xmldoc");
-  lua_setmetatable(L, -2);
+  luaL_pushuserptr(L, MT_DOC, doc);
   return 1;
 }
 
 static int lua_xmldoc_gc(lua_State *L)
 {
-  xmlDocPtr *holder = luaL_checkudata(L,1, "xmldoc");
+  xmlDocPtr holder = luaL_checkudata(L,1, MT_DOC);
 
-  xmlFreeDoc(*holder);
+  xmlFreeDoc(holder);
   return 0;
 }
 
@@ -419,17 +398,10 @@ static const struct luaL_reg reg_libxml[] = {
 
 LUALIB_API int luaopen_xml(lua_State *L)
 {
-  luaL_newmetatable(L, "xmldoc");
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -2, "__index");
-  luaL_register(L, NULL, xmldoc_funcs);
+  luaL_registerptrtype(L, MT_DOC, xmldoc_funcs, NULL);
+  luaL_registerptrtype(L, MT_NODE, xmlnode_funcs, NULL);
 
-  luaL_newmetatable(L, "xmlnode");
-  lua_pushvalue(L, -1);
-  lua_setfield(L, -2, "__index");
-  luaL_register(L, NULL, xmlnode_funcs);
-
-  luaL_newmetatable(L, "xpathiter");
+  luaL_newmetatable(L, MT_XPATHITER);
   lua_pushcfunction(L, lua_xpathiter_gc);
   lua_setfield(L, -2, "__gc");
 

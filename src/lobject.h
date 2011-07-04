@@ -190,6 +190,7 @@ typedef union Udata {
     GCheader /*struct Table*/ *metatable;
     GCheader /*struct Table*/ *env;
     size_t len;
+    unsigned is_user_ptr:1;
   } uv;
 } Udata;
 

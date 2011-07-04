@@ -233,6 +233,68 @@ LUALIB_API void (luaL_register) (lua_State *L, const char *libname,
   luaI_openlib(L, libname, l, 0);
 }
 
+void luaL_registerptrtype(lua_State *L,
+    const char *metatable, const luaL_Reg *funcs,
+    luaL_UserPtrPushFunc pushfunc)
+{
+  luaL_newmetatable(L, metatable);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_register(L, NULL, funcs);
+
+  if (pushfunc) {
+    /* stash it in the metatable */
+    lua_pushlightuserdata(L, pushfunc);
+    lua_setfield(L, -2, "__onpushptr");
+  }
+
+  /* pop the metatable */
+  lua_pop(L, 1);
+}
+
+void luaL_pushuserptr(lua_State *L, const char *metatable, void *ptr)
+{
+  Udata *u;
+  TValue key, val;
+
+  if (ptr == NULL) {
+    lua_pushnil(L);
+    return;
+  }
+
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    luaC_checkGC(L);
+    u = luaS_newudata(L, sizeof(void *), luaA_getcurrenv(L));
+    u->uv.is_user_ptr = 1;
+    memset(u + 1, 0, sizeof(void *));
+
+    /* get the metatable from the registry and put it directly
+     * into the udata */
+    setsvalue(L, &key, luaS_new(L, metatable));
+    luaV_gettable(L, registry(L), &key, L->top);
+    luaC_writebarrier(L, &u->uv.gch, &u->uv.metatable,
+        gcvalue(L->top));
+
+    /* locate push handler */
+    setsvalue(L, &key, luaS_new(L, "__onpushptr"));
+    luaV_gettable(L, L->top, &key, &val);
+    if (ttislightuserdata(&val)) {
+      luaL_UserPtrPushFunc push = pvalue(&val);
+
+      push(L, ptr);
+    }
+
+    *(void**)(u + 1) = ptr;
+    setuvalue(L, L->top, u);
+    L->top++;
+
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+}
+
+
 
 static int libsize (const luaL_Reg *l) {
   int size = 0;

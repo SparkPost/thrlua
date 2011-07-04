@@ -257,6 +257,7 @@ extern "C" {
 #endif
 
 LUAI_FUNC void luaA_pushobject (lua_State *L, const TValue *o);
+LUAI_FUNC Table *luaA_getcurrenv (lua_State *L);
 
 
 #ifdef __cplusplus

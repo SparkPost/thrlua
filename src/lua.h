@@ -304,7 +304,6 @@ LUA_API void  (lua_pushboolean) (lua_State *L, int b);
 LUA_API void  (lua_pushlightuserdata) (lua_State *L, void *p);
 LUA_API int   (lua_pushthread) (lua_State *L);
 
-
 /*
 ** get functions (Lua -> stack)
 */

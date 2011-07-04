@@ -70,7 +70,7 @@ static TValue *index2adr (lua_State *L, int idx) {
 }
 
 
-static Table *getcurrenv (lua_State *L) {
+Table *luaA_getcurrenv (lua_State *L) {
   if (L->ci == L->base_ci)  /* no enclosing function? */
     return hvalue(gt(L));  /* use global table as environment */
   else {
@@ -476,9 +476,17 @@ LUA_API lua_CFunction lua_tocfunction (lua_State *L, int idx) {
 
 LUA_API void *lua_touserdata (lua_State *L, int idx) {
   StkId o = index2adr(L, idx);
+  Udata *u;
+
   switch (ttype(o)) {
-    case LUA_TUSERDATA: return (rawuvalue(o) + 1);
-    case LUA_TLIGHTUSERDATA: return pvalue(o);
+    case LUA_TUSERDATA:
+      u = rawuvalue(o);
+      if (u->uv.is_user_ptr) {
+        return *(void**)(u + 1);
+      }
+      return u + 1;
+    case LUA_TLIGHTUSERDATA:
+      return pvalue(o);
     default: return NULL;
   }
 }
@@ -605,7 +613,7 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
     api_checknelems(L, n);
-    cl = luaF_newCclosure(L, n, getcurrenv(L));
+    cl = luaF_newCclosure(L, n, luaA_getcurrenv(L));
     cl->c.f = fn;
     cl->c.fname = name;
     L->top -= n;
@@ -1040,7 +1048,7 @@ struct CCallS {  /* data to `f_Ccall' */
 static void f_Ccall (lua_State *L, void *ud) {
   struct CCallS *c = cast(struct CCallS *, ud);
   Closure *cl;
-  cl = luaF_newCclosure(L, 0, getcurrenv(L));
+  cl = luaF_newCclosure(L, 0, luaA_getcurrenv(L));
   cl->c.f = c->func;
   setclvalue(L, L->top, cl);  /* push function */
   api_incr_top(L);
@@ -1281,7 +1289,7 @@ LUA_API void *lua_newuserdata (lua_State *L, size_t size) {
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
-    u = luaS_newudata(L, size, getcurrenv(L));
+    u = luaS_newudata(L, size, luaA_getcurrenv(L));
     setuvalue(L, L->top, u);
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
