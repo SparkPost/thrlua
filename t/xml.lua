@@ -2,7 +2,7 @@
 require("Test.More");
 require("xml");
 
-plan(19);
+plan(20);
 
 local xml_sample = [[<?xml version="1.0" encoding="utf8"?>
 <doc>
@@ -25,6 +25,8 @@ is(root:name(), "doc", "root node name is doc")
 is(root:attr("does-not-exist"), nil, "nil for non-existent attr")
 root:attr("foo", "bar")
 is(root:attr("foo"), "bar", "set foo = bar")
+root:attr("foo", nil);
+isnt(root:attr("foo"), "bar", "cleared foo = bar")
 
 -- counts the non-text nodes
 function count_children(node)
