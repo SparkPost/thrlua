@@ -38,6 +38,7 @@ typedef enum {
   TM_BNOT,
   TM_INTDIV,
 #endif
+  TM_ITER,
   TM_N		/* number of elements in the enum */
 } TMS;
 

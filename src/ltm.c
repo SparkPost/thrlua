@@ -27,6 +27,7 @@ void luaT_init (lua_State *L) {
 #if defined(LUA_BITWISE_OPERATORS)
     ,"__or", "__and", "__xor", "__shl", "__shr", "__not", "__intdiv"
 #endif
+    ,"__iter"
   };
   int i;
   for (i=0; i<TM_N; i++) {

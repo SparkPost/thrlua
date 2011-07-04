@@ -797,6 +797,27 @@ void luaV_execute (lua_State *L, int nexeccalls) {
       }
       case OP_TFORLOOP: {
         StkId cb = ra + 3;  /* call base */
+
+        /* __iter metatable event */
+        if (!ttisfunction(ra)) {
+          const TValue *tm = luaT_gettmbyobj(L, ra, TM_ITER);
+
+          if (ttisfunction(tm)) {
+            setobjs2s(L, cb + 1, ra);
+            setobjs2s(L, cb, tm);
+            L->top = cb + 2; /* tag func + object param */
+            Protect(luaD_call(L, cb, 3));
+            L->top = L->ci->top;
+            /* previous call may have changed stack */
+            ra = RA(i);
+            cb = ra + 3;
+            /* replace parameters with return from tag method */
+            setobjs2s(L, ra + 2, cb + 2);
+            setobjs2s(L, ra + 1, cb + 1);
+            setobjs2s(L, ra, cb);
+            L->top = ra + 3;
+          }
+        }
         setobjs2s(L, cb+2, ra+2);
         setobjs2s(L, cb+1, ra+1);
         setobjs2s(L, cb, ra);

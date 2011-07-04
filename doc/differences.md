@@ -59,6 +59,50 @@ in stock Lua:
 
 This feature set is inspired by the [bitwise power patch][bitwise].
 
+## Iterator metatable event
+
+The "pairs" function provides a means for iterating over tables, but
+stock lua does not provide a generic mechanism for userdata to
+participate in the generic for loop construct, pushing this to the
+module author either as a helper function that must be imported, or a
+helper method that must be provided on the object in question.  Both of
+these solutions "pollute" the namespace, with the latter risking
+collision with the properties or methods that might be present on the
+object being exposed.
+
+This is why Threaded Lua provides an "__iter" metatable event; here's
+how it works:
+
+When executing a generic for loop, if the parameter specified by the
+"in" clause is not a function, the VM will attempt to resolve the
+"__iter" metatable event.  It is expected that this will be a function
+with the following signature:
+
+    function iter_event(object)
+      return iterfunc, state, initial
+    end
+
+The return values from the iter_event are used in the for construct.
+The following two pieces of code are equivalent in effect:
+
+    t = {"one", "two"}
+    for _, v in ipairs(t) do
+      print(v)
+    end
+
+And:
+
+    t = {"one", "two"}
+    setmetatable(t, { __iter = ipairs });
+    for _, v in t do -- note that the table is used in the "in" clause
+      print(v)
+    end
+
+This functionality is inspired by the [iterator power patch][iter], although
+the implementation in Threaded Lua does not change the semantics of the
+runtime when the "in" clause is not a function and does not provide the
+"__iter" metatable event.
+
 ## Threads
 
 One of the most significant changes in Threaded Lua is (not
@@ -133,3 +177,6 @@ of mutexes.  Consult its documentation for more details.
 
  [literals]: svn://slugak.dyndns.org/public/lua-patches/literals.patch
  [bitwise]: http://darkmist.newmail.ru/bitwise_operators_for_lua_5.1.3.patch
+ [iter]:
+ http://lua-users.org/files/wiki_insecure/power_patches/5.1/jh-lua-iter-5.1.4.patch
+
