@@ -178,6 +178,84 @@ LUALIB_API void (luaL_pushresult) (luaL_Buffer *B);
 
 /* }====================================================== */
 
+/* Enhanced Buffer API.
+ * This allows modules and scripts to efficiently pass data around without
+ * forcing them to allocate and map the data as string objects.
+ */
+#define LUAL_BUFFER_MT "lua:luaL_BufferObj"
+struct luaL_BufferObj;
+typedef struct luaL_BufferObj luaL_BufferObj;
+
+/** When working with buffers whose memory is managed externally,
+ * the free function will be called when the buffer is finalized
+ * so that the memory can be released. */
+typedef void (*luaL_BuffFreeFunc)(void *ptr);
+
+/** Allocate a new buffer object and push it onto the stack.
+ * The buffer is implemented as a userdata with a metatable of
+ * type LUAL_BUFFER_MT.
+ *
+ * There are two modes of operation:
+ *
+ *    buf = luaL_bufnew(8192, NULL, NULL);
+ *
+ * This mode creates a new buffer of size 8k.
+ * The other mode allows you to reference a pre-existing buffer managed
+ * by some other code and/or via another allocator.  When used in this
+ * second mode, if freefunc is not NULL, it will called on ptr when
+ * the buffer is finalized by the garbage collector:
+ *
+ *    buf = luaL_bufnew(8192, ptr, free, 64);
+ *
+ * The len parameter specifies where the end of the used portion of the
+ * buffer can be found, in bytes.  This is used to map an externally
+ * writable buffer that is partially filled.
+ *
+ * Buffers are fixed size; they do not grow.
+ */
+LUALIB_API luaL_BufferObj *luaL_bufnew(lua_State *L,
+	size_t size, void *ptr, luaL_BuffFreeFunc freefunc, size_t len);
+
+/** Returns the buffer at the specified acceptable index, or NULL
+ * if that value is not a buffer */
+LUALIB_API luaL_BufferObj *luaL_tobuffer(lua_State *L, int idx);
+
+/** Writes data into buffer at the specified offset, returning the number
+ * of bytes written.
+ * If the data would overflow the buffer, a partial write is performed
+ * and the number of bytes actually written to the buffer is returned.
+ *
+ * if offset is -1, then the data will be appended to the buffer starting
+ * at the last written offset.
+ */
+LUALIB_API size_t luaL_bufwrite(luaL_BufferObj *b, int offset,
+	const void *ptr, size_t bytes);
+
+/** Create a slice buffer, which is a read/write view on another buffer.
+ * Changes made to the slice are reflected in the original buffer.
+ * The original buffer is not collectable until any and all slices of
+ * it have been collected.
+ */
+LUALIB_API luaL_BufferObj *luaL_bufslice(lua_State *L,
+	luaL_BufferObj *b, size_t offset, size_t len);
+
+/** Returns the buffer memory and used length.
+ * This function is intended to be used for read operations when
+ * passing the buffer contents into other library routines.
+ */
+LUALIB_API void *luaL_bufmem(luaL_BufferObj *b, size_t *len);
+
+/** Copies data from srcbuf to destbuf.
+ * if destoff is -1, the data will be appended to destbuf, otherwise
+ * destoff specifies the offset at which the data will be placed.
+ * srcoff specifies the starting offset in srcbuf from which to copy
+ * the data.
+ * srclen specifies how much data to copy; if srclen is -1 then all
+ * data from srcoff through to the end of the src buffer will be copied.
+ */
+LUALIB_API size_t luaL_bufcopy(luaL_BufferObj *dest, int destoff,
+		luaL_BufferObj *srcbuf, size_t srcoff, int srclen);
+
 
 /* compatibility with ref system */
 

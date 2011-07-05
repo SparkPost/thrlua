@@ -42,6 +42,9 @@ LUALIB_API int (luaopen_package) (lua_State *L);
 #define LUA_THREADLIBNAME "thread"
 LUALIB_API int (luaopen_thread)(lua_State *L);
 
+#define LUA_BUFFERLIBNAME "buffer"
+LUALIB_API int (luaopen_buffer)(lua_State *L);
+
 /* open all previous libraries */
 LUALIB_API void (luaL_openlibs) (lua_State *L); 
 
