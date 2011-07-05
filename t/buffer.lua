@@ -36,4 +36,9 @@ ok(bs, "made buffer from string")
 is(#bs, 11, "got right length")
 is(tostring(bs), "from string", "compares right")
 
+tmp = io.tmpfile()
+ok(tmp, "opened tmpfile")
+ok(tmp:write(bs), "wrote buffer to tmpfile")
+tmp:seek('set', 0)
+is(tmp:read(), "from string", "read correct buffer contents")
 
