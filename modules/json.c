@@ -29,18 +29,8 @@ static int ljson_gc(lua_State *L)
 {
   struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
 
-  if (!json_is_error(json)) {
-    json_object_put(json);
-  }
+  json_object_put(json);
   return 0;
-}
-
-static int push_error(lua_State *L, struct json_object *json)
-{
-  lua_pushnil(L);
-  lua_pushinteger(L, -(unsigned long)json);
-  lua_pushstring(L, json_tokener_errors[-(unsigned long)json]);
-  return 3;
 }
 
 static int push_json_value(lua_State *L, struct json_object *json)
@@ -48,9 +38,6 @@ static int push_json_value(lua_State *L, struct json_object *json)
   if (!json) {
     lua_pushnil(L);
     return 1;
-  }
-  if (json_is_error(json)) {
-    return push_error(L, json);
   }
 
   switch (json_object_get_type(json)) {
@@ -207,7 +194,8 @@ static int ljson_newindex(lua_State *L)
       }
       idx = lua_tonumber(L, 2);
       if (idx < 1) {
-        luaL_error(L, "lua array semantics are that index operations are 1-based");
+        luaL_error(L,
+            "lua array semantics are that index operations are 1-based");
       }
       break;
     case json_type_object:
@@ -356,9 +344,7 @@ static int parse_json(lua_State *L)
   json_tokener_free(tok);
 
   res = push_json_value(L, json);
-  if (!json_is_error(json)) {
-    json_object_put(json);
-  }
+  json_object_put(json);
 
   return res;
 }
