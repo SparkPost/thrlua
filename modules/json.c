@@ -107,7 +107,10 @@ static struct json_object *make_json_val(lua_State *L, int idx)
           JSON_TRUE : JSON_FALSE);
 
     case LUA_TUSERDATA:
-      return luaL_checkudata(L, idx, MT_JSON);
+      item = luaL_checkudata(L, idx, MT_JSON);
+      /* caller owns its own ref */
+      json_object_get(item);
+      return item;
 
     case LUA_TNUMBER:
     {
@@ -374,13 +377,19 @@ static int ljson_strerror(lua_State *L)
 static int encode_json(lua_State *L)
 {
   struct json_object *json;
+  int res;
 
   if (lua_gettop(L)) {
     json = make_json_val(L, 1);
   } else {
     json = json_object_new_object();
   }
-  return push_json_value(L, json, 1);
+  res = push_json_value(L, json, 1);
+  /* push_json_value will addref */
+  if (json) {
+    json_object_put(json);
+  }
+  return res;
 }
 
 static const struct luaL_reg funcs[] = {
