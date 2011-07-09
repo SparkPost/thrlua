@@ -11,6 +11,10 @@ bin_PROGRAMS = rclua rcluac
 cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la \
 	posix.la xml.la curl.la socket.la
 
+if BUILD_JSON
+cmod_LTLIBRARIES += json.la
+endif
+
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
 	rcluaconfig.h etc/lua.hpp
 
@@ -101,6 +105,12 @@ posix_la_CPPFLAGS = $(commonCFLAGS)
 socket_la_SOURCES = modules/socket.c
 socket_la_LDFLAGS = -module
 socket_la_CPPFLAGS = $(commonCFLAGS)
+
+if BUILD_JSON
+json_la_SOURCES = modules/json.c
+json_la_LDFLAGS = -module @JSON_LIBS@
+json_la_CPPFLAGS = $(commonCFLAGS) @JSON_CFLAGS@
+endif
 
 EXTRA_DIST = COPYING HISTORY INSTALL README
 

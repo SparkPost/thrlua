@@ -82,6 +82,17 @@ CURL_CFLAGS=`curl-config --cflags`
 AC_SUBST(CURL_LIBS)
 AC_SUBST(CURL_CFLAGS)
 
+if pkg-config json ; then
+	BUILD_JSON="yes"
+	JSON_LIBS=`pkg-config --libs json`
+	JSON_CFLAGS=`pkg-config --cflags json`
+	AC_SUBST(JSON_LIBS)
+	AC_SUBST(JSON_CFLAGS)
+else
+	BUILD_JSON="no"
+fi
+AM_CONDITIONAL(BUILD_JSON, test "$BUILD_JSON" = "yes")
+
 AC_CHECK_LIB(dl,dlopen)
 AC_CHECK_LIB(rt,clock_gettime)
 AC_CHECK_LIB(crypt,crypt)
