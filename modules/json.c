@@ -33,10 +33,14 @@ static int ljson_gc(lua_State *L)
   return 0;
 }
 
-static int push_json_value(lua_State *L, struct json_object *json)
+static int push_json_value(lua_State *L, struct json_object *json, int root)
 {
   if (!json) {
     lua_pushnil(L);
+    return 1;
+  }
+  if (root) {
+    luaL_pushuserptr(L, MT_JSON, json);
     return 1;
   }
 
@@ -78,7 +82,7 @@ static int ljson_index(lua_State *L)
       return 0;
   }
 
-  return push_json_value(L, prop);
+  return push_json_value(L, prop, 0);
 }
 
 /* epsilon; a small value that we can use to fuzzy compare */
@@ -103,7 +107,10 @@ static struct json_object *make_json_val(lua_State *L, int idx)
           JSON_TRUE : JSON_FALSE);
 
     case LUA_TUSERDATA:
-      return luaL_checkudata(L, idx, MT_JSON);
+      item = luaL_checkudata(L, idx, MT_JSON);
+      /* caller owns its own ref */
+      json_object_get(item);
+      return item;
 
     case LUA_TNUMBER:
     {
@@ -241,7 +248,7 @@ static int next_arr(lua_State *L)
 
   if (item) {
     lua_pushinteger(L, idx + 1); /* push the 1-based index */
-    return 1 + push_json_value(L, item);
+    return 1 + push_json_value(L, item, 0);
   }
   lua_pushnil(L);
   return 1;
@@ -268,9 +275,14 @@ static int next_obj(lua_State *L)
   *ep = entry->next;
 
   lua_pushstring(L, key);
-  return 1 + push_json_value(L, item);
+  return 1 + push_json_value(L, item, 0);
 }
 
+/* when iterating scalars, return no data */
+static int null_iter(lua_State *L)
+{
+  return 0;
+}
 
 static int make_iter(lua_State *L)
 {
@@ -292,7 +304,8 @@ static int make_iter(lua_State *L)
       lua_pushnil(L);
       return 3;
     default:
-      return 0;
+      lua_pushcclosure2(L, "json:null_iter", null_iter, 0);
+      return 1;
   }
 }
 
@@ -343,7 +356,7 @@ static int parse_json(lua_State *L)
   }
   json_tokener_free(tok);
 
-  res = push_json_value(L, json);
+  res = push_json_value(L, json, 1);
   json_object_put(json);
 
   return res;
@@ -364,13 +377,19 @@ static int ljson_strerror(lua_State *L)
 static int encode_json(lua_State *L)
 {
   struct json_object *json;
+  int res;
 
   if (lua_gettop(L)) {
     json = make_json_val(L, 1);
   } else {
     json = json_object_new_object();
   }
-  return push_json_value(L, json);
+  res = push_json_value(L, json, 1);
+  /* push_json_value will addref */
+  if (json) {
+    json_object_put(json);
+  }
+  return res;
 }
 
 static const struct luaL_reg funcs[] = {

@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(90);
+plan(94);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -145,4 +145,19 @@ local mixedbag = { foo = "bar", [32] = "dude" }
 local mj = json.encode(mixedbag)
 is(mj["32"], "dude", "saw integer key")
 is(mj.foo, "bar", "saw string key")
+
+o = json.encode(42)
+is(type(o), "userdata", "42 => userdata")
+error_like(function ()
+  o.foo = "bang"
+end, "cannot assign to this type of json object")
+is(o.foo, nil, "no props in a json integer")
+
+nprops = 0
+for k, v in o do
+  nprops = nprops + 1
+  diag(k, v)
+end
+is(nprops, 0, "no properties iterated")
+
 
