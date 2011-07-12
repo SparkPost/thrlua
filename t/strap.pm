@@ -28,8 +28,14 @@ sub _command_line {
     my $infoname = $file . ".lcovinfo";
     my $testname = $file;
     $testname =~ s/[^a-zA-Z0-9_]/_/g;
+    $testname =~ s/^t_//;
 
     $cmd = "$lcov -q --zerocounters --directory .; $cmd ; $lcov --capture --base-directory . --directory . --output-file $infoname --test-name $testname";
+  }
+  if (exists $ENV{LUA_COV}) {
+    my $testname = $file;
+    $testname =~ s/[^a-zA-Z0-9_]/_/g;
+    $cmd = "nocrap zero ; $cmd ; nocrap testname $testname capture";
   }
   return $cmd;
 }

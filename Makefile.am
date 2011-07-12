@@ -131,3 +131,8 @@ lcov:
 	-find . -name \*.gcov | xargs rm -f
 	PATH="./coverage:$$PATH" genhtml --output-directory lcovhtml --prefix `cd .. ; pwd` --show-details --title "Lua Code Coverage " $$(find . -name \*.lcovinfo)
 
+cov:
+	nocrap init
+	-LUA_COV=nocrap ./runtests $(COV_TESTS)
+	nocrap compute
+
