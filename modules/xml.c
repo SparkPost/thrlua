@@ -228,6 +228,29 @@ static int lua_xmlnode_name(lua_State *L)
   return 1;
 }
 
+static int lua_xmlnode_copy(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  xmlNodePtr clone;
+
+  if (lua_gettop(L) != 1) {
+    luaL_error(L, "must be called with no arguments");
+  }
+
+  /* the "1" parameter, per the docs: if 1 do a recursive copy (properties,
+   * namespaces and children when applicable) if 2 copy properties and
+   * namespaces (when applicable)
+   */
+  clone = xmlCopyNode(node, 1);
+  if (clone) {
+    luaL_pushuserptr(L, MT_NODE, clone);
+    return 1;
+  }
+
+  lua_pushnil(L);
+  return 1;
+}
+
 static int lua_xmlnode_attr(lua_State *L)
 {
   xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
@@ -255,6 +278,32 @@ static int lua_xmlnode_attr(lua_State *L)
       return 1;
   }
   luaL_error(L,"must be called with one argument");
+}
+
+/* val = node:attrns("stream", "uri:...") -- gets value
+ */
+static int lua_xmlnode_attrns(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  const char *attr;
+  const char *ns;
+  xmlChar *v = NULL;
+
+  attr = luaL_checkstring(L, 2);
+  if (lua_gettop(L) < 3 || lua_isnil(L, 3)) {
+    ns = NULL;
+  } else {
+    ns = luaL_checkstring(L, 3);
+  }
+
+  v = xmlGetNsProp(node, (xmlChar*)attr, (xmlChar*)ns);
+  if (v) {
+    lua_pushstring(L, (const char *)v);
+    xmlFree(v);
+  } else {
+    lua_pushnil(L);
+  }
+  return 1;
 }
 
 static int lua_xmlnode_contents(lua_State *L)
@@ -373,9 +422,11 @@ static int lua_xmldoc_gc(lua_State *L)
 static const struct luaL_reg xmlnode_funcs[] = {
   { "attr", lua_xmlnode_attr },
   { "attribute", lua_xmlnode_attr },
+  { "attrns", lua_xmlnode_attrns },
   { "addchild", lua_xmlnode_addchild },
   { "children", lua_xmlnode_children },
   { "contents", lua_xmlnode_contents },
+  { "copy", lua_xmlnode_copy },
   { "name", lua_xmlnode_name },
   { "tostring", lua_xmlnode_tostring },
   { "__tostring", lua_xmlnode_tostring },

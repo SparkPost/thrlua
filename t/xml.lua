@@ -2,7 +2,7 @@
 require("Test.More");
 require("xml");
 
-plan(20);
+plan(26);
 
 local xml_sample = [[<?xml version="1.0" encoding="utf8"?>
 <doc>
@@ -50,6 +50,18 @@ n:contents("and vegetables");
 is(n:contents(), "and vegetables", "can see new contents")
 is(tostring(n), "<fruit>and vegetables</fruit>", "fruit and veg")
 
+-- what about copying!?
+local copy = n:copy();
+is(n:name(), copy:name(), "copied name matches")
+copy:attr("cloned", "trooper")
+is(n:attr("cloned"), nil, "did not modify original")
+is(copy:attr("cloned"), "trooper", "updated original")
+
+-- namespaced attr reader
+is(copy:attr("cloned"), copy:attrns("cloned"), "attrns gives sane results")
+is(copy:attrns("cloned", ""), nil, "attrns with empty namespace -> nil")
+is(copy:attrns("cloned", "boo"), nil, "attrns with bogus namespace -> nil")
+
 for n in doc:xpath('//item[@name="one"]') do
 	is(n:name(), "item", "found an item")
 	is(n:attr("name"), "one", "it's the one we selected")
@@ -67,5 +79,6 @@ end
 error_like(function ()
 	root:name("boo");
 end, "must be called with no arguments");
+
 
 
