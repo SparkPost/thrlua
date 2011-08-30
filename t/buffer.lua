@@ -1,7 +1,7 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('Test.More')
 require('buffer')
-plan(8)
+plan(28)
 
 b = buffer.new(8192);
 ok(b, "made a new buffer")
