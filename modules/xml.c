@@ -168,7 +168,7 @@ static int lua_xpath_iter(lua_State *L)
       node = xmlXPathNodeSetItem(xpi->pobj->nodesetval, xpi->idx);
       xpi->idx++;
 
-      luaL_pushuserptr(L, MT_NODE, node);
+      luaL_pushuserptr(L, MT_NODE, node, 1);
       return 1;
     }
   }
@@ -243,7 +243,7 @@ static int lua_xmlnode_copy(lua_State *L)
    */
   clone = xmlCopyNode(node, 1);
   if (clone) {
-    luaL_pushuserptr(L, MT_NODE, clone);
+    luaL_pushuserptr(L, MT_NODE, clone, 1);
     return 1;
   }
 
@@ -339,7 +339,7 @@ static int lua_xmlnode_next(lua_State *L)
 
   iter = lua_touserdata(L, lua_upvalueindex(1));
   if (*iter) {
-    luaL_pushuserptr(L, MT_NODE, *iter);
+    luaL_pushuserptr(L, MT_NODE, *iter, 1);
     *iter = (*iter)->next;
     return 1;
   }
@@ -367,7 +367,7 @@ static int lua_xmlnode_addchild(lua_State *L)
   v = luaL_checkstring(L, 2);
 
   newnode = xmlNewChild(node, NULL, (xmlChar *)v, NULL);
-  luaL_pushuserptr(L, MT_NODE, newnode);
+  luaL_pushuserptr(L, MT_NODE, newnode, 1);
   return 1;
 }
 
@@ -379,7 +379,7 @@ static int lua_xml_docroot(lua_State *L)
   n = lua_gettop(L);
   if (n != 1) luaL_error(L, "expects no arguments, got %d", n - 1);
 
-  luaL_pushuserptr(L, MT_NODE, xmlDocGetRootElement(doc));
+  luaL_pushuserptr(L, MT_NODE, xmlDocGetRootElement(doc), 1);
   return 1;
 }
 
@@ -407,7 +407,7 @@ static int nl_parsexml(lua_State *L)
     return 1;
   }
 
-  luaL_pushuserptr(L, MT_DOC, doc);
+  luaL_pushuserptr(L, MT_DOC, doc, 1);
   return 1;
 }
 

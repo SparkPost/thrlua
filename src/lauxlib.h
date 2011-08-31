@@ -115,7 +115,21 @@ LUALIB_API void luaL_registerptrtype(lua_State *L,
  * using lua_newuserdata().
  * */
 LUALIB_API void luaL_pushuserptr(lua_State *L, const char *metatable,
-	void *ptr);
+	void *ptr, int nocallpush);
+
+/* Creates a "userptr" per luaL_pushuserptr.
+ * This userptr instance will keep a reference to "otherref", such that
+ * it will release "otherref" when this userptr instance is finalized.
+ */
+LUALIB_API void luaL_pushuserptrandref(lua_State *L,
+	const char *metatable, void *ptr, int nocallpush, void *otherref);
+
+/* Breaks a userptr reference.  Useful in situations where some other
+ * library function has explicitly finalized the underlying resource and
+ * we don't want to trigger it again on gc */
+LUALIB_API void luaL_breakuserptr(lua_State *L, int idx);
+
+LUALIB_API int luaL_isuserptr(lua_State *L, int idx);
 
 /*
 ** ===============================================================

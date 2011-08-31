@@ -242,6 +242,11 @@ void luaL_registerptrtype(lua_State *L,
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, funcs);
 
+  /* make it cheap to figure out what it is later on */
+  lua_pushstring(L, "@type");
+  lua_pushstring(L, metatable);
+  lua_settable(L, -3); /* metatable.@type = type_name */
+
   if (pushfunc) {
     /* stash it in the metatable */
     lua_pushlightuserdata(L, pushfunc);
@@ -252,7 +257,13 @@ void luaL_registerptrtype(lua_State *L,
   lua_pop(L, 1);
 }
 
-void luaL_pushuserptr(lua_State *L, const char *metatable, void *ptr)
+void luaL_pushuserptr(lua_State *L, const char *metatable, void *ptr, int nocallpush)
+{
+  luaL_pushuserptrandref(L, metatable, ptr, nocallpush, NULL);
+}
+
+void luaL_pushuserptrandref(lua_State *L, const char *metatable,
+    void *ptr, int nocallpush, void *otherref)
 {
   Udata *u;
   TValue key, val;
@@ -267,6 +278,7 @@ void luaL_pushuserptr(lua_State *L, const char *metatable, void *ptr)
     luaC_checkGC(L);
     u = luaS_newudata(L, sizeof(void *), luaA_getcurrenv(L));
     u->uv.is_user_ptr = 1;
+    u->uv.otherref = otherref;
     memset(u + 1, 0, sizeof(void *));
 
     /* get the metatable from the registry and put it directly
@@ -277,12 +289,14 @@ void luaL_pushuserptr(lua_State *L, const char *metatable, void *ptr)
         gcvalue(L->top));
 
     /* locate push handler */
-    setsvalue(L, &key, luaS_new(L, "__onpushptr"));
-    luaV_gettable(L, L->top, &key, &val);
-    if (ttislightuserdata(&val)) {
-      luaL_UserPtrPushFunc push = pvalue(&val);
+    if (!nocallpush) {
+      setsvalue(L, &key, luaS_new(L, "__onpushptr"));
+      luaV_gettable(L, L->top, &key, &val);
+      if (ttislightuserdata(&val)) {
+        luaL_UserPtrPushFunc push = pvalue(&val);
 
-      push(L, ptr);
+        push(L, ptr);
+      }
     }
 
     *(void**)(u + 1) = ptr;
@@ -321,12 +335,14 @@ LUALIB_API void luaI_openlib (lua_State *L, const char *libname,
     lua_remove(L, -2);  /* remove _LOADED table */
     lua_insert(L, -(nup+1));  /* move library table to below upvalues */
   }
-  for (; l->name; l++) {
-    int i;
-    for (i=0; i<nup; i++)  /* copy upvalues to the top */
-      lua_pushvalue(L, -nup);
-    lua_pushcclosure2(L, l->name, l->func, nup);
-    lua_setfield(L, -(nup+2), l->name);
+  if (l) {
+    for (; l->name; l++) {
+      int i;
+      for (i=0; i<nup; i++)  /* copy upvalues to the top */
+        lua_pushvalue(L, -nup);
+      lua_pushcclosure2(L, l->name, l->func, nup);
+      lua_setfield(L, -(nup+2), l->name);
+    }
   }
   lua_pop(L, nup);  /* remove upvalues */
 }

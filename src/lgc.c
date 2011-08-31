@@ -365,6 +365,9 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         if (ud->uv.env) {
           traverse_obj(L, o, ud->uv.env, objfunc);
         }
+        if (ud->uv.otherref) {
+          traverse_obj(L, o, ud->uv.otherref, objfunc);
+        }
         break;
       }
     case LUA_TUPVAL:

@@ -40,7 +40,7 @@ static int push_json_value(lua_State *L, struct json_object *json, int root)
     return 1;
   }
   if (root) {
-    luaL_pushuserptr(L, MT_JSON, json);
+    luaL_pushuserptr(L, MT_JSON, json, 0);
     return 1;
   }
 
@@ -58,7 +58,7 @@ static int push_json_value(lua_State *L, struct json_object *json, int root)
       lua_pushstring(L, json_object_get_string(json));
       return 1;
     default:
-      luaL_pushuserptr(L, MT_JSON, json);
+      luaL_pushuserptr(L, MT_JSON, json, 0);
       return 1;
   }
 }

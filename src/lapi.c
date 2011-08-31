@@ -473,6 +473,41 @@ LUA_API lua_CFunction lua_tocfunction (lua_State *L, int idx) {
   return (!iscfunction(o)) ? NULL : clvalue(o)->c.f;
 }
 
+int luaL_isuserptr(lua_State *L, int idx)
+{
+  StkId o = index2adr(L, idx);
+  Udata *u;
+
+  switch (ttype(o)) {
+    case LUA_TUSERDATA:
+      u = rawuvalue(o);
+      if (u->uv.is_user_ptr) {
+        return 1;
+      }
+  }
+  return 0;
+}
+
+void luaL_breakuserptr(lua_State *L, int idx)
+{
+  StkId o = index2adr(L, idx);
+  Udata *u;
+
+  switch (ttype(o)) {
+    case LUA_TUSERDATA:
+      u = rawuvalue(o);
+      if (u->uv.is_user_ptr) {
+        *(void**)(u + 1) = NULL;
+        u->uv.otherref = NULL;
+      }
+      return;
+    case LUA_TLIGHTUSERDATA:
+      o->value.p = NULL;
+      return;
+    default:
+      return;
+  }
+}
 
 LUA_API void *lua_touserdata (lua_State *L, int idx) {
   StkId o = index2adr(L, idx);
