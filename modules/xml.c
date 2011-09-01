@@ -472,6 +472,27 @@ static int nl_parsexml(lua_State *L)
   return 1;
 }
 
+static int nl_newnode(lua_State *L)
+{
+  xmlNodePtr n;
+  xmlChar *name;
+  xmlNsPtr ns;
+
+  name = (xmlChar*)luaL_checkstring(L, 1);
+  if (lua_gettop(L) > 1 && !lua_isnil(L, 2)) {
+    ns = luaL_checkudata(L, 2, MT_NS);
+  }
+
+  n = xmlNewNode(ns, name);
+
+  if (n) {
+    luaL_pushuserptr(L, MT_NODE, n, 1);
+  } else {
+    lua_pushnil(L);
+  }
+  return 1;
+}
+
 static int lua_xmldoc_gc(lua_State *L)
 {
   xmlDocPtr holder = luaL_checkudata(L,1, MT_DOC);
@@ -507,6 +528,7 @@ static const struct luaL_reg xmldoc_funcs[] = {
 
 static const struct luaL_reg reg_libxml[] = {
   { "parsexml", nl_parsexml },
+  { "newnode", nl_newnode },
   { NULL, NULL }
 };
 
