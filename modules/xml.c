@@ -49,6 +49,7 @@
 #define MT_NODE "libxml2:xmlNodePtr"
 #define MT_DOC  "libxml2:xmlDocPtr"
 #define MT_XPATHITER "libxml2:xpath_iter"
+#define MT_NS "libxml2:xmlNsPtr"
 
 struct xml_buffer_ptr {
   char *buff;
@@ -280,30 +281,90 @@ static int lua_xmlnode_attr(lua_State *L)
   luaL_error(L,"must be called with one argument");
 }
 
-/* val = node:attrns("stream", "uri:...") -- gets value
- */
-static int lua_xmlnode_attrns(lua_State *L)
+/* node:setns(ns) -- see node:newns */
+static int lua_xmlnode_setns(lua_State *L)
 {
   xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
-  const char *attr;
-  const char *ns;
-  xmlChar *v = NULL;
+  xmlNsPtr ns = luaL_checkudata(L, 2, MT_NS);
 
-  attr = luaL_checkstring(L, 2);
-  if (lua_gettop(L) < 3 || lua_isnil(L, 3)) {
-    ns = NULL;
+  xmlSetNs(node, ns);
+}
+
+/* ns = node:newns(node, uri, prefix) */
+static int lua_xmlnode_newns(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  const char *uri, *prefix;
+  xmlNsPtr ns;
+
+  if (lua_isnil(L, 2)) {
+    uri = NULL;
   } else {
-    ns = luaL_checkstring(L, 3);
+    uri = luaL_checkstring(L, 2);
+  }
+  if (lua_gettop(L) < 3 || lua_isnil(L, 3)) {
+    prefix = NULL;
+  } else {
+    prefix = luaL_checkstring(L, 3);
   }
 
-  v = xmlGetNsProp(node, (xmlChar*)attr, (xmlChar*)ns);
-  if (v) {
-    lua_pushstring(L, (const char *)v);
-    xmlFree(v);
+  ns = xmlNewNs(node, uri, prefix);
+  if (ns) {
+    luaL_pushuserptr(L, MT_NS, ns, 1);
   } else {
     lua_pushnil(L);
   }
   return 1;
+}
+
+/* val = node:attrns("stream", "uri:...") -- gets value
+ * node:attrns(ns, "stream", "value") -- sets value
+ */
+static int lua_xmlnode_attrns(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+
+  if (lua_gettop(L) <= 3) {
+    const char *attr;
+    const char *ns;
+    xmlChar *v = NULL;
+
+    /* get value */
+    attr = luaL_checkstring(L, 2);
+
+    if (lua_gettop(L) < 3 || lua_isnil(L, 3)) {
+      ns = NULL;
+    } else {
+      ns = luaL_checkstring(L, 3);
+    }
+
+    v = xmlGetNsProp(node, (xmlChar*)attr, (xmlChar*)ns);
+    if (v) {
+      lua_pushstring(L, (const char *)v);
+      xmlFree(v);
+    } else {
+      lua_pushnil(L);
+    }
+
+    return 1;
+
+  } else if (lua_gettop(L) == 4) {
+    /* set value */
+    xmlNsPtr ns = luaL_checkudata(L, 2, MT_NS);
+    xmlChar *attr = (xmlChar*)luaL_checkstring(L, 3);
+    xmlChar *val = NULL;
+
+    if (!lua_isnil(L, 4)) {
+      val = (xmlChar*)luaL_checkstring(L, 4);
+    }
+
+    xmlNewNsProp(node, ns, attr, val);
+
+  } else {
+    luaL_error(L, "invalid number of parameters");
+  }
+
+  return 0;
 }
 
 static int lua_xmlnode_contents(lua_State *L)
@@ -423,6 +484,8 @@ static const struct luaL_reg xmlnode_funcs[] = {
   { "attr", lua_xmlnode_attr },
   { "attribute", lua_xmlnode_attr },
   { "attrns", lua_xmlnode_attrns },
+  { "newns", lua_xmlnode_newns },
+  { "setns", lua_xmlnode_setns },
   { "addchild", lua_xmlnode_addchild },
   { "children", lua_xmlnode_children },
   { "contents", lua_xmlnode_contents },
@@ -451,6 +514,7 @@ LUALIB_API int luaopen_xml(lua_State *L)
 {
   luaL_registerptrtype(L, MT_DOC, xmldoc_funcs, NULL);
   luaL_registerptrtype(L, MT_NODE, xmlnode_funcs, NULL);
+  luaL_registerptrtype(L, MT_NS, NULL, NULL);
 
   luaL_newmetatable(L, MT_XPATHITER);
   lua_pushcfunction(L, lua_xpathiter_gc);
