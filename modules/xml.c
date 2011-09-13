@@ -378,6 +378,7 @@ static int lua_xmlnode_contents(lua_State *L)
       data = luaL_checkstring(L, 2);
       v = xmlEncodeEntitiesReentrant(node->doc, (xmlChar *)data);
       xmlNodeSetContent(node, v);
+      xmlFree(v);
       return 0;
     case 1:
       v = xmlNodeGetContent(node);
@@ -476,7 +477,7 @@ static int nl_newnode(lua_State *L)
 {
   xmlNodePtr n;
   xmlChar *name;
-  xmlNsPtr ns;
+  xmlNsPtr ns = NULL;
 
   name = (xmlChar*)luaL_checkstring(L, 1);
   if (lua_gettop(L) > 1 && !lua_isnil(L, 2)) {
