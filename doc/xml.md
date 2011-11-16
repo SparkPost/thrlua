@@ -40,6 +40,20 @@ equivalent:
     doc:tostring()
     tostring(doc)
 
+## node:doc()
+
+Returns the XML document object which contains the node
+
+## node:unlink()
+
+Unlink a xml node from its xmldoc container. Call this function to avoid the 
+xmlnode object been garbage collected when its xmldoc container is gc-ed.
+Returns the xml node object:
+
+  doc = xml.parsexml([[<doc><item/></doc>]])
+  node = doc:root()
+  node = node:unlink()
+
 ## node:attr() & node:attribute()
 
 These methods are synonyms, you may use whichever name suits you best.
@@ -57,6 +71,9 @@ node.  Returns the new node.
 
     kid = node:addchild("childitem")
     kid:attr("name", "newchild!")
+
+## node:addchild(child_node)
+Add a node object as a child of node. Returns the added child node.
 
 ## node:children()
 
