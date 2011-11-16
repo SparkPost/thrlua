@@ -130,6 +130,21 @@ static int lua_xml_tostring(lua_State *L)
   return 1;
 }
 
+static int lua_xmlnode_document(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  luaL_pushuserptr(L, MT_DOC, node->doc, 1);
+  return 1;
+}
+
+static int lua_xmlnode_unlink(lua_State *L)
+{
+  xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
+  xmlUnlinkNode(node);
+  luaL_pushuserptr(L, MT_NODE, node, 1);
+  return 1; 
+}
+
 static int lua_xmlnode_tostring(lua_State *L)
 {
   int n;
@@ -426,6 +441,13 @@ static int lua_xmlnode_addchild(lua_State *L)
   xmlNodePtr node = luaL_checkudata(L, 1, MT_NODE);
   const char *v;
 
+  if (lua_type(L, 2) == LUA_TUSERDATA) {
+    xmlNodePtr child = luaL_checkudata(L, 2, MT_NODE);
+    xmlAddChild(node, child);
+    lua_pushvalue(L, 2);
+    return 1;
+  }
+
   v = luaL_checkstring(L, 2);
 
   newnode = xmlNewChild(node, NULL, (xmlChar *)v, NULL);
@@ -510,9 +532,12 @@ static const struct luaL_reg xmlnode_funcs[] = {
   { "setns", lua_xmlnode_setns },
   { "addchild", lua_xmlnode_addchild },
   { "children", lua_xmlnode_children },
+  { "document", lua_xmlnode_document },
+  { "doc", lua_xmlnode_document },
   { "contents", lua_xmlnode_contents },
   { "copy", lua_xmlnode_copy },
   { "name", lua_xmlnode_name },
+  { "unlink", lua_xmlnode_unlink },
   { "tostring", lua_xmlnode_tostring },
   { "__tostring", lua_xmlnode_tostring },
   { NULL, NULL }
