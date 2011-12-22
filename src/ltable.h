@@ -7,8 +7,6 @@
 #ifndef ltable_h
 #define ltable_h
 
-#include "ck_rwlock.h"
-
 #define gnode(t,i)	(&(t)->node[i])
 #define gkey(n)		(&(n)->i_key.nk)
 #define gval(n)		(&(n)->i_val)
@@ -29,10 +27,13 @@ LUAI_FUNC void luaH_free (lua_State *L, Table *t);
 LUAI_FUNC int luaH_next (lua_State *L, Table *t, StkId key);
 LUAI_FUNC int luaH_getn (Table *t);
 
-#define luaH_wrlock(L, t)   ck_rwlock_write_lock(&(t)->lock)
-#define luaH_rdlock(L, t)   ck_rwlock_read_lock(&(t)->lock)
-#define luaH_wrunlock(L, t) ck_rwlock_write_unlock(&(t)->lock)
-#define luaH_rdunlock(L, t) ck_rwlock_read_unlock(&(t)->lock)
+/* block until a write lock is obtained */
+LUAI_FUNC void luaH_wrlock(lua_State *L, Table *t);
+/* block until a read lock is obtained */
+LUAI_FUNC void luaH_rdlock(lua_State *L, Table *t);
+/* release a lock */
+LUAI_FUNC void luaH_wrunlock(lua_State *L, Table *t);
+LUAI_FUNC void luaH_rdunlock(lua_State *L, Table *t);
 
 #if defined(LUA_DEBUG)
 LUAI_FUNC Node *luaH_mainposition (const Table *t, const TValue *key);
