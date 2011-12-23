@@ -2,7 +2,7 @@
 require("Test.More");
 require("xml");
 
-plan(26);
+plan(29);
 
 local xml_sample = [[<?xml version="1.0" encoding="utf8"?>
 <doc>
@@ -61,6 +61,7 @@ is(copy:attr("cloned"), "trooper", "updated original")
 is(copy:attr("cloned"), copy:attrns("cloned"), "attrns gives sane results")
 is(copy:attrns("cloned", ""), nil, "attrns with empty namespace -> nil")
 is(copy:attrns("cloned", "boo"), nil, "attrns with bogus namespace -> nil")
+copy:free()
 
 for n in doc:xpath('//item[@name="one"]') do
 	is(n:name(), "item", "found an item")
@@ -80,5 +81,11 @@ error_like(function ()
 	root:name("boo");
 end, "must be called with no arguments");
 
-
+n = xml.newnode('foo')
+ok(n, "made a node")
+is(n:name(), 'foo', 'is called foo')
+n:free()
+error_like(function ()
+  n:name()
+end, "bad self")
 

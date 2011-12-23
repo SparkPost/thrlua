@@ -145,6 +145,14 @@ static int lua_xmlnode_unlink(lua_State *L)
   return 1; 
 }
 
+static int lua_freenode(lua_State *L)
+{
+  xmlNodePtr n = luaL_checkudata(L, 1, MT_NODE);
+  xmlFreeNode(n);
+  luaL_breakuserptr(L, 1);
+  return 0;
+}
+
 static int lua_xmlnode_tostring(lua_State *L)
 {
   int n;
@@ -538,6 +546,7 @@ static const struct luaL_reg xmlnode_funcs[] = {
   { "copy", lua_xmlnode_copy },
   { "name", lua_xmlnode_name },
   { "unlink", lua_xmlnode_unlink },
+  { "free", lua_freenode },
   { "tostring", lua_xmlnode_tostring },
   { "__tostring", lua_xmlnode_tostring },
   { NULL, NULL }
