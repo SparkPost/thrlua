@@ -149,6 +149,7 @@ static int lua_freenode(lua_State *L)
 {
   xmlNodePtr n = luaL_checkudata(L, 1, MT_NODE);
   xmlFreeNode(n);
+  luaL_breakuserptr(L, 1);
   return 0;
 }
 
