@@ -21,7 +21,16 @@
  * of atomic operations to coordinate with a potential collector.
  * In a single threaded run, using atomics is 2x faster than blocking
  * signals.  If you need to use blocked signals, you can define this to 1 */
-#define BLOCK_COLLECTOR_USING_SIGNALS 1
+#define BLOCK_COLLECTOR_USING_SIGNALS 0
+/* set USE_TRACE_THREADS to 1 to use a dedicated pool of threads for tracing.
+ * Other mutator threads can assist in collection too.
+ * We've disabled this portion of processing due to:
+ * https://msysqa.int.messagesystems.com/bugzilla/show_bug.cgi?id=4515
+ * The ticket doesn't indicate that this particular piece of code is
+ * problematic (rather, the spinlocks in the table code are indicated),
+ * but we rolled back to 5.1.5.rc7 for safety and have not had the chance
+ * to dig in deeper. */
+#define USE_TRACE_THREADS 0
 
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
@@ -46,6 +55,7 @@ static uint32_t parked_threads = 0;
 static TAILQ_HEAD(thr_StateList, thr_State)
   all_threads = TAILQ_HEAD_INITIALIZER(all_threads);
 static sigset_t suspend_handler_mask;
+#if USE_TRACE_THREADS
 static struct ck_stack trace_stack;
 static pthread_cond_t trace_cond;
 static pthread_mutex_t trace_mtx;
@@ -53,6 +63,7 @@ static pthread_mutex_t trace_mtx;
 static void *trace_thread(void *);
 static void trace_heap(GCheap *h);
 static uint32_t trace_heaps = 0;
+#endif
 
 
 #define BLACKBIT    (1<<0)
@@ -210,7 +221,7 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-#if !BLOCK_COLLECTOR_USING_SIGNALS
+#if USE_TRACE_THREADS
 /* called during a global trace; when it returns, all mutators will be in
  * a safe state that blocks them from mutating state */
 static INLINE void block_mutators(lua_State *L)
@@ -261,6 +272,10 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
 
   for (;;) {
     while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
+#if !USE_TRACE_THREADS
+      /* we will get suspended momentarily */
+      ck_pr_stall();
+#else
       /* a global trace is either about to commence, or is ongoing.
        * Let's see if we can help out */
       struct ck_stack_entry *ent;
@@ -278,6 +293,7 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
       if (!traced && ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
         ck_pr_stall();
       }
+#endif
     }
     /* tell a possible collector that we're in a write barrier */
     ck_pr_store_32(&pt->in_barrier, 1);
@@ -303,7 +319,7 @@ static INLINE void unblock_collector(lua_State *L, thr_State *pt)
 #endif
 }
 
-#if BLOCK_COLLECTOR_USING_SIGNALS
+#if !USE_TRACE_THREADS
 # define GET_PT_FOR_NON_SIGNAL_COLLECTOR() do {} while(0)
 # define BLOCK_COLLECTOR() do {} while(0)
 # define UNBLOCK_COLLECTOR() do {} while(0)
@@ -336,25 +352,25 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
 void luaC_writebarriervo(lua_State *L, GCheader *object,
   TValue *lvalue, GCheader *rvalue)
 {
-  GET_PT_FOR_NON_SIGNAL_COLLECTOR();
+  thr_State *pt = luaC_get_per_thread(L);
 
   set_xref(L, object, rvalue, 0);
   mark_object(L, rvalue);
 
-  BLOCK_COLLECTOR();
+  block_collector(L, pt);
   lvalue->value.gc = rvalue;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
    * the collector */
   lvalue->tt = rvalue->tt;
-  UNBLOCK_COLLECTOR();
+  unblock_collector(L, pt);
 }
 
 
 void luaC_writebarriervv(lua_State *L, GCheader *object,
   TValue *lvalue, const TValue *rvalue)
 {
-  GET_PT_FOR_NON_SIGNAL_COLLECTOR();
+  thr_State *pt = luaC_get_per_thread(L);
 
   if (iscollectable(rvalue)) {
     GCheader *ro = gcvalue(rvalue);
@@ -362,13 +378,13 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
     mark_object(L, ro);
   }
 
-  BLOCK_COLLECTOR();
+  block_collector(L, pt);
   lvalue->value = rvalue->value;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
    * the collector */
   lvalue->tt = rvalue->tt;
-  UNBLOCK_COLLECTOR();
+  unblock_collector(L, pt);
 }
 
 void luaC_writebarrier(lua_State *L, GCheader *object,
@@ -837,8 +853,10 @@ static void make_tls_key(void)
 {
   struct sigaction act;
   pthread_mutexattr_t m;
+#if USE_TRACE_THREADS
   pthread_attr_t ta;
   int i;
+#endif
 
   atexit(free_last_global_bits);
 
@@ -849,6 +867,7 @@ static void make_tls_key(void)
   pthread_mutex_init(&all_threads_lock, &m);
   pthread_mutexattr_destroy(&m);
 
+#if USE_TRACE_THREADS
   /* spin up GC tracing threads */
   ck_stack_init(&trace_stack);
   pthread_cond_init(&trace_cond, NULL);
@@ -860,6 +879,7 @@ static void make_tls_key(void)
     pthread_create(&t, &ta, trace_thread, NULL);
   }
   pthread_attr_destroy(&ta);
+#endif
 
   memset(&act, 0, sizeof(act));
   act.sa_flags = SA_RESTART;
@@ -1528,6 +1548,7 @@ static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
   }
 }
 
+#if USE_TRACE_THREADS
 static void trace_heap(GCheap *h)
 {
   GCheader *o;
@@ -1542,12 +1563,10 @@ static void trace_heap(GCheap *h)
 
 static void *trace_thread(void *unused)
 {
-#if 0 /* this was not enabled in the 3.2 build */
   sigset_t set;
 
   sigfillset(&set);
   pthread_sigmask(SIG_SETMASK, &set, NULL);
-#endif
 
   while (1) {
     struct ck_stack_entry *ent;
@@ -1566,6 +1585,7 @@ static void *trace_thread(void *unused)
     }
   }
 }
+#endif
 
 /* Global collection must only use async-signal safe functions,
  * or it will lead to a deadlock (especially in printf) */
@@ -1573,14 +1593,13 @@ static void global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
-  struct ck_stack_entry *ent;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads()) {
     return;
   }
 
-#if !BLOCK_COLLECTOR_USING_SIGNALS
+#if USE_TRACE_THREADS
   block_mutators(L);
 #else
   stop_all_threads(L);
@@ -1603,19 +1622,18 @@ static void global_trace(lua_State *L)
     G(L)->notxref = 0;
   }
 
+#if USE_TRACE_THREADS
   /* now trace all objects and fix the xref bit */
   TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     ck_pr_inc_32(&trace_heaps);
     ck_stack_push_upmc(&trace_stack, &h->instack);
-#if BLOCK_COLLECTOR_USING_SIGNALS
     /* let consumers know they have things to do */
     pthread_cond_broadcast(&trace_cond);
-#endif
   }
 
   /* we are a consumer too */
   while (1) {
-    ent = ck_stack_pop_upmc(&trace_stack);
+    struct ck_stack_entry *ent = ck_stack_pop_upmc(&trace_stack);
 
     if (!ent) {
       break;
@@ -1629,6 +1647,15 @@ static void global_trace(lua_State *L)
   while (ck_pr_load_32(&trace_heaps) != 0) {
     ck_pr_stall();
   }
+#else
+  TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
+    GCheader *o;
+
+    TAILQ_FOREACH(o, &h->objects, allocd) {
+      global_trace_obj(h->owner, &h->owner->gch, o);
+    }
+  }
+#endif
 
   /* all heaps are traced */
 
@@ -1639,10 +1666,10 @@ static void global_trace(lua_State *L)
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 #endif
 
-#if BLOCK_COLLECTOR_USING_SIGNALS
-  resume_threads(L);
-#else
+#if USE_TRACE_THREADS
   unblock_mutators(L);
+#else
+  resume_threads(L);
 #endif
 
   unlock_all_threads();
