@@ -1,4 +1,4 @@
-AC_INIT([rclua], [5.1.5], [], [rclua])
+AC_INIT([rclua], [5.1.6], [], [rclua])
 AM_INIT_AUTOMAKE([dist-bzip2])
 AC_CANONICAL_HOST
 AC_PROG_CC
