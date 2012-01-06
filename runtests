@@ -44,6 +44,7 @@ platform = {
 LUA
 
 $ENV{RCLUA_PATH} = './?.lua;./etc/?.lua;./etc/?/init.lua';
+$ENV{LUA_PATH} = './?.lua;./etc/?.lua;./etc/?/init.lua';
 $ENV{RCLUA_CPATH} = ".libs/?.so";
 if ($use_installed) {
   $ENV{LUA_EXECUTABLE} ||= "/opt/msys/3rdParty/bin/rclua";
