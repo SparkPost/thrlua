@@ -6,10 +6,14 @@ MD_FILES = @MD_FILES@
 
 MAKEFLAGS = -s
 
-lib_LTLIBRARIES = libthrlua.la
+lib_LTLIBRARIES = libthrlua.la gimli_libthrlua.la
 bin_PROGRAMS = rclua rcluac
 cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la \
 	posix.la xml.la curl.la socket.la
+
+gimli_libthrlua_la_CPPFLAGS = $(commonCFLAGS)
+gimli_libthrlua_la_SOURCES = src/gimli.c
+gimli_libthrlua_la_LDFLAGS = -module
 
 if BUILD_JSON
 cmod_LTLIBRARIES += json.la
@@ -23,7 +27,7 @@ noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-CFLAGS += @CK_CFLAGS@ -Isrc
+CFLAGS += @CK_CFLAGS@ -Isrc -gdwarf-2 -fno-omit-frame-pointer
 
 libthrlua_la_LDFLAGS = -lpthread -lm
 libthrlua_la_CPPFLAGS = $(commonCFLAGS)
