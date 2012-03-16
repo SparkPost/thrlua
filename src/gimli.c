@@ -15,6 +15,55 @@
 static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
 
+static int show_tvalue(const struct gimli_ana_api *api,
+    TValue *tvp, int limit)
+{
+  TValue tv;
+
+  if (api->read_mem(tvp, &tv, sizeof(tv)) != sizeof(tv)) {
+    return 0;
+  }
+
+  switch (tv.tt) {
+    case luat_nil:
+      printf("nil\n");
+      return 1;
+    case luat_bool:
+      printf("bool %s\n", tv.value.b ? "true" : "false");
+      return 1;
+    case luat_ludata:
+      printf("lightuserdata\n");
+      return 1;
+    case luat_num:
+      printf("number %f\n", tv.value.n);
+      return 1;
+    case luat_str:
+    {
+      char *str = api->read_string(((TString*)tv.value.gc) + 1);
+      printf("string %p %s\n", tv.value.gc, str);
+      free(str);
+      return 1;
+    }
+    case luat_func:
+      printf("func %p\n", tv.value.gc);
+      return 1;
+    case luat_table:
+      printf("table %p\n", tv.value.gc);
+      return 1;
+    case luat_udata:
+      printf("userdata %p\n", tv.value.p);
+      return 1;
+    case luat_thread:
+      printf("thread %p\n", tv.value.gc);
+      return 1;
+    case luat_proto:
+      printf("proto %p\n", tv.value.gc);
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 /* This function intercepts the usual glider printing of lua_State
  * variables in the stack trace.
  *
@@ -94,6 +143,8 @@ static int before_var(
     } else {
       Proto p;
       int pc;
+      struct LocVar lv;
+      int n, sn;
 
       if (api->read_mem(cl.l.p, &p, sizeof(p)) != sizeof(p)) {
         printf("failed to read Proto\n");
@@ -111,6 +162,33 @@ static int before_var(
         free(src);
       } else {
         printf("  [VM]\n");
+      }
+
+      /* print out locals */
+      for (sn = 0, n = 0; n < p.sizelocvars; n++) {
+        char *varname;
+        int startline, endline;
+        TValue val;
+
+        if (api->read_mem(p.locvars + n, &lv, sizeof(lv)) != sizeof(lv)) {
+          break;
+        }
+        if (lv.startpc > pc || pc >= lv.endpc) {
+          /* this local is not yet or no longer valid in this frame */
+          continue;
+        }
+
+        varname = api->read_string(((TString*)lv.varname) + 1);
+        api->read_mem(p.lineinfo + lv.startpc, &startline, sizeof(startline));
+        api->read_mem(p.lineinfo + lv.endpc, &endline, sizeof(endline));
+        printf("    local %s [lines: %d - %d] ", varname, startline, endline);
+        free(varname);
+
+        /* we can read it from the stack at offset sn from the ci.base */
+        show_tvalue(api, ci.base + sn, 16);
+
+        /* stack offset for the local */
+        sn++;
       }
     }
   }
