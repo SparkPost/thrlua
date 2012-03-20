@@ -15,6 +15,69 @@
 static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
 
+static unsigned int compute_string_hash(const char *str, size_t l)
+{
+  unsigned int h = (unsigned int)l; /* seed */
+  size_t step = (l >> 5) + 1; /* if string is too long, don't hash it all */
+  size_t l1;
+
+  for (l1 = l; l1 >= step; l1 -= step) {
+    h = h ^ ( (h << 5) + (h >> 2) + ((unsigned char)str[l1-1]));
+  }
+
+  return h;
+}
+
+/* given mtptr, a pointer to a GCheader representing
+ * a table, look inside it for the "@type" field that holds
+ * the type name and return that string */
+static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
+{
+  Table t;
+  unsigned int h;
+  int snode;
+  int off;
+  Node *np;
+
+  if (!mtptr) {
+    return NULL;
+  }
+
+  if (api->read_mem(mtptr, &t, sizeof(t)) != sizeof(t)) {
+    return NULL;
+  }
+
+  h = compute_string_hash("@type", strlen("@type"));
+  snode = twoto(t.lsizenode);
+  off = h & (snode - 1);
+
+  np = t.node + off;
+  do {
+    Node n;
+
+    if (api->read_mem(np, &n, sizeof(n)) != sizeof(n)) {
+      return NULL;
+    }
+
+    if (n.i_key.nk.tt == LUA_TSTRING) {
+      char *k = api->read_string(((TString*)n.i_key.nk.value.gc) + 1);
+
+      if (!k) {
+        return NULL;
+      }
+
+      if (!strcmp(k, "@type")) {
+        free(k);
+        return api->read_string(((TString*)n.i_val.value.gc) + 1);
+      }
+      free(k);
+    }
+
+    np = n.i_key.nk.next;
+  } while (np);
+  return NULL;
+}
+
 static int show_tvalue(const struct gimli_ana_api *api,
     TValue *tvp, int limit)
 {
@@ -48,11 +111,46 @@ static int show_tvalue(const struct gimli_ana_api *api,
       printf("func %p\n", tv.value.gc);
       return 1;
     case luat_table:
-      printf("table %p\n", tv.value.gc);
+    {
+      char *mt;
+      Table t;
+
+      printf("table %p", tv.value.gc);
+      if (api->read_mem(tv.value.gc, &t, sizeof(t)) != sizeof(t)) {
+        printf("\n");
+        return 1;
+      }
+      mt = resolve_mt_name(api, t.metatable);
+      if (mt) {
+        printf(" mt %s", mt);
+        free(mt);
+      }
+      printf("\n");
       return 1;
+    }
     case luat_udata:
-      printf("userdata %p\n", tv.value.p);
+    {
+      Udata ud;
+      void *ptr;
+      char *mt;
+
+      printf("userdata %p", tv.value.p);
+      if (api->read_mem(tv.value.p, &ud, sizeof(ud)) != sizeof(ud)) {
+        printf("\n");
+        return 1;
+      }
+      mt = resolve_mt_name(api, ud.uv.metatable);
+      if (ud.uv.is_user_ptr && api->read_mem(((Udata*)tv.value.p) + 1,
+            &ptr, sizeof(ptr)) == sizeof(ptr)) {
+        printf(" userptr -> %s %p", mt ? mt : "", ptr);
+      } else if (mt) {
+        printf(" mt %s", mt);
+      }
+      free(mt);
+      printf("\n");
+
       return 1;
+    }
     case luat_thread:
       printf("thread %p\n", tv.value.gc);
       return 1;
@@ -60,6 +158,7 @@ static int show_tvalue(const struct gimli_ana_api *api,
       printf("proto %p\n", tv.value.gc);
       return 1;
     default:
+      printf("type: %d\n", tv.tt);
       return 0;
   }
 }
@@ -86,23 +185,32 @@ static int before_var(
   Closure cl;
   TValue stk;
   int ret;
+  int lframeno = 1;
 
-  if (strcmp(datatype, "lua_State *")) return GIMLI_ANA_CONTINUE;
+  /* not the cleanest way to do this, since we're assuming knoweldge of
+   * typedefs defined in other modules. We'd need a typedef resolving
+   * API to make this clean.  For now, we explicitly look for both the
+   * real lua_State type and the well-known scpt_thread typedef */
+  if (strcmp(datatype, "lua_State *") && strcmp(datatype, "scpt_thread *")) {
+    return GIMLI_ANA_CONTINUE;
+  }
 
   ret = dump_lua_state ? GIMLI_ANA_CONTINUE : GIMLI_ANA_SUPPRESS;
-
-  if (last_ci == L.ci) {
-    /* already rendered this trace in an earlier call */
-    return ret;
-  }
-  last_ci = L.ci;
-
-  printf("  * Lua call stack: (may be interleaved with following C frames)\n");
 
   if (api->read_mem(varaddr, &L, sizeof(L)) != sizeof(L)) {
     printf("failed to read lua_State\n");
     return ret;
   }
+
+  if (last_ci && last_ci == L.ci) {
+    /* already rendered this trace in an earlier call */
+    printf("  %s %s @ %p [deref'ed above]\n",
+        datatype, varname, varaddr);
+    return ret;
+  }
+  last_ci = L.ci;
+
+  printf("  * Lua call stack: (may be interleaved with following C frames)\n");
 
   /* now read out the call frames */
   for (cip = L.ci; cip && cip > L.base_ci; cip--) {
@@ -119,6 +227,8 @@ static int before_var(
       break;
     }
 
+    printf("  #L%d ", lframeno++);
+
     if (cl.c.isC) {
       char buf[1024];
       char file[1024];
@@ -129,7 +239,7 @@ static int before_var(
         line = -1;
       }
       sym = api->sym_name(cl.c.f, buf, sizeof(buf));
-      printf("  [C:%p] ", cl.c.f);
+      printf("[C:%p] ", cl.c.f);
       if (cl.c.fname) {
         char *l = api->read_string((void*)cl.c.fname);
         printf("\"%s\" ", l);
@@ -151,17 +261,17 @@ static int before_var(
         break;
       }
 
-      pc = ci.savedpc - p.code;
+      pc = (ci.savedpc - p.code) - 1;
 
       if (p.source) {
         char *src = api->read_string(p.source + 1);
         int line;
 
         api->read_mem(p.lineinfo + pc, &line, sizeof(line));
-        printf("  %s:%d @ pc=%d\n", src + 1, line, pc);
+        printf("%s:%d @ pc=%d\n", src + 1, line, pc);
         free(src);
       } else {
-        printf("  [VM]\n");
+        printf("[VM]\n");
       }
 
       /* print out locals */
@@ -173,8 +283,8 @@ static int before_var(
         if (api->read_mem(p.locvars + n, &lv, sizeof(lv)) != sizeof(lv)) {
           break;
         }
-        if (lv.startpc > pc || pc >= lv.endpc) {
-          /* this local is not yet or no longer valid in this frame */
+        if (lv.startpc > pc) {
+          /* this local is not yet valid in this frame */
           continue;
         }
 
