@@ -172,6 +172,7 @@ static void f_luaopen (lua_State *L, void *ud) {
   lua_pushcclosure2(L, "_G.__index:TLS", do_tls_access, 0);
   lua_setfield(L, -2, "__index");
   lua_setmetatable(L, LUA_GLOBALSINDEX);
+  sethvalue(L, &g->ostls, luaH_new(L, 0, 2));
 
   if (G(L)->on_state_create) {
     G(L)->on_state_create(L);

@@ -44,15 +44,7 @@ static TValue *index2adr (lua_State *L, int idx) {
       }
       return &L->tls;
     case LUA_OSTLSINDEX:
-    {
-      global_State *g = G(L);
-
-      /* create the overall OS TLS table */
-      if (!ttistable(&g->ostls)) {
-        sethvalue(L, &g->ostls, luaH_new(L, 0, 2));
-      }
-      return &g->ostls;
-    }
+      return &G(L)->ostls;
     case LUA_ENVIRONINDEX: {
       Closure *func = curr_func(L);
       sethvalue(L, &L->env, gch2h(func->c.env));
