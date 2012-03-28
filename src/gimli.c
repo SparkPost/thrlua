@@ -433,6 +433,13 @@ struct gimli_ana_module *gimli_ana_init(const struct gimli_ana_api *api)
   if (dump && !strcmp(dump, "1")) {
     dump_lua_state = 1;
   }
+  dump = getenv("GIMLI_LUA_RECURSION_DEPTH");
+  if (dump) {
+    int val = atoi(dump);
+    if (val > 0) {
+      table_dump_limit = val;
+    }
+  }
   derefed = gimli_hash_new(NULL);
   return &ana;
 }
