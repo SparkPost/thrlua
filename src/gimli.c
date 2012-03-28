@@ -14,6 +14,15 @@
 
 static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
+static int table_dump_limit = 16;
+
+/* hack to get at technically unsupported Gimli APIs */
+typedef void *gimli_hash_t;
+extern gimli_hash_t gimli_hash_new(void*);
+extern int gimli_hash_insert(gimli_hash_t h, const char *k, void *item);
+extern int gimli_hash_find(gimli_hash_t h, const char *k, void **itemp);
+
+static gimli_hash_t derefed = NULL;
 
 static unsigned int compute_string_hash(const char *str, size_t l)
 {
@@ -79,9 +88,102 @@ static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
 }
 
 static int show_tvalue(const struct gimli_ana_api *api,
+    TValue *tvp, int limit);
+
+static const char indent_str[] =
+"                                                                           ";
+
+/* Table is in the target address space */
+static int show_table(const struct gimli_ana_api *api,
+    Table *tp, int limit)
+{
+  int i;
+  int printed = 0;
+  int indent = 2 + ((table_dump_limit - limit + 1) * 2);
+  Table t;
+  char ptrbuf[64];
+  void *ptr;
+
+  snprintf(ptrbuf, sizeof(ptrbuf), "%p", tp);
+  if (gimli_hash_find(derefed, ptrbuf, &ptr)) {
+    printf("[table %p deref'ed above]", tp);
+    return 1;
+  }
+  gimli_hash_insert(derefed, ptrbuf, tp);
+
+  if (api->read_mem(tp, &t, sizeof(t)) != sizeof(t)) {
+    return 0;
+  }
+
+  if (indent >= sizeof(indent_str) - 2) {
+    indent = sizeof(indent_str) - 2;
+  }
+
+  if (limit <= 1) {
+    printf("{ ... }");
+    return 1;
+  }
+
+  printf("{ ");
+  for (i = 0; i < t.sizearray; i++) {
+    TValue val;
+
+    if (api->read_mem(t.array + i, &val, sizeof(val)) != sizeof(val)) {
+      break;
+    }
+
+    if (ttisnil(&val)) {
+      continue;
+    }
+
+    if (!printed) {
+      printed = 1;
+      printf("\n");
+    }
+    printf("%.*s[%d] = ", indent, indent_str, i + 1);
+    show_tvalue(api, t.array + i, limit - 1);
+    printf("\n");
+  }
+
+  for (i = twoto(t.lsizenode) - 1; i >= 0; i--) {
+    Node node;
+
+    if (api->read_mem(t.node + i, &node, sizeof(node)) != sizeof(node)) {
+      break;
+    }
+    if (ttisnil(gval(&node))) {
+      continue;
+    }
+
+    if (!printed) {
+      printed = 1;
+      printf("\n");
+    }
+    printf("%.*s[", indent, indent_str);
+    show_tvalue(api, (TValue*)(
+          ((uintptr_t)(t.node + i)) + sizeof(TValue)), limit - 1);
+    printf("] = ");
+    show_tvalue(api, (TValue*)(t.node + i), limit - 1);
+    printf("\n");
+  }
+  if (printed) {
+    indent -= 4;
+    if (indent < 4) indent = 4;
+    printf("%.*s", indent, indent_str);
+  }
+  printf("}");
+
+  return 1;
+}
+
+static int show_tvalue(const struct gimli_ana_api *api,
     TValue *tvp, int limit)
 {
   TValue tv;
+
+  if (limit <= 0) {
+    return 0;
+  }
 
   if (api->read_mem(tvp, &tv, sizeof(tv)) != sizeof(tv)) {
     return 0;
@@ -89,43 +191,46 @@ static int show_tvalue(const struct gimli_ana_api *api,
 
   switch (tv.tt) {
     case luat_nil:
-      printf("nil\n");
+      printf("nil");
       return 1;
     case luat_bool:
-      printf("bool %s\n", tv.value.b ? "true" : "false");
+      printf("bool %s", tv.value.b ? "true" : "false");
       return 1;
     case luat_ludata:
-      printf("lightuserdata\n");
+      printf("lightuserdata %p", tv.value.p);
       return 1;
     case luat_num:
-      printf("number %f\n", tv.value.n);
+      printf("number %f", tv.value.n);
       return 1;
     case luat_str:
     {
       char *str = api->read_string(((TString*)tv.value.gc) + 1);
-      printf("string %p %s\n", tv.value.gc, str);
+      printf("string %p \"%s\"", tv.value.gc, str);
       free(str);
       return 1;
     }
     case luat_func:
-      printf("func %p\n", tv.value.gc);
+      printf("func %p", tv.value.gc);
       return 1;
     case luat_table:
     {
       char *mt;
       Table t;
 
-      printf("table %p", tv.value.gc);
+      printf("table %p ", tv.value.gc);
       if (api->read_mem(tv.value.gc, &t, sizeof(t)) != sizeof(t)) {
-        printf("\n");
         return 1;
       }
       mt = resolve_mt_name(api, t.metatable);
       if (mt) {
-        printf(" mt %s", mt);
+        printf("mt %s ", mt);
         free(mt);
+      } else if (t.metatable) {
+        printf("mt %p ", t.metatable);
+        show_table(api, (Table*)t.metatable, limit - 1);
+        printf(" ");
       }
-      printf("\n");
+      show_table(api, (Table*)tv.value.gc, limit - 1);
       return 1;
     }
     case luat_udata:
@@ -136,7 +241,6 @@ static int show_tvalue(const struct gimli_ana_api *api,
 
       printf("userdata %p", tv.value.p);
       if (api->read_mem(tv.value.p, &ud, sizeof(ud)) != sizeof(ud)) {
-        printf("\n");
         return 1;
       }
       mt = resolve_mt_name(api, ud.uv.metatable);
@@ -147,18 +251,17 @@ static int show_tvalue(const struct gimli_ana_api *api,
         printf(" mt %s", mt);
       }
       free(mt);
-      printf("\n");
 
       return 1;
     }
     case luat_thread:
-      printf("thread %p\n", tv.value.gc);
+      printf("thread %p", tv.value.gc);
       return 1;
     case luat_proto:
-      printf("proto %p\n", tv.value.gc);
+      printf("proto %p", tv.value.gc);
       return 1;
     default:
-      printf("type: %d\n", tv.tt);
+      printf("type: %d", tv.tt);
       return 0;
   }
 }
@@ -210,7 +313,7 @@ static int before_var(
   }
   last_ci = L.ci;
 
-  printf("  * Lua call stack: (may be interleaved with following C frames)\n");
+  printf("  * Lua call stack: (interleaved with surrounding C frames)\n");
 
   /* now read out the call frames */
   for (cip = L.ci; cip && cip > L.base_ci; cip--) {
@@ -295,7 +398,9 @@ static int before_var(
         free(varname);
 
         /* we can read it from the stack at offset sn from the ci.base */
-        show_tvalue(api, ci.base + sn, 16);
+        if (show_tvalue(api, ci.base + sn, table_dump_limit)) {
+          printf("\n");
+        }
 
         /* stack offset for the local */
         sn++;
@@ -328,6 +433,7 @@ struct gimli_ana_module *gimli_ana_init(const struct gimli_ana_api *api)
   if (dump && !strcmp(dump, "1")) {
     dump_lua_state = 1;
   }
+  derefed = gimli_hash_new(NULL);
   return &ana;
 }
 
