@@ -16,12 +16,6 @@ static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
 static int table_dump_limit = 16;
 
-/* hack to get at technically unsupported Gimli APIs */
-typedef void *gimli_hash_t;
-extern gimli_hash_t gimli_hash_new(void*);
-extern int gimli_hash_insert(gimli_hash_t h, const char *k, void *item);
-extern int gimli_hash_find(gimli_hash_t h, const char *k, void **itemp);
-
 static gimli_hash_t derefed = NULL;
 
 static unsigned int compute_string_hash(const char *str, size_t l)
@@ -40,7 +34,7 @@ static unsigned int compute_string_hash(const char *str, size_t l)
 /* given mtptr, a pointer to a GCheader representing
  * a table, look inside it for the "@type" field that holds
  * the type name and return that string */
-static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
+static char *resolve_mt_name(gimli_proc_t proc, GCheader *mtptr)
 {
   Table t;
   unsigned int h;
@@ -52,7 +46,7 @@ static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
     return NULL;
   }
 
-  if (api->read_mem(mtptr, &t, sizeof(t)) != sizeof(t)) {
+  if (gimli_read_mem(proc, (gimli_addr_t)mtptr, &t, sizeof(t)) != sizeof(t)) {
     return NULL;
   }
 
@@ -64,12 +58,12 @@ static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
   do {
     Node n;
 
-    if (api->read_mem(np, &n, sizeof(n)) != sizeof(n)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)np, &n, sizeof(n)) != sizeof(n)) {
       return NULL;
     }
 
     if (n.i_key.nk.tt == LUA_TSTRING) {
-      char *k = api->read_string(((TString*)n.i_key.nk.value.gc) + 1);
+      char *k = gimli_read_string(proc, (gimli_addr_t)(((TString*)n.i_key.nk.value.gc) + 1));
 
       if (!k) {
         return NULL;
@@ -77,7 +71,7 @@ static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
 
       if (!strcmp(k, "@type")) {
         free(k);
-        return api->read_string(((TString*)n.i_val.value.gc) + 1);
+        return gimli_read_string(proc, (gimli_addr_t)(((TString*)n.i_val.value.gc) + 1));
       }
       free(k);
     }
@@ -87,15 +81,13 @@ static char *resolve_mt_name(const struct gimli_ana_api *api, GCheader *mtptr)
   return NULL;
 }
 
-static int show_tvalue(const struct gimli_ana_api *api,
-    TValue *tvp, int limit);
+static int show_tvalue(gimli_proc_t proc, TValue *tvp, int limit);
 
 static const char indent_str[] =
 "                                                                           ";
 
 /* Table is in the target address space */
-static int show_table(const struct gimli_ana_api *api,
-    Table *tp, int limit)
+static int show_table(gimli_proc_t proc, Table *tp, int limit)
 {
   int i;
   int printed = 0;
@@ -111,7 +103,7 @@ static int show_table(const struct gimli_ana_api *api,
   }
   gimli_hash_insert(derefed, ptrbuf, tp);
 
-  if (api->read_mem(tp, &t, sizeof(t)) != sizeof(t)) {
+  if (gimli_read_mem(proc, (gimli_addr_t)tp, &t, sizeof(t)) != sizeof(t)) {
     return 0;
   }
 
@@ -128,7 +120,7 @@ static int show_table(const struct gimli_ana_api *api,
   for (i = 0; i < t.sizearray; i++) {
     TValue val;
 
-    if (api->read_mem(t.array + i, &val, sizeof(val)) != sizeof(val)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)(t.array + i), &val, sizeof(val)) != sizeof(val)) {
       break;
     }
 
@@ -141,14 +133,14 @@ static int show_table(const struct gimli_ana_api *api,
       printf("\n");
     }
     printf("%.*s[%d] = ", indent, indent_str, i + 1);
-    show_tvalue(api, t.array + i, limit - 1);
+    show_tvalue(proc, t.array + i, limit - 1);
     printf("\n");
   }
 
   for (i = twoto(t.lsizenode) - 1; i >= 0; i--) {
     Node node;
 
-    if (api->read_mem(t.node + i, &node, sizeof(node)) != sizeof(node)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)(t.node + i), &node, sizeof(node)) != sizeof(node)) {
       break;
     }
     if (ttisnil(gval(&node))) {
@@ -160,10 +152,10 @@ static int show_table(const struct gimli_ana_api *api,
       printf("\n");
     }
     printf("%.*s[", indent, indent_str);
-    show_tvalue(api, (TValue*)(
+    show_tvalue(proc, (TValue*)(
           ((uintptr_t)(t.node + i)) + sizeof(TValue)), limit - 1);
     printf("] = ");
-    show_tvalue(api, (TValue*)(t.node + i), limit - 1);
+    show_tvalue(proc, (TValue*)(t.node + i), limit - 1);
     printf("\n");
   }
   if (printed) {
@@ -176,8 +168,7 @@ static int show_table(const struct gimli_ana_api *api,
   return 1;
 }
 
-static int show_tvalue(const struct gimli_ana_api *api,
-    TValue *tvp, int limit)
+static int show_tvalue(gimli_proc_t proc, TValue *tvp, int limit)
 {
   TValue tv;
 
@@ -185,7 +176,7 @@ static int show_tvalue(const struct gimli_ana_api *api,
     return 0;
   }
 
-  if (api->read_mem(tvp, &tv, sizeof(tv)) != sizeof(tv)) {
+  if (gimli_read_mem(proc, (gimli_addr_t)tvp, &tv, sizeof(tv)) != sizeof(tv)) {
     return 0;
   }
 
@@ -204,7 +195,7 @@ static int show_tvalue(const struct gimli_ana_api *api,
       return 1;
     case luat_str:
     {
-      char *str = api->read_string(((TString*)tv.value.gc) + 1);
+      char *str = gimli_read_string(proc, (gimli_addr_t)(((TString*)tv.value.gc) + 1));
       printf("string %p \"%s\"", tv.value.gc, str);
       free(str);
       return 1;
@@ -218,19 +209,19 @@ static int show_tvalue(const struct gimli_ana_api *api,
       Table t;
 
       printf("table %p ", tv.value.gc);
-      if (api->read_mem(tv.value.gc, &t, sizeof(t)) != sizeof(t)) {
+      if (gimli_read_mem(proc, (gimli_addr_t)tv.value.gc, &t, sizeof(t)) != sizeof(t)) {
         return 1;
       }
-      mt = resolve_mt_name(api, t.metatable);
+      mt = resolve_mt_name(proc, t.metatable);
       if (mt) {
         printf("mt %s ", mt);
         free(mt);
       } else if (t.metatable) {
         printf("mt %p ", t.metatable);
-        show_table(api, (Table*)t.metatable, limit - 1);
+        show_table(proc, (Table*)t.metatable, limit - 1);
         printf(" ");
       }
-      show_table(api, (Table*)tv.value.gc, limit - 1);
+      show_table(proc, (Table*)tv.value.gc, limit - 1);
       return 1;
     }
     case luat_udata:
@@ -240,11 +231,11 @@ static int show_tvalue(const struct gimli_ana_api *api,
       char *mt;
 
       printf("userdata %p", tv.value.p);
-      if (api->read_mem(tv.value.p, &ud, sizeof(ud)) != sizeof(ud)) {
+      if (gimli_read_mem(proc, (gimli_addr_t)tv.value.p, &ud, sizeof(ud)) != sizeof(ud)) {
         return 1;
       }
-      mt = resolve_mt_name(api, ud.uv.metatable);
-      if (ud.uv.is_user_ptr && api->read_mem(((Udata*)tv.value.p) + 1,
+      mt = resolve_mt_name(proc, ud.uv.metatable);
+      if (ud.uv.is_user_ptr && gimli_read_mem(proc, (gimli_addr_t)(((Udata*)tv.value.p) + 1),
             &ptr, sizeof(ptr)) == sizeof(ptr)) {
         printf(" userptr -> %s %p", mt ? mt : "", ptr);
       } else if (mt) {
@@ -276,31 +267,24 @@ static int show_tvalue(const struct gimli_ana_api *api,
  * in the environment will allow it to be printed.
  */
 
-static int before_var(
-  const struct gimli_ana_api *api, const char *object, int tid,
-  int frameno, void *pcaddr, void *context,
-  const char *datatype, const char *varname,
-  void *varaddr, uint64_t varsize)
+static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
+    gimli_stack_frame_t frame,
+    const char *varname, gimli_type_t t, gimli_addr_t varaddr,
+    int depth, void *arg)
 {
   lua_State L;
   CallInfo ci;
   CallInfo *cip;
   Closure cl;
   TValue stk;
-  int ret;
+  gimli_iter_status_t ret;
   int lframeno = 1;
+  const char *datatype = gimli_type_declname(t);
 
-  /* not the cleanest way to do this, since we're assuming knoweldge of
-   * typedefs defined in other modules. We'd need a typedef resolving
-   * API to make this clean.  For now, we explicitly look for both the
-   * real lua_State type and the well-known scpt_thread typedef */
-  if (strcmp(datatype, "lua_State *") && strcmp(datatype, "scpt_thread *")) {
-    return GIMLI_ANA_CONTINUE;
-  }
+  if (!varname) varname = "";
+  ret = dump_lua_state ? GIMLI_ITER_CONT : GIMLI_ITER_STOP;
 
-  ret = dump_lua_state ? GIMLI_ANA_CONTINUE : GIMLI_ANA_SUPPRESS;
-
-  if (api->read_mem(varaddr, &L, sizeof(L)) != sizeof(L)) {
+  if (gimli_read_mem(proc, varaddr, &L, sizeof(L)) != sizeof(L)) {
     printf("failed to read lua_State\n");
     return ret;
   }
@@ -317,15 +301,15 @@ static int before_var(
 
   /* now read out the call frames */
   for (cip = L.ci; cip && cip > L.base_ci; cip--) {
-    if (api->read_mem(cip, &ci, sizeof(ci)) != sizeof(ci)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)cip, &ci, sizeof(ci)) != sizeof(ci)) {
       printf("couldn't read next ci\n");
       break;
     }
-    if (api->read_mem(ci.func, &stk, sizeof(stk)) != sizeof(stk)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)ci.func, &stk, sizeof(stk)) != sizeof(stk)) {
       printf("couldn't read func from ci\n");
       break;
     }
-    if (api->read_mem(stk.value.gc, &cl, sizeof(cl)) != sizeof(cl)) {
+    if (gimli_read_mem(proc, (gimli_addr_t)stk.value.gc, &cl, sizeof(cl)) != sizeof(cl)) {
       printf("couldn't read closure from ci\n");
       break;
     }
@@ -336,15 +320,16 @@ static int before_var(
       char buf[1024];
       char file[1024];
       const char *sym;
-      int line;
+      uint64_t line;
 
-      if (!api->get_source_info(cl.c.f, file, sizeof(file), &line)) {
+      if (!gimli_determine_source_line_number(proc, (gimli_addr_t)cl.c.f,
+            file, sizeof(file), &line)) {
         line = -1;
       }
-      sym = api->sym_name(cl.c.f, buf, sizeof(buf));
+      sym = gimli_pc_sym_name(proc, (gimli_addr_t)cl.c.f, buf, sizeof(buf));
       printf("[C:%p] ", cl.c.f);
       if (cl.c.fname) {
-        char *l = api->read_string((void*)cl.c.fname);
+        char *l = gimli_read_string(proc, (gimli_addr_t)cl.c.fname);
         printf("\"%s\" ", l);
         free(l);
       }
@@ -359,7 +344,7 @@ static int before_var(
       struct LocVar lv;
       int n, sn;
 
-      if (api->read_mem(cl.l.p, &p, sizeof(p)) != sizeof(p)) {
+      if (gimli_read_mem(proc, (gimli_addr_t)cl.l.p, &p, sizeof(p)) != sizeof(p)) {
         printf("failed to read Proto\n");
         break;
       }
@@ -367,10 +352,10 @@ static int before_var(
       pc = (ci.savedpc - p.code) - 1;
 
       if (p.source) {
-        char *src = api->read_string(p.source + 1);
+        char *src = gimli_read_string(proc, (gimli_addr_t)(p.source + 1));
         int line;
 
-        api->read_mem(p.lineinfo + pc, &line, sizeof(line));
+        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + pc), &line, sizeof(line));
         printf("%s:%d @ pc=%d\n", src + 1, line, pc);
         free(src);
       } else {
@@ -383,7 +368,7 @@ static int before_var(
         int startline, endline;
         TValue val;
 
-        if (api->read_mem(p.locvars + n, &lv, sizeof(lv)) != sizeof(lv)) {
+        if (gimli_read_mem(proc, (gimli_addr_t)(p.locvars + n), &lv, sizeof(lv)) != sizeof(lv)) {
           break;
         }
         if (lv.startpc > pc) {
@@ -391,14 +376,14 @@ static int before_var(
           continue;
         }
 
-        varname = api->read_string(((TString*)lv.varname) + 1);
-        api->read_mem(p.lineinfo + lv.startpc, &startline, sizeof(startline));
-        api->read_mem(p.lineinfo + lv.endpc, &endline, sizeof(endline));
+        varname = gimli_read_string(proc, (gimli_addr_t)(((TString*)lv.varname) + 1));
+        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.startpc), &startline, sizeof(startline));
+        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.endpc), &endline, sizeof(endline));
         printf("    local %s [lines: %d - %d] ", varname, startline, endline);
         free(varname);
 
         /* we can read it from the stack at offset sn from the ci.base */
-        if (show_tvalue(api, ci.base + sn, table_dump_limit)) {
+        if (show_tvalue(proc, ci.base + sn, table_dump_limit)) {
           printf("\n");
         }
 
@@ -407,6 +392,7 @@ static int before_var(
       }
     }
   }
+  if (lframeno == 1) printf("  <inactive Lua stack>");
   printf("\n");
 
   if (ret == GIMLI_ANA_SUPPRESS) {
@@ -416,18 +402,9 @@ static int before_var(
   return ret;
 }
 
-static struct gimli_ana_module ana = {
-  GIMLI_ANA_API_VERSION,
-  NULL, /* perform trace */
-  NULL, /* begin_thread_trace */
-  NULL, /* before print frame */
-  before_var, /* before print frame var */
-  NULL, /* after print frame var */
-  NULL, /* after print frame */
-  NULL, /* end thread trace */
-};
+static const char *lua_state_typenames[] = { "struct lua_State" };
 
-struct gimli_ana_module *gimli_ana_init(const struct gimli_ana_api *api)
+int gimli_module_init(int api_version)
 {
   const char *dump = getenv("GIMLI_LUA_VERBOSE");
   if (dump && !strcmp(dump, "1")) {
@@ -441,7 +418,11 @@ struct gimli_ana_module *gimli_ana_init(const struct gimli_ana_api *api)
     }
   }
   derefed = gimli_hash_new(NULL);
-  return &ana;
+
+  gimli_module_register_var_printer_for_types(lua_state_typenames, 1,
+      print_lua_State, NULL);
+
+  return 1;
 }
 
 /* vim:ts=2:sw=2:et:
