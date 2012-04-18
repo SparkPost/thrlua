@@ -9,6 +9,8 @@
 
 #include "thrlua.h"
 
+const char gimli_tracer_module_name[] = "gimli_libthrlua.so";
+
 static const char *getfuncname (lua_State *L, CallInfo *ci, const char **name);
 
 
