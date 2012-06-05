@@ -13,9 +13,12 @@ The scope of these bindings will increase in future releases.
     require 'xml'
     doc = xml.parsexml([[<doc><item/></doc>]])
 
-## xml.parsexml(string)
+## xml.parsexml(string, keep_blanks)
 
-Parses an XML string and returns an XML document object
+Parses an XML string and returns an XML document object.
+The 2nd argument "keep_blanks" is an optional integer value. 
+When not set or set to "0", ignorable white spaces will be ignored, otherwise, 
+text nodes containing those blanks will be generated in the DOM output.  
 
 ## doc:root()
 
