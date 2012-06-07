@@ -488,11 +488,16 @@ static int nl_parsexml(lua_State *L)
 {
   xmlDocPtr doc;
   const char *in;
+  int keep_blank = 0;
   size_t inlen;
 
-  if (lua_gettop(L) != 1) luaL_error(L, "parsexml requires one argument");
-
+  if (lua_gettop(L) < 1) luaL_error(L, "parsexml requires one argument");
+  if (lua_gettop(L) > 1) {
+    luaL_checktype(L, 2, LUA_TNUMBER);
+    keep_blank = lua_tointeger(L, 2);
+  }
   in = lua_tolstring(L, 1, &inlen);
+  xmlKeepBlanksDefault(keep_blank);
   doc = xmlParseMemory(in, inlen);
   if (!doc) {
     lua_pushnil(L);
