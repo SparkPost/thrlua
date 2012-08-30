@@ -13,7 +13,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
-#include "json/json.h"
+#include "json.h"
 
 #define MT_JSON "libjson:json_object*"
 
