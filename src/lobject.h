@@ -371,6 +371,7 @@ typedef struct Table {
   Node *node;
   Node *lastfree;  /* any free position is before this position */
   int sizearray;  /* size of `array' array */
+  unsigned int initialized; /* GC skips if this is not 1 */
 } Table;
 
 

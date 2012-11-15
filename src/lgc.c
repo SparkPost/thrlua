@@ -448,6 +448,10 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         int weakkey = 0, weakvalue = 0;
         const TValue *mode;
 
+        if (!ck_pr_load_uint(&h->initialized)) {
+          /* Not done being setup yet, skip */
+          return;
+        }
         if (!is_world_stopped(L)) luaH_rdlock(L, h);
         if (h->metatable) {
           traverse_obj(L, o, h->metatable, objfunc);
