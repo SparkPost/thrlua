@@ -1449,12 +1449,17 @@ static int local_collection(lua_State *L)
   int reclaimed;
   int i;
   struct stringtable_node *n;
+  thr_State *pt = luaC_get_per_thread(L);
 
   if (L->in_gc) {
     return 0; // happens during finalizers
   }
 //  printf("LOCAL marked=%x is_blac=%d\n", L->gch.marked, is_black(L, &L->gch));
   L->in_gc = 1;
+
+  /* This isn't safe to interrupt.  Block the global collector.  This is
+   * self-contained so we don't have any recursion issues here */
+  block_collector(L, pt);
 
   /* prune out excess string table entries.
    * We don't want to be too aggressive, as we'd like to see some benefit
@@ -1500,6 +1505,8 @@ static int local_collection(lua_State *L)
       L->strt.nuse--;
     }
   }
+  /* Now we can un-block the global collector */
+  unblock_collector(L, pt);
 
   /* mark roots */
   make_grey(L, &L->gch);
