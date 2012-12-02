@@ -143,7 +143,7 @@ static void removeentry(Node *n)
 
 static INLINE int is_unknown_xref(lua_State *L, GCheader *o)
 {
-  if ((G(L)->isxref & 3) == 1) {
+  if ((ck_pr_load_32(&G(L)->isxref) & 3) == 1) {
     return (ck_pr_load_32(&o->xref) & 2) == 2;
   }
   return (ck_pr_load_32(&o->xref) & 2) == 0;
@@ -345,7 +345,7 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   set_xref(L, object, ro, 0);
 
   BLOCK_COLLECTOR();
-  *lvalue = ro;
+  ck_pr_store_ptr(lvalue, ro);
   UNBLOCK_COLLECTOR();
 }
 
@@ -398,7 +398,7 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
   }
 
   BLOCK_COLLECTOR();
-  *lvalue = rvalue;
+  ck_pr_store_ptr(lvalue, rvalue);
   UNBLOCK_COLLECTOR();
 }
 
@@ -1625,12 +1625,12 @@ static void global_trace(lua_State *L)
   ck_pr_store_32(&G(L)->stopped, 1);
 
   /* flip sense of definitive xref bit */
-  if (G(L)->isxref == 1) {
-    G(L)->isxref = 3;
-    G(L)->notxref = 2;
+  if (ck_pr_load_32(&G(L)->isxref) == 1) {
+    ck_pr_store_32(&G(L)->isxref, 3);
+    ck_pr_store_32(&G(L)->notxref, 2);
   } else {
-    G(L)->isxref = 1;
-    G(L)->notxref = 0;
+    ck_pr_store_32(&G(L)->isxref, 1);
+    ck_pr_store_32(&G(L)->notxref, 0);
   }
 
 #if USE_TRACE_THREADS
