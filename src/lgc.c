@@ -1076,8 +1076,8 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->tt = tt;
   o->marked = !L->black;
   o->xref = G(L)->notxref;
-  TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
   make_grey(L, o);
+  TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
 
   return o;
 }
