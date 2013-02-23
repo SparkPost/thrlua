@@ -303,6 +303,7 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
     }
 
     ck_pr_store_32(&pt->in_barrier, 0);
+    ck_pr_fence_memory();
   }
 #endif
 }
@@ -316,6 +317,7 @@ static INLINE void unblock_collector(lua_State *L, thr_State *pt)
   pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
 #else
   ck_pr_store_32(&pt->in_barrier, 0);
+  ck_pr_fence_memory();
 #endif
 }
 
