@@ -261,8 +261,18 @@ static INLINE void unblock_mutators(lua_State *L)
 }
 #endif
 
+/* Per-thread collector block recursion counter.  As it is per-thread we
+ * don't need to use any threadsafe operators to change or read it */
+static __thread int collector_block_recursion = 0;
+
 static INLINE void block_collector(lua_State *L, thr_State *pt)
 {
+  collector_block_recursion++;
+  if (collector_block_recursion > 1) {
+    /* Already blocked, do nothing */
+    return;
+  }
+
 #if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
 
@@ -310,6 +320,12 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
 
 static INLINE void unblock_collector(lua_State *L, thr_State *pt)
 {
+  collector_block_recursion--;
+  if (collector_block_recursion != 0) {
+    /* Another block in play further up the stack, do nothing */
+    return;
+  }
+
 #if BLOCK_COLLECTOR_USING_SIGNALS
   sigset_t mask;
 
@@ -1071,6 +1087,7 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   enum lua_memtype objtype, size_t size)
 {
   GCheader *o;
+  thr_State *pt = luaC_get_per_thread(L);
 
   o = luaM_realloc(L, objtype, NULL, 0, size);
   memset(o, 0, size);
@@ -1079,7 +1096,11 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->marked = !L->black;
   o->xref = G(L)->notxref;
   make_grey(L, o);
+  /* The collector can be walking our heap, which isn't safe.  So block it
+   * while we're adding to it */
+  block_collector(L, pt);
   TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
+  unblock_collector(L, pt);
 
   return o;
 }
@@ -1209,6 +1230,7 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
 static void reclaim_object(lua_State *L, GCheader *o)
 {
+  /* Collector is already blocked in this case, no need to block again */
   TAILQ_REMOVE(&L->heap->objects, o, allocd);
   o->marked |= FREEDBIT;
 
@@ -1267,7 +1289,8 @@ static int reclaim_white(lua_State *L, int final_close)
 {
   GCheader *o, *tmp;
   int reclaimed = 0;
-
+  
+  /* Collector is already blocked in this case, no need to block again */
   TAILQ_FOREACH_SAFE(o, &L->heap->objects, allocd, tmp) {
 
     if (is_black(L, o)) continue;
@@ -1327,6 +1350,7 @@ static void run_finalize(lua_State *L)
 
   lua_assert(CK_STACK_FIRST(&L->heap->grey) == NULL);
 
+  /* Collector is already blocked, no need to block again */
   TAILQ_FOREACH(o, &L->heap->objects, allocd) {
     lua_assert(o->owner == L->heap);
 
@@ -1356,6 +1380,7 @@ static void check_references(lua_State *L)
 
   lua_assert(CK_STACK_FIRST(&L->heap->grey) == NULL);
 
+  /* Collector is already blocked, no need to block again */
   TAILQ_FOREACH(o, &L->heap->objects, allocd) {
     if (is_black(L, o)) continue;
 
@@ -1459,8 +1484,9 @@ static int local_collection(lua_State *L)
 //  printf("LOCAL marked=%x is_blac=%d\n", L->gch.marked, is_black(L, &L->gch));
   L->in_gc = 1;
 
-  /* This isn't safe to interrupt.  Block the global collector.  This is
-   * self-contained so we don't have any recursion issues here */
+  /* The global collector walks our structures, which is not safe to do in a 
+   * multi-threaded environment.  Prevent the global collector from running
+   * while we are in this function and manipulating our string tables or heap */
   block_collector(L, pt);
 
   /* prune out excess string table entries.
@@ -1507,8 +1533,6 @@ static int local_collection(lua_State *L)
       L->strt.nuse--;
     }
   }
-  /* Now we can un-block the global collector */
-  unblock_collector(L, pt);
 
   /* mark roots */
   make_grey(L, &L->gch);
@@ -1537,6 +1561,10 @@ static int local_collection(lua_State *L)
 
   /* and now we can free whatever is left in White */
   reclaimed = reclaim_white(L, 0);
+
+  /* Now we can un-block the global collector, as we are done with our string
+   * tables and our heap. */
+  unblock_collector(L, pt);
 
   /* White is the new Black */
   L->black = !L->black;
@@ -1750,6 +1778,8 @@ LUA_API void lua_close (lua_State *L)
   lua_settop(L, 0);
   global_trace(L);
   local_collection(L);
+
+  /* Don't think we need to block the collector here */
 
   /* force all finalizers to run */
   TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
