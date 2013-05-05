@@ -285,6 +285,7 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
 #if !USE_TRACE_THREADS
       /* we will get suspended momentarily */
       ck_pr_stall();
+      ck_pr_fence_memory();
 #else
       /* a global trace is either about to commence, or is ongoing.
        * Let's see if we can help out */
@@ -796,6 +797,7 @@ static int signal_all_threads(lua_State *L, int sig)
       /* wait for thread to leave its barrier */
       while (ck_pr_load_32(&pt->in_barrier) == 1) {
         ck_pr_stall();
+        ck_pr_fence_memory();
       }
     }
 #endif
