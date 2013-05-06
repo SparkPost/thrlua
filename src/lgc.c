@@ -1110,6 +1110,7 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
 void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
 {
   GCheader *o;
+  thr_State *pt = luaC_get_per_thread(L);
 
   switch (tt) {
 #define NEWIMPL(a, b, objtype) \
@@ -1135,7 +1136,9 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       n->heap = new_heap(n);
       n->gch.owner = n->heap;
       ck_sequence_init(&n->memlock);
+      block_collector(L, pt);
       TAILQ_INSERT_HEAD(&n->heap->objects, &n->gch, allocd);
+      unblock_collector(L, pt);
       make_grey(n, &n->gch);
       o = &n->gch;
       o->marked = !n->black;
