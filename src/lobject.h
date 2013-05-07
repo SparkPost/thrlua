@@ -263,13 +263,13 @@ typedef struct UpVal {
 
 #define ClosureHeader \
 	GCheader gch; lu_byte isC; lu_byte nupvalues; \
-	GCheader *env; \
-  unsigned int initialized;
+	GCheader *env
 
 typedef struct CClosure {
   ClosureHeader;
   lua_CFunction f;
   const char *fname;
+  unsigned int initialized;
   TValue upvalue[1];
 } CClosure;
 
@@ -277,6 +277,7 @@ typedef struct CClosure {
 typedef struct LClosure {
   ClosureHeader;
   struct Proto *p;
+  unsigned int initialized;
   UpVal *upvals[1];
 } LClosure;
 
