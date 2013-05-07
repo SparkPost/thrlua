@@ -421,6 +421,21 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
   UNBLOCK_COLLECTOR();
 }
 
+void luaC_writebarrierstr(lua_State *L, struct stringtable_node *n) {
+  stringtable *tb = &L->strt;
+  unsigned int h = lmod(h, tb->size);
+  thr_State *pt = luaC_get_per_thread(L);
+
+  block_collector(L, pt);
+  n->next = tb->hash[h];  /* chain new entry */
+  tb->hash[h] = n;
+  tb->nuse++;
+  if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2) {
+    luaS_resize(L, tb, tb->size*2);  /* too crowded */
+  }
+  unblock_collector(L, pt);
+}
+
 /* broken out into a function to allow us to suppress it from drd.
  * If the world is stopped, we don't need (and in fact, MUST NOT,
  * due to risk of deadlock) take locks on items during collection cycles.

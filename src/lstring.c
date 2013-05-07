@@ -59,12 +59,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
   n->str = ts;
 
-  h = lmod(h, tb->size);
-  n->next = tb->hash[h];  /* chain new entry */
-  tb->hash[h] = n;
-  tb->nuse++;
-  if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2)
-    luaS_resize(L, tb, tb->size*2);  /* too crowded */
+  luaC_writebarrierstr(L, n);
   return ts;
 }
 

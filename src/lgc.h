@@ -26,6 +26,8 @@ LUAI_FUNC void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader **lvalue, const TValue *rvalue);
 LUAI_FUNC void luaC_writebarriervo(lua_State *L, GCheader *object,
   TValue *lvalue, GCheader *rvalue);
+LUAI_FUNC void luaC_writebarrierstr(lua_State *L, struct stringtable_node *n);
+
 
 LUAI_FUNC void *luaC_newobj(lua_State *L, enum lua_obj_type tt);
 LUAI_FUNC void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size);
