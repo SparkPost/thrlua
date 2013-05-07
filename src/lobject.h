@@ -253,6 +253,7 @@ typedef struct UpVal {
       struct UpVal *next;
     } l;
   } u;
+  unsigned int initialized;
 } UpVal;
 
 
@@ -283,6 +284,7 @@ typedef union Closure {
   GCheader gch;
   CClosure c;
   LClosure l;
+  unsigned int initialized; /* GC skips if this is not 1 */
 } Closure;
 
 

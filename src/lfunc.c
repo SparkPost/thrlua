@@ -32,6 +32,7 @@ UpVal *luaF_newupval (lua_State *L) {
   UpVal *uv = luaC_newobj(L, LUA_TUPVAL);
   uv->v = &uv->u.value;
   setnilvalue(uv->v);
+  ck_pr_store_uint(&uv->initialized, 1);
   return uv;
 }
 

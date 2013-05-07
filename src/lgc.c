@@ -458,6 +458,11 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
     case LUA_TUPVAL:
       {
         UpVal *uv = gco2uv(o);
+
+        if (!ck_pr_load_uint(&uv->initialized)) {
+          /* Not done being setup yet, skip */
+          return;
+        }
         traverse_value(L, o, uv->v, objfunc);
         break;
       }
@@ -515,6 +520,10 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
       {
         Closure *cl = gco2cl(o);
 
+        if (!ck_pr_load_uint(&cl->initialized)) {
+          /* Not done being setup yet, skip */
+          return;
+        }
         if (cl->c.isC) {
           traverse_obj(L, o, cl->c.env, objfunc);
           for (i = 0; i < cl->c.nupvalues; i++) {
