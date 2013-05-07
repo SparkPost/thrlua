@@ -82,6 +82,7 @@ are not set Grey (we don't have a lock on the owning lists):
    linked into the Grey list.
  * if it is a non-aggregate object type, it is marked black and
    linked into the Black list.
+   <AHP Note: There is no 'black' list any more apparently>
 
 The collector is invoked when a local collection is initiated.  Its purpose is
 to identify all objects in the local heap that are definitely garbage.
@@ -176,6 +177,8 @@ stopped before we can holistically process the overall heap.
 
 For each lua_State
  * For each object in the Black, White, Finalize and Grey lists:
+ <AHP Note: We walk all heaps, not these lists (since there apparently are
+            'black' and 'white' lists any more>
    * if the xref status is unknown, set it to !xref
    * if the object is an aggregate type, for each directly referenced object:
      * if the target heapid != object heapid, set the target object status to

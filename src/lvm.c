@@ -879,7 +879,6 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             ncl->l.upvals[j] = luaF_findupval(L, base + GETARG_B(*pc));
           }
         }
-        ck_pr_store_uint(&ncl->l.initialized, 1);
         setclvalue(L, ra, ncl);
         Protect(luaC_checkGC(L));
         continue;
