@@ -263,7 +263,8 @@ typedef struct UpVal {
 
 #define ClosureHeader \
 	GCheader gch; lu_byte isC; lu_byte nupvalues; \
-	GCheader *env
+	GCheader *env; \
+  unsigned int initialized;
 
 typedef struct CClosure {
   ClosureHeader;
@@ -284,7 +285,6 @@ typedef union Closure {
   GCheader gch;
   CClosure c;
   LClosure l;
-  unsigned int initialized; /* GC skips if this is not 1 */
 } Closure;
 
 

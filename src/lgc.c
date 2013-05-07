@@ -520,16 +520,20 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
       {
         Closure *cl = gco2cl(o);
 
-        if (!ck_pr_load_uint(&cl->initialized)) {
-          /* Not done being setup yet, skip */
-          return;
-        }
         if (cl->c.isC) {
+          if (!ck_pr_load_uint(&cl->c.initialized)) {
+            /* Not done being setup yet, skip */
+            return;
+          }
           traverse_obj(L, o, cl->c.env, objfunc);
           for (i = 0; i < cl->c.nupvalues; i++) {
             traverse_value(L, o, &cl->c.upvalue[i], objfunc);
           }
         } else {
+          if (!ck_pr_load_uint(&cl->l.initialized)) {
+            /* Not done being setup yet, skip */
+            return;
+          }
           lua_assert(cl->l.nupvalues == cl->l.p->nups);
           traverse_obj(L, o, &cl->l.p->gch, objfunc);
           traverse_obj(L, o, cl->l.env, objfunc);

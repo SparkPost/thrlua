@@ -647,7 +647,7 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
     while (n--) {
       luaC_writebarriervv(L, &cl->gch, &cl->c.upvalue[n], L->top+n);
     }
-    ck_pr_store_uint(&cl->initialized, 1);
+    ck_pr_store_uint(&cl->c.initialized, 1);
     setclvalue(L, L->top, cl);
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
@@ -1082,7 +1082,7 @@ static void f_Ccall (lua_State *L, void *ud) {
   api_incr_top(L);
   setpvalue(L->top, c->ud);  /* push only argument */
   api_incr_top(L);
-  ck_pr_store_uint(&cl->initialized, 1);
+  ck_pr_store_uint(&cl->c.initialized, 1);
   luaD_call(L, L->top - 2, 0);
 }
 
