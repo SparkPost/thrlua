@@ -1567,14 +1567,14 @@ static int local_collection(lua_State *L)
   /* and now we can free whatever is left in White */
   reclaimed = reclaim_white(L, 0);
 
-  /* Now we can un-block the global collector, as we are done with our string
-   * tables and our heap. */
-  unblock_collector(L, pt);
-
   /* White is the new Black */
   L->black = !L->black;
 
   sanity_check_mark_status(L);
+
+  /* Now we can un-block the global collector, as we are done with our string
+   * tables and our heap. */
+  unblock_collector(L, pt);
 
   /* revise threshold for next run */
   L->thresh = L->gcestimate / 100 * G(L)->gcpause;
