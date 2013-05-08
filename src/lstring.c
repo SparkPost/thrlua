@@ -59,7 +59,7 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
   n->str = ts;
 
-  luaC_writebarrierstr(L, n);
+  luaC_writebarrierstr(L, h, n);
   return ts;
 }
 

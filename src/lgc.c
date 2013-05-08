@@ -421,11 +421,12 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
   UNBLOCK_COLLECTOR();
 }
 
-void luaC_writebarrierstr(lua_State *L, struct stringtable_node *n) {
+void luaC_writebarrierstr(lua_State *L, unsigned int h,
+                          struct stringtable_node *n) {
   stringtable *tb = &L->strt;
-  unsigned int h = lmod(h, tb->size);
   thr_State *pt = luaC_get_per_thread(L);
 
+  h = lmod(h, tb->size);
   block_collector(L, pt);
   n->next = tb->hash[h];  /* chain new entry */
   tb->hash[h] = n;
