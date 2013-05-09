@@ -9,6 +9,10 @@
 
 #include "thrlua.h"
 
+/* Getting some really bizarre crashes around the string table.  Define
+ * this variable to try disabling string interning. */
+#define DISABLE_STRING_INTERNING
+
 /* MUST be called with the string table locked by the caller */
 void luaS_resize (lua_State *L, stringtable *tb, int newsize)
 {
@@ -56,10 +60,12 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
 
   tb = &L->strt;
 
+#ifndef DISABLE_STRING_INTERNING
   n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
   n->str = ts;
 
   luaC_writebarrierstr(L, h, n);
+#endif
   return ts;
 }
 
