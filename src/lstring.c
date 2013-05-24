@@ -9,18 +9,17 @@
 
 #include "thrlua.h"
 
-/* Getting some really bizarre crashes around the string table.  Define
- * this variable to try disabling string interning. */
-#define DISABLE_STRING_INTERNING
-
 /* MUST be called with the string table locked by the caller */
-void luaS_resize (lua_State *L, stringtable *tb, int newsize)
+
+/* Note this does no allocations, because this must be called while the 
+ * collector is blocked and doing allocations in that state can cause a deadlock.
+ */
+
+void luaS_resize (lua_State *L, stringtable *tb, int newsize,
+                  struct stringtable_node **newhash)
 {
-  struct stringtable_node **newhash;
   int i;
 
-  newhash = luaM_realloc(L, LUA_MEM_STRING_TABLE, NULL, 0,
-              newsize * sizeof(struct stringtable_node *));
   memset(newhash, 0, newsize * sizeof(struct stringtable_node*));
 
   /* rehash */
@@ -36,8 +35,6 @@ void luaS_resize (lua_State *L, stringtable *tb, int newsize)
       p = next;
     }
   }
-  luaM_realloc(L, LUA_MEM_STRING_TABLE, tb->hash,
-    tb->size * sizeof(struct stringtable_node *), 0);
   tb->size = newsize;
   tb->hash = newhash;
 }
@@ -60,12 +57,10 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
 
   tb = &L->strt;
 
-#ifndef DISABLE_STRING_INTERNING
   n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
   n->str = ts;
 
   luaC_writebarrierstr(L, h, n);
-#endif
   return ts;
 }
 

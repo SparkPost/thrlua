@@ -54,6 +54,13 @@ typedef struct GCheap {
    * the list */
   TAILQ_HEAD(GCheaderList, GCheader) objects;
 
+  /** List of objects to be actually freed.  
+   * We can't do this directly from objects because we need to block 
+   * the collector when we manipulate that list.  So push those into
+   * another list that we will take care of when we un-block the collector.
+   */
+  ck_stack_t to_free;
+
   /** backref to owning thread */
   struct lua_State *owner;
 

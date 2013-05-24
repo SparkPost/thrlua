@@ -425,16 +425,34 @@ void luaC_writebarrierstr(lua_State *L, unsigned int h,
                           struct stringtable_node *n) {
   stringtable *tb = &L->strt;
   thr_State *pt = luaC_get_per_thread(L);
+  struct stringtable_node **oldhash = NULL;
+  int oldsize = 0;
 
   h = lmod(h, tb->size);
   block_collector(L, pt);
   n->next = tb->hash[h];  /* chain new entry */
   tb->hash[h] = n;
   tb->nuse++;
-  if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2) {
-    luaS_resize(L, tb, tb->size*2);  /* too crowded */
-  }
+  oldhash = tb->hash;
+  oldsize = tb->size;
   unblock_collector(L, pt);
+
+  /* Can't do allocations or frees while blocking the collector */
+  if (tb->nuse > cast(uint32_t, tb->size) && tb->size <= MAX_INT/2) {
+    int newsize = tb->size * 2;
+    struct stringtable_node **newhash = 
+      luaM_realloc(L, LUA_MEM_STRING_TABLE, NULL, 0,
+                   newsize * sizeof(struct stringtable_node *));
+
+    /* luaS_resize does no allocations, but it needs the collector blocked */
+    block_collector(L, pt);
+    luaS_resize(L, tb, tb->size*2, newhash);  /* too crowded */
+    unblock_collector(L, pt); 
+    if (oldhash && oldsize) {
+      luaM_realloc(L, LUA_MEM_STRING_TABLE, oldhash,
+                   oldsize * sizeof(struct stringtable_node *), 0);
+    }
+  }
 }
 
 /* broken out into a function to allow us to suppress it from drd.
@@ -697,7 +715,6 @@ static void propagate(lua_State *L)
     blacken_object(L, o);
   }
 }
-
 
 static INLINE void lock_all_threads(void)
 {
@@ -1055,6 +1072,7 @@ static void init_heap(lua_State *L, GCheap *h)
   TAILQ_INIT(&h->objects);
   ck_stack_init(&h->grey);
   ck_stack_init(&h->weak);
+  ck_stack_init(&h->to_free);
   h->owner = L;
 
   lock_all_threads();
@@ -1266,10 +1284,11 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   ck_pr_inc_32(&G(L)->need_global_trace);
 }
 
-static void reclaim_object(lua_State *L, GCheader *o)
+static void reclaim_object(lua_State *L, GCheader *o, int remove_from_heap)
 {
-  /* Collector is already blocked in this case, no need to block again */
-  TAILQ_REMOVE(&L->heap->objects, o, allocd);
+  if (remove_from_heap) {
+    TAILQ_REMOVE(&L->heap->objects, o, allocd);
+  }
   o->marked |= FREEDBIT;
 
   switch (o->tt) {
@@ -1323,6 +1342,15 @@ static void reclaim_object(lua_State *L, GCheader *o)
   }
 }
 
+static void free_deferred_white(lua_State *L) 
+{
+  GCheader *o;
+
+  while ((o = pop_obj(&L->heap->to_free)) != NULL) {
+    reclaim_object(L, o, 0);
+  }
+}
+
 static int reclaim_white(lua_State *L, int final_close)
 {
   GCheader *o, *tmp;
@@ -1345,7 +1373,10 @@ static int reclaim_white(lua_State *L, int final_close)
     lua_assert_obj(final_close == 1 || is_not_xref(L, o), o);
     lua_assert_obj(o->ref == 0, o);
 
-    reclaim_object(L, o);
+    /* Don't actually reclaim yet, just remove from the heap and queue
+     * up for reclamation after we unblock the collector */
+    TAILQ_REMOVE(&L->heap->objects, o, allocd);
+    push_obj(&L->heap->to_free, o);
     reclaimed++;
   }
 
@@ -1515,6 +1546,7 @@ static int local_collection(lua_State *L)
   int i;
   struct stringtable_node *n;
   thr_State *pt = luaC_get_per_thread(L);
+  struct stringtable_node *tofree;
 
   if (L->in_gc) {
     return 0; // happens during finalizers
@@ -1550,7 +1582,8 @@ static int local_collection(lua_State *L)
       } else {
         L->strt.hash[i] = n->next;
       }
-      luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+      n->next = tofree;
+      tofree = n;
       L->strt.nuse--;
       if (p) {
         n = p->next;
@@ -1567,7 +1600,8 @@ static int local_collection(lua_State *L)
     if (L->strt.hash[i]) {
       n = L->strt.hash[i];
       L->strt.hash[i] = n->next;
-      luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+      n->next = tofree;
+      tofree = n;
       L->strt.nuse--;
     }
   }
@@ -1608,6 +1642,16 @@ static int local_collection(lua_State *L)
   /* Now we can un-block the global collector, as we are done with our string
    * tables and our heap. */
   unblock_collector(L, pt);
+
+  /* Free any objects that were white */
+  free_deferred_white(L);
+
+  /* Free any deferred stringtable nodes */
+  while (tofree) {
+    n = tofree;
+    tofree = tofree->next;
+    luaM_freemem(L, LUA_MEM_STRING_TABLE_NODE, n, sizeof(*n));
+  }
 
   /* revise threshold for next run */
   L->thresh = L->gcestimate / 100 * G(L)->gcpause;
@@ -1829,7 +1873,7 @@ LUA_API void lua_close (lua_State *L)
   /* now everything is garbage */
   TAILQ_FOREACH_SAFE(h, &G(L)->all_heaps, heaps, htmp) {
     TAILQ_FOREACH_SAFE(o, &h->objects, allocd, n) {
-      reclaim_object(L, o);
+      reclaim_object(L, o, 1);
     }
   }
 
