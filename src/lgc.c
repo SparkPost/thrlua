@@ -1546,7 +1546,7 @@ static int local_collection(lua_State *L)
   int i;
   struct stringtable_node *n;
   thr_State *pt = luaC_get_per_thread(L);
-  struct stringtable_node *tofree;
+  struct stringtable_node *tofree = NULL;
 
   if (L->in_gc) {
     return 0; // happens during finalizers
@@ -1631,7 +1631,9 @@ static int local_collection(lua_State *L)
   /* remove collected weak values from weak tables */
   fixup_weak_refs(L);
 
-  /* and now we can free whatever is left in White */
+  /* and now we can free whatever is left in White.  Note that we're still 
+   * blocked here so we are pulling white out of the heap and placing them
+   * in another list that will free them when we unblock the collector. */
   reclaimed = reclaim_white(L, 0);
 
   /* White is the new Black */
