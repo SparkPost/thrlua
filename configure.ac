@@ -101,7 +101,7 @@ AC_CHECK_LIB(crypt_d, crypt)
 # __thread
 AC_MSG_CHECKING([for native TLS in gcc])
 AC_TRY_COMPILE([static __thread int a;],[int b = a;],
-[AC_DEFINE(HAVE_TLS)
+[AC_DEFINE_UNQUOTED([HAVE_TLS], [1], [Native TLS])
  AC_MSG_RESULT([yup, using native TLS])],
 [AC_MSG_RESULT([nope, using pthread TLS])])
 
