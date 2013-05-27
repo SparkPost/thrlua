@@ -98,6 +98,13 @@ AC_CHECK_LIB(rt,clock_gettime)
 AC_CHECK_LIB(crypt,crypt)
 AC_CHECK_LIB(crypt_d, crypt)
 
+# __thread
+AC_MSG_CHECKING([for native TLS in gcc])
+AC_TRY_COMPILE([static __thread int a;],[int b = a;],
+[AC_DEFINE(HAVE_TLS)
+ AC_MSG_RESULT([yup, using native TLS])],
+[AC_MSG_RESULT([nope, using pthread TLS])])
+
 AC_ARG_WITH(readline,
 [  --with-readline    link rclua against libreadline
                       otherwise, use libedit if found],

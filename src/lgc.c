@@ -263,12 +263,35 @@ static INLINE void unblock_mutators(lua_State *L)
 
 /* Per-thread collector block recursion counter.  As it is per-thread we
  * don't need to use any threadsafe operators to change or read it */
+#ifdef HAVE_TLS
 static __thread int collector_block_recursion = 0;
+#else
+static pthread_key_t collector_block_recursion_key;
+
+static void free_recursion(void *tofree) {
+  free(tofree);
+}
+#endif
+
+static int *get_recursion(void) {
+  int *recursion;
+#ifdef HAVE_TLS
+  recursion = &collector_block_recursion;
+#else
+  if ((recursion = pthread_getspecific(collector_block_recursion_key)) == NULL) {
+    recursion = calloc(1, sizeof(*recursion));
+    pthread_setspecific(collector_block_recursion_key, recursion);
+  }
+#endif
+  return recursion;
+}
 
 static INLINE void block_collector(lua_State *L, thr_State *pt)
 {
-  collector_block_recursion++;
-  if (collector_block_recursion > 1) {
+  int *recursion = get_recursion();
+
+  (*recursion)++;
+  if (*recursion > 1) {
     /* Already blocked, do nothing */
     return;
   }
@@ -321,8 +344,10 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
 
 static INLINE void unblock_collector(lua_State *L, thr_State *pt)
 {
-  collector_block_recursion--;
-  if (collector_block_recursion != 0) {
+  int *recursion = get_recursion();
+
+  (*recursion)--;
+  if (*recursion != 0) {
     /* Another block in play further up the stack, do nothing */
     return;
   }
@@ -983,6 +1008,9 @@ static void make_tls_key(void)
   sigdelset(&suspend_handler_mask, LUA_SIG_RESUME);
 
   pthread_key_create(&lua_tls_key, thread_exited);
+#ifndef HAVE_TLS
+  pthread_key_create(&collector_block_recursion_key, free_recursion);
+#endif
 }
 
 thr_State *luaC_get_per_thread_(void)
