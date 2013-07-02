@@ -392,10 +392,31 @@ static int encode_json(lua_State *L)
   return res;
 }
 
+static int addref_json(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
+  
+  if (json) {
+    json_object_get(json);
+  }
+  
+  lua_pushboolean(L, json?1:0);
+  return 1;
+}
+
+static int free_json(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
+  json_object_put(json);
+  return 0;
+}
+
 static const struct luaL_reg funcs[] = {
   { "decode", parse_json },
   { "encode", encode_json },
   { "new", encode_json },
+  { "free", free_json },
+  { "addref", addref_json },
   { "strerror", ljson_strerror },
   { NULL, NULL }
 };
