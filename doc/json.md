@@ -90,6 +90,24 @@ This is useful for building up json data from scratch:
     o.name = "value"
     print(o) -- { "name": "value" }
 
+## json.free(jsonobj)
+
+Free a json object. Use it to free a json object not in local scope.
+
+## json.addref(jsonobj)
+
+Add a reference to a json object. Use it when want to pass a local scope 
+json object outside the local scope:
+
+function update_json(data)
+  json.free(data.json)
+  local newjson = json.new()
+  newjson.name = "value"
+  data.json = newjson
+  json.addref(newjson)
+  return
+end
+
 ## jsonobj = json.encode(value)
 
 Creates a json object representation of the provided parameter.  This is
