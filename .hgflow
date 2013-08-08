@@ -1,0 +1,10 @@
+[branchname]
+master = default
+develop = develop
+feature = feature/
+defect = defect/
+release = release/
+hotfix = hotfix/
+support = support/
+integration = integration/
+
