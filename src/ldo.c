@@ -461,8 +461,48 @@ int lua_arrange_resume(lua_State *L)
   return L->arrange_resume(L, L->suspend_resume_ptr);
 }
 
+/* Runs the lua_ResumeFunc which was previously set via lua_suspend().
+   On success, *status will be set to 0 and *nargs will contain the
+   return value from the lua_ResumeFunc.  On failure, *status will contain
+   the non-zero lua_longjmp error code */
+static void lua_run_on_resume(lua_State *L, int *nargs, int *status) {
+  lua_ResumeFunc on_resume;
+  void *on_resume_ptr;
+  int on_resume_nargs = 0;
+
+  /* clear resumption information before we dispatch */
+  on_resume = L->on_resume;
+  on_resume_ptr = L->on_resume_ptr;
+  L->on_resume_ptr = NULL;
+  L->on_resume = NULL;
+
+  struct lua_longjmp lj;
+  lj.status = 0;
+  lj.previous = L->errorJmp;  /* chain new error handler */
+  lj.file = __FILE__;
+  lj.line = __LINE__;
+  L->errorJmp = &lj;
+
+  /* The lua_ResumeFunc may raise a lua_error().  Make sure it
+     is caught here and the status code updated appropriately */
+  lua_unlock(L);
+  LUAI_TRY(L, &lj,
+     on_resume_nargs = on_resume(L, on_resume_ptr);
+  );
+  lua_lock(L);
+
+  L->errorJmp = lj.previous;  /* restore old error handler */
+
+  if (on_resume_nargs < 0) {
+    resume_error(L, "cannot suspend or yield from a resume handler");
+  }
+
+  *nargs = on_resume_nargs;
+  *status = lj.status;
+}
+
 LUA_API int lua_resume (lua_State *L, int nargs) {
-  int status;
+  int status = 0;
   const char *reserr = NULL;
 
   lua_lock(L);
@@ -481,32 +521,17 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
       lua_assert(L->errfunc == 0);
 
       if (L->on_resume) {
-        lua_ResumeFunc on_resume;
-        void *on_resume_ptr;
-
-        /* clear resumption information before we dispatch */
-        on_resume = L->on_resume;
-        on_resume_ptr = L->on_resume_ptr;
-        L->on_resume_ptr = NULL;
-        L->on_resume = NULL;
-
-        lua_unlock(L);
-        LUAI_TRY_BLOCK(L) {
-          status = on_resume(L, on_resume_ptr);
-        } LUAI_TRY_FINALLY(L) {
-          lua_lock(L);
-        } LUAI_TRY_END(L);
-
-        if (status < 0) {
-          resume_error(L, "cannot suspend or yield from a resume handler");
-        }
-        nargs = status;
+        lua_run_on_resume(L, &nargs, &status);
       } else if (L->status == LUA_SUSPEND) {
         nargs = 0;
       }
 
-      L->baseCcalls = ++L->nCcalls;
-      status = luaD_rawrunprotected(L, resume, L->top - nargs);
+      /* Begin execution only if L->on_resume did not throw an error */
+      if (status == 0) {
+        L->baseCcalls = ++L->nCcalls;
+        status = luaD_rawrunprotected(L, resume, L->top - nargs);
+      }
+
       if (status != 0) {  /* error? */
         L->status = cast_byte(status);  /* mark thread as `dead' */
         luaD_seterrorobj(L, status, L->top);
