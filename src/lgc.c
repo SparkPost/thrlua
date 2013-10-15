@@ -1085,6 +1085,10 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
   unlock_all_threads();
 }
 
+void lua_mem_set_limit(lua_State *L, int64_t limit) {
+  L->mem.limit = limit;
+}
+
 static void init_heap(lua_State *L, GCheap *h)
 {
   TAILQ_INIT(&h->objects);

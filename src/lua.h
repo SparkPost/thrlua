@@ -97,6 +97,7 @@ enum lua_memtype {
 struct lua_memtype_alloc_info {
   int64_t bytes;
   int64_t allocs;
+  int64_t limit;
 };
 
 struct lua_mem_usage_data {
@@ -111,6 +112,10 @@ enum lua_mem_info_scope {
 /* returns memory used by the lua runtime */
 void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
   enum lua_mem_info_scope scope);
+
+/* Per lua thread memory limit in bytes.
+   A limit of 0 means unlimited */
+void lua_mem_set_limit(lua_State *L, int64_t limit);
 
 typedef void *(*lua_Alloc2)(void *ud, enum lua_memtype objtype,
   void *ptr, size_t osize, size_t nsize);

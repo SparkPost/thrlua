@@ -73,10 +73,29 @@ static inline void *call_allocator(lua_State *L, enum lua_memtype objtype,
 {
   void *res;
   int64_t delta;
-
-  res = G(L)->alloc(G(L)->allocdata, objtype, block, oldsize, size);
+  uint32_t vers;
+  int over_limit;
 
   delta = (int64_t)size - (int64_t)oldsize;
+
+  /* first see if this allocation will even be allowed */
+  if (L->mem.limit > 0 && delta > 0) {
+    do {
+      vers = ck_sequence_read_begin(&L->memlock);
+      over_limit = (L->mem.bytes + delta > L->mem.limit);
+    } while (ck_sequence_read_retry(&L->memlock, vers));
+
+    if (over_limit) {
+      /* throw an error, but let the error handler allocate
+         memory otherwise we'll get into an infinite loop */
+      L->mem.limit = 0;
+      lua_pushstring(L, "lua thread memory limit");
+      lua_error(L);
+      return NULL;
+    }
+  }
+
+  res = G(L)->alloc(G(L)->allocdata, objtype, block, oldsize, size);
 
   /* metrics for local collection */
   L->gcestimate += delta;
