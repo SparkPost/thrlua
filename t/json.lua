@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(94);
+plan(102);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -160,4 +160,38 @@ for k, v in o do
 end
 is(nprops, 0, "no properties iterated")
 
+-- Nested tables
+local nested = {
+  foo = {
+    bar = 32,
+    baz = "quux"
+  }
+}
+local nj = json.encode(nested)
+is(nj.foo.bar, 32, "saw integer value")
+is(nj.foo.baz, "quux", "saw string value")
+
+local nested2 = {
+  val = "hello",
+  val2 = "hello again",
+  t = {
+   t2 = {
+     t3 = {
+       nested = true,
+       t4 = {
+         [ "very_nested" ] = true
+       }
+     }
+   }
+  },
+  trailer = "bye",
+  trailer2 = false
+}
+local nj2 = json.encode(nested2)
+is(nj2.val, "hello")
+is(nj2.val2, "hello again")
+is(nj2.t.t2.t3.nested, true)
+is(nj2.t.t2.t3.t4.very_nested, true)
+is(nj2.trailer, "bye")
+is(nj2.trailer2, false)
 

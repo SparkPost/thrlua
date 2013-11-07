@@ -174,7 +174,15 @@ static struct json_object *make_json_val(lua_State *L, int idx)
           lua_gettable(L, idx);
         } while (!lua_isnil(L, -1));
       }
-      lua_pop(L, 1);
+
+      /* Only eat the table if it's at the top of the stack.
+       * When we're processing nested tables, we need to leave
+       * the table on the stack to be popped by a nested call
+       * to make_json_val().
+       */
+      if (lua_gettop(L) == 1) {
+        lua_pop(L, 1);
+      }
 
       return val;
     }
