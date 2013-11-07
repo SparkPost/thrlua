@@ -43,6 +43,7 @@ $stdout = get_section('stdout');
 $stderr = get_section('stderr');
 
 my ($pid, $out, $err);
+my $cmd = $ENV{LUA_EXECUTABLE} || './lua';
 $pid = open3(0, $out, $err, $ENV{LUA_EXECUTABLE} || './lua', $ARGV[0]);
 waitpid $pid, 0;
 {
