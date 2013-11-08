@@ -11,14 +11,14 @@ our @ISA = qw(TAP::Harness);
 
 sub new {
   my $self = shift;
-  my $opts = $_[0];
+  my $opts = shift;
 
   if (!defined $opts->{exec}) {
     $opts->{exec} = \&_exec;
   } else {
     cluck "exec option already passed to TAP::Harness->new()";
   }
-  return $self->SUPER::new(@_);
+  return $self->SUPER::new($opts, @_);
 }
 
 sub _exec {
