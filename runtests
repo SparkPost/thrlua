@@ -9,8 +9,11 @@ use Getopt::Long;
 use IO::File;
 use lib 't';
 use t::strap;
+use t::TAP_Harness;
+
 BEGIN {
   $ENV{HARNESS_STRAP_CLASS} = "t::strap";
+  $ENV{HARNESS_SUBCLASS} = "t::TAP_Harness";
 }
 use Test::Harness;
 
