@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(102);
+plan(107);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -194,4 +194,43 @@ is(nj2.t.t2.t3.nested, true)
 is(nj2.t.t2.t3.t4.very_nested, true)
 is(nj2.trailer, "bye")
 is(nj2.trailer2, false)
+
+-- Table nested in array
+local nj3 = json.new()
+
+local nested3_id = "1234567890123456789"
+local nested3_str = "0:1234567890123456%ab1234c5d6ef7abc"
+local nested3 = {
+  [ 1 ] = {
+    [ "message_id" ] = nested3_str
+  }
+}
+
+nj3.multicast_id = nested3_id
+nj3.results = nested3
+
+is(nj3.multicast_id, nested3_id)
+is(nj3.results[1].message_id, nested3_str, "Table nested in array") 
+
+nj3.results[2] = { [ "message_id" ] = nested3_str }
+is(nj3.results[2].message_id, nested3_str, "Table nested in array 2")
+
+-- Array nested in array
+local nj4 = json.new()
+
+local nested4 = {
+  [ 1 ] = {
+    {
+      [ "flag" ] = true
+    },
+    {
+      [ "flag2" ] = false
+    }
+  }
+}
+
+nj.results = nested4
+
+is(nj.results[1][1].flag, true, "Table nested in array nested in array")
+is(nj.results[1][2].flag2, false, "Table nested in array nested in array 2")
 
