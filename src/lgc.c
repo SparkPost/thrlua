@@ -108,6 +108,10 @@ CK_STACK_CONTAINER(GCheap, instack, GCheap_from_stack);
  * GCheader */
 CK_STACK_CONTAINER(GCheader, instack, GCheader_from_stack);
 
+/** defines GCheader_from_stack_finalize to convert a to finalize
+ * stack entry to a GCHeader */
+CK_STACK_CONTAINER(GCheader, finalize_instack, GCheader_from_stack_finalize);
+
 static GCheader *pop_obj(ck_stack_t *stack)
 {
   ck_stack_entry_t *ent = ck_stack_pop_npsc(stack);
@@ -115,6 +119,17 @@ static GCheader *pop_obj(ck_stack_t *stack)
   if (!ent) return NULL;
   o = GCheader_from_stack(ent);
   lua_assert(&o->instack == ent);
+  ent->next = NULL;
+  return o;
+}
+
+static GCheader *pop_finalize(ck_stack_t *stack)
+{
+  ck_stack_entry_t *ent = ck_stack_pop_npsc(stack);
+  GCheader *o;
+  if (!ent) return NULL;
+  o = GCheader_from_stack_finalize(ent);
+  lua_assert(&o->finalize_instack == ent);
   ent->next = NULL;
   return o;
 }
@@ -133,6 +148,22 @@ static void push_obj(ck_stack_t *stack, GCheader *o)
 #endif
   ck_stack_push_spnc(stack, &o->instack);
 }
+
+static void push_finalize(ck_stack_t *stack, GCheader *o)
+{
+#if DEBUG_ALLOC
+  if (o->finalize_instack.next) {
+    VALGRIND_PRINTF_BACKTRACE(
+      "push stack=%p obj=%p ALREADY IN A STACK!\n", stack, o);
+  }
+#endif
+  lua_assert_obj(o->finalize_instack.next == NULL, o);
+#if DEBUG_ALLOC
+  VALGRIND_PRINTF_BACKTRACE("push stack=%p obj=%p\n", stack, o);
+#endif
+  ck_stack_push_spnc(stack, &o->finalize_instack);
+}
+
 
 static void removeentry(Node *n)
 {
@@ -1091,6 +1122,7 @@ static void init_heap(lua_State *L, GCheap *h)
   ck_stack_init(&h->grey);
   ck_stack_init(&h->weak);
   ck_stack_init(&h->to_free);
+  ck_stack_init(&h->to_finalize);
   h->owner = L;
 
   lock_all_threads();
@@ -1360,7 +1392,7 @@ static void reclaim_object(lua_State *L, GCheader *o, int remove_from_heap)
   }
 }
 
-static void free_deferred_white(lua_State *L) 
+static void free_deferred_white(lua_State *L)
 {
   GCheader *o;
 
@@ -1456,8 +1488,18 @@ static void run_finalize(lua_State *L)
        * we will still have references to the now-collected env
        * and metatables */
       make_grey(L, o);
-      call_finalize(L, o);
+      /* Don't actually finalize until we unblock the gc */
+      push_finalize(&L->heap->to_finalize, o);
     }
+  }
+}
+
+static void finalize_deferred(lua_State *L)
+{
+  GCheader *o;
+
+  while ((o = pop_finalize(&L->heap->to_finalize)) != NULL) {
+    call_finalize(L, o);
   }
 }
 
@@ -1662,6 +1704,9 @@ static int local_collection(lua_State *L)
   /* Now we can un-block the global collector, as we are done with our string
    * tables and our heap. */
   unblock_collector(L, pt);
+
+  /* Finalize deferred objects */
+  finalize_deferred(L);
 
   /* Free any objects that were white */
   free_deferred_white(L);
