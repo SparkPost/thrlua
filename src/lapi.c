@@ -107,9 +107,8 @@ LUA_API void lua_xmove (lua_State *from, lua_State *to, int n)
     api_check(from, G(from) == G(to));
     api_check(from, to->ci->top - to->top >= n);
     from->top -= n;
-    for (i = 0; i < n; i++) {
-      setobj2s(to, to->top++, from->top + i);
-    }
+
+    luaC_writebarrierxmove(to, &to->top, from->top, n);
   } LUAI_TRY_FINALLY(to) {
     lua_unlock(to);
   } LUAI_TRY_END(to);

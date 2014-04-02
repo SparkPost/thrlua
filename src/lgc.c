@@ -405,6 +405,20 @@ static INLINE void unblock_collector(lua_State *L, thr_State *pt)
   unblock_collector(L, pt)
 #endif
 
+void luaC_writebarrierxmove(lua_State *L, TValue **lhs,
+                            const TValue *rhs, int num) {
+  int i;
+  thr_State *pt = luaC_get_per_thread(L);
+
+  // The write barrier will block again, but recursion on collector
+  // blocks is allowed
+  block_collector(L, pt);
+  for (i = 0; i < num; i++) {
+    setobj2s(L, (*lhs)++, rhs + i);
+  }
+  unblock_collector(L, pt);
+}
+
 void luaC_writebarrierov(lua_State *L, GCheader *object,
   GCheader **lvalue, const TValue *rvalue)
 {
