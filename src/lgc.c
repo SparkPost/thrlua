@@ -386,6 +386,18 @@ static INLINE void unblock_collector(lua_State *L, thr_State *pt)
 #endif
 }
 
+void luaC_blockcollector(lua_State *L) {
+  thr_State *pt = luaC_get_per_thread(L);
+
+  block_collector(L, pt);
+}
+
+void luaC_unblockcollector(lua_State *L) {
+  thr_State *pt = luaC_get_per_thread(L);
+
+  unblock_collector(L, pt);
+}
+
 #if !USE_TRACE_THREADS
 # define GET_PT_FOR_NON_SIGNAL_COLLECTOR() do {} while(0)
 # define BLOCK_COLLECTOR() do {} while(0)
@@ -1432,7 +1444,7 @@ static int reclaim_white(lua_State *L, int final_close)
       !is_not_xref(L, o));
 #endif
 
-    lua_assert_obj(!is_grey(o), o);
+    lua_assert_obj(!is_grey(o) || (o->marked & FINALBIT), o);
     lua_assert_obj(o->owner == L->heap, o);
     lua_assert_obj(final_close == 1 || is_not_xref(L, o), o);
     lua_assert_obj(o->ref == 0, o);
@@ -1452,6 +1464,7 @@ static void call_finalize(lua_State *L, GCheader *o)
   if (o->tt == LUA_TUSERDATA && !is_finalized(o)) {
     Udata *ud;
     const TValue *tm;
+    thr_State *pt = luaC_get_per_thread(L);
 
     o->marked |= FINALBIT;
 
@@ -1463,10 +1476,14 @@ static void call_finalize(lua_State *L, GCheader *o)
       /* turn off hooks during finalizer */
       L->allowhook = 0;
 
+      lua_lock(L);
+      /* Need to block the collector to muck with the stack like this */
+      block_collector(L, pt);
+
       setobj2s(L, L->top, tm);
       setuvalue(L, L->top + 1, ud);
       L->top += 2;
-      lua_lock(L);
+      unblock_collector(L, pt);
       LUAI_TRY_BLOCK(L) {
         luaD_call(L, L->top - 2, 0);
       } LUAI_TRY_CATCH(L) {

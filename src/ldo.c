@@ -114,13 +114,22 @@ static void correctstack (lua_State *L, TValue *oldstack) {
 
 
 void luaD_reallocstack (lua_State *L, int newsize) {
-  TValue *oldstack = L->stack;
+  TValue *oldstack = L->stack, *newstack = NULL;
+  int oldstacksize = L->stacksize;
   int realsize = newsize + 1 + EXTRA_STACK;
+
   lua_assert(L->stack_last - L->stack == L->stacksize - EXTRA_STACK - 1);
-  luaM_reallocvector(L, LUA_MEM_STACK, L->stack, L->stacksize, realsize, TValue);
+  /* Can't muck with the stack like this without the collector blocked.
+   * Also can't allocate/free memory with the collector blocked. */
+  luaM_reallocvector(L, LUA_MEM_STACK, newstack, 0, realsize, TValue);
+  luaC_blockcollector(L);
+  memcpy(newstack, oldstack, oldstacksize * sizeof(TValue));
+  L->stack = newstack;
   L->stacksize = realsize;
   L->stack_last = L->stack+newsize;
   correctstack(L, oldstack);
+  luaC_unblockcollector(L);
+  luaM_freemem(L, LUA_MEM_STACK, oldstack, oldstacksize * sizeof(TValue));
 }
 
 
