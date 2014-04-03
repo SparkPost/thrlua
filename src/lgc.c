@@ -71,7 +71,6 @@ static uint32_t trace_heaps = 0;
 #define WEAKVALBIT  (1<<2)
 #define GREYBIT     (1<<3)
 #define FINALBIT    (1<<4)
-#define FINALRUNBIT (1<<5)
 #define FREEDBIT    (1<<7)
 
 static int local_collection(lua_State *L);
@@ -90,11 +89,6 @@ static INLINE int is_grey(GCheader *obj)
 static INLINE int is_finalized(GCheader *obj)
 {
   return obj->marked & FINALBIT;
-}
-
-static INLINE int is_finalize_run(GCheader *obj)
-{
-  return obj->marked & FINALRUNBIT;
 }
 
 static INLINE int is_aggregate(GCheader *obj)
@@ -1455,11 +1449,11 @@ static int reclaim_white(lua_State *L, int final_close)
 
 static void call_finalize(lua_State *L, GCheader *o)
 {
-  if (o->tt == LUA_TUSERDATA && !is_finalize_run(o)) {
+  if (o->tt == LUA_TUSERDATA && !is_finalized(o)) {
     Udata *ud;
     const TValue *tm;
 
-    o->marked |= FINALRUNBIT;
+    o->marked |= FINALBIT;
 
     ud = rawgco2u(o);
     tm = gfasttm(G(L), gch2h(ud->uv.metatable), TM_GC);
@@ -1508,9 +1502,6 @@ static void run_finalize(lua_State *L)
        * we will still have references to the now-collected env
        * and metatables */
       make_grey(L, o);
-
-      /* Mark as finalized, but do the actual work later */
-      o->marked |= FINALBIT;
 
       /* Don't actually finalize until we unblock the gc */
       push_finalize(&L->heap->to_finalize, o);
