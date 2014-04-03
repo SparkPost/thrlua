@@ -15,7 +15,7 @@
 #define _GNU_SOURCE
 #include "luaconf.h"
 
-#define LUA_ASSERTIONS 1
+#define LUA_ASSERTIONS 0
 #define USING_DRD 0
 #define DEBUG_ALLOC 0
 

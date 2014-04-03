@@ -291,10 +291,8 @@ luaC_step will cause the local collector to move through a series of phases:
     to the next)
  - finalize:
     for each Finalize object
-      mark it finalized and Grey it.
-      prevent a recursive step from being triggered
-      invoke its finalizer
-      remove recursive step protection
+      Grey it.
+      Put on deferred Finalize list.
       set phase to propagate and goto propagate handling (for the newly Greyed
       finalized object and objects it touched during finalization)
     Now there are no more Finalize objects, and no more Grey objects; set
@@ -304,6 +302,10 @@ luaC_step will cause the local collector to move through a series of phases:
       remove weak refs to objects in the White list
     for each string in string table:
       remove refs to strings in the White list
+    for each deferred Finalize object:
+      prevent a recursive step from being triggered
+      invoke its finalizer
+      remove recursive step protection
     for each White object:
       free it
     set phase to paused
