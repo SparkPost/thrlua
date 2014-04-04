@@ -75,7 +75,6 @@
   /* Copy the old memory to the new memory */ \
   memcpy(__newobj, __oldobj, __oldsize * sizeof(objtype)); \
   obj = __newobj; \
-  size = newsize; \
   /* do whatever assignment needed for the new memory */ \
   fixup; \
   /* Unblock the collector */ \

@@ -255,6 +255,7 @@ static void setarrayvector (lua_State *L, Table *t, int size) {
     setnilvalue(&t->array[i]); \
 } while(0)
   luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, size, TValue, fixup_tvalue);
+  t->sizearray = size;
 }
 
 static void setnodevector (lua_State *L, Table *t, int size) {
