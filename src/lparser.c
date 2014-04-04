@@ -340,20 +340,62 @@ static void close_func (LexState *ls) {
   lua_State *L = ls->L;
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
+
+  Instruction *new_fcode = NULL, old_fcode = f->code;
+  int old_fcode_size = f->sizecode;
+  int *new_flineinfo = NULL, old_flineinfo = f->lineinfo; 
+  int old_flineinfo_size = f->sizelineinfo;
+  TValue *new_fk = NULL, old_fk = f->k;
+  int old_fk_size = f->sizek;
+  Proto **new_fp = NULL, old_fp = f->p;
+  int old_fp_size = f->sizep;
+  LocVar *new_flocvars = NULL, old_flocvars = f->locvars;
+  int old_flocvars_size = f->sizelocvars;
+  GCheader **new_fupvalues = NULL, old_fupvalues = f->upvalues;
+  int old_fupvalues = f->sizeupvalues;
+
   removevars(ls, 0);
   luaK_ret(fs, 0, 0);  /* final return */
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->code, f->sizecode, fs->pc, Instruction);
+  
+  /* Allocate new memory */
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fcode, 0, fs->pc, Instruction);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_flineinfo, 0, fs->pc, int);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fk, 0, fs->nk, TValue);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fp, 0, fs->np, Proto *);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_flocvars, 0, fs->nlocvars, LocVar);
+  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fupvalues, 0, f->nups, GCheader *);
+  /* Block the collector */
+  luaC_blockcollector(L);
+  /* copy the old memory to the new memory */
+  memcpy(new_fcode, f->code, f->sizecode * sizeof(Instruction));
+  memcpy(new_flineinfo, f->flineinfo, f->sizelineinfo * sizeof(int));
+  memcpy(new_fk, f->k, f->sizek * sizeof(TValue));
+  memcpy(new_fp, f->p, f->sizep * sizeof(Proto*));
+  memcpy(new_flocvars, f->locvars, f->sizelocvars * sizeof(LocVar));
+  memcpy(new_fupvalues, f->upvalues, f->sizeupvalues * sizeof(GCheader*));
+  /* assign the new memory and size */
+  f->code = new_fcode;
   f->sizecode = fs->pc;
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->lineinfo, f->sizelineinfo, fs->pc, int);
+  f->lineinfo = new_flineinfo;
   f->sizelineinfo = fs->pc;
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->k, f->sizek, fs->nk, TValue);
+  f->k = new_fk;
   f->sizek = fs->nk;
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->p, f->sizep, fs->np, Proto *);
+  f->p = new_fp;
   f->sizep = fs->np;
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->locvars, f->sizelocvars, fs->nlocvars, LocVar);
+  f->locvars = new_flocvars;
   f->sizelocvars = fs->nlocvars;
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, f->upvalues, f->sizeupvalues, f->nups, GCheader *);
+  f->upvalues = new_fupvalues;
   f->sizeupvalues = f->nups;
+  /* Unblock the collector */
+  luaC_unblockcollector(L);
+  /* Free the old memory */
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_fcode, old_fcode_size * sizeof(Instruction));
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_flineinfo, old_flineinfo_size * sizeof(int));
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_fk, old_fk_size * sizeof(TValue));
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_fp, old_fp_size * sizeof(Proto*));
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_flocvars, old_flocvars_size * sizeof(LocVar));
+  luaM_freemem(L, LUA_MEM_PROTO_DATA, old_fupvalues, old_fupvalues_size * sizeof(GCheader*));
+  
   lua_assert(luaG_checkcode(f));
   lua_assert(fs->bl == NULL);
   ls->fs = fs->prev;

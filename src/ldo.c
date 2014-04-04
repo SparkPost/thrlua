@@ -135,10 +135,12 @@ void luaD_reallocstack (lua_State *L, int newsize) {
 
 void luaD_reallocCI (lua_State *L, int newsize) {
   CallInfo *oldci = L->base_ci;
-  luaM_reallocvector(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo);
-  L->size_ci = newsize;
-  L->ci = (L->ci - oldci) + L->base_ci;
-  L->end_ci = L->base_ci + L->size_ci - 1;
+#define fixup do { \
+  L->size_ci = newsize; \
+  L->ci = (L->ci - oldci) + L->base_ci; \
+  L->end_ci = L->base_ci + L->size_ci - 1; \
+  } while(0)
+  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, &L->size_ci, newsize, CallInfo, fixup);
 }
 
 
