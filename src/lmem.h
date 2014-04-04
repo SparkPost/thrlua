@@ -24,9 +24,34 @@
 #define luaM_newvector(L,objtype,n,t) \
 		cast(t *, luaM_reallocv(L, objtype, NULL, 0, n, sizeof(t)))
 
-#define luaM_growvector(L, objtype, v,nelems,size,t,limit,e) \
-          if ((nelems)+1 > (size)) \
-            ((v)=cast(t *, luaM_growaux_(L,objtype, v,&(size),sizeof(t),limit,e)))
+#define MINSIZEARRAY  4
+#define luaM_growvector(L, objtype, v,nelems,size,t,limit,e) do { \
+  if ((nelems)+1 > (size)) { \
+    void *__newmem = NULL; \
+    void *__oldmem = v; \
+    int __newsize; \
+    int __oldsize = size; \
+    if (size >= limit/2) {  /* cannot double it? */ \
+      if (size >= limit)  /* cannot grow even a little? */ \
+        luaG_runerror(L, e); \
+      __newsize = limit;  /* still have at least one free place */ \
+    } \
+    else { \
+      __newsize = size*2; \
+      if (__newsize < MINSIZEARRAY) \
+        __newsize = MINSIZEARRAY;  /* minimum size */ \
+    }\
+    __newmem = luaM_realloc_(L, objtype, NULL, 0, __newsize * sizeof(t)); \
+	/* Cannot change the existing data structures without the collector \
+	 * blocked */ \
+    luaC_blockcollector(L); \
+    memcpy(__newmem, v, size * sizeof(t)); \
+    v = cast(t *, __newmem); \
+    size = __newsize; \
+    luaC_unblockcollector(L); \
+    luaM_freearray(L, objtype, __oldmem, __oldsize, sizeof(t)); \
+  } \
+} while(0)
 
 #define luaM_reallocvector(L, objtype, v,oldn,n,t) \
    ((v)=cast(t *, luaM_reallocv(L, objtype, v, oldn, n, sizeof(t))))
@@ -36,8 +61,6 @@
 LUAI_FUNC void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype,
 	void *block, size_t oldsize, size_t size);
 LUAI_FUNC void *luaM_toobig (lua_State *L);
-LUAI_FUNC void *luaM_growaux_ (lua_State *L, enum lua_memtype objtype,
-	void *block, int *size, size_t size_elem, int limit, const char *errormsg);
 LUAI_FUNC void *luaM_realloc(lua_State *L, enum lua_memtype objtype,
 	void *block, size_t oldsize, size_t size);
 
