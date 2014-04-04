@@ -140,7 +140,7 @@ void luaD_reallocCI (lua_State *L, int newsize) {
   L->ci = (L->ci - oldci) + L->base_ci; \
   L->end_ci = L->base_ci + L->size_ci - 1; \
   } while(0)
-  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, &L->size_ci, newsize, CallInfo, fixup);
+  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo, fixup);
 }
 
 

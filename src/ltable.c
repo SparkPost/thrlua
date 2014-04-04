@@ -251,12 +251,10 @@ static int numusehash (const Table *t, int *nums, int *pnasize) {
 static void setarrayvector (lua_State *L, Table *t, int size) {
 #define fixup_tvalue do { \
   int i;                               \
-  t->array = newobj;                   \
-  t->sizearray = size;                 \
   for (i=oldsize; i<size; i++)         \
     setnilvalue(&t->array[i]);         \
 } while(0)
-  luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, &t->sizearray, size, fixup_tvalue);
+  luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, size, fixup_tvalue);
 }
 
 static void setnodevector (lua_State *L, Table *t, int size) {
@@ -300,7 +298,7 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
         setobjt2t(L, luaH_setnum(L, t, i+1), &t->array[i]);
     }
     /* shrink array */
-    luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, &t->sizearray, nasize, TValue, do_nothing);
+    luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, nasize, TValue, do_nothing);
   }
   /* re-insert elements from hash part */
   for (i = twoto(oldhsize) - 1; i >= 0; i--) {

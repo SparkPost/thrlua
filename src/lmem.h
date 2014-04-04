@@ -65,15 +65,17 @@
 #define do_nothing do { } while(0)
 
 #define luaM_reallocvector2(L, memtype, obj, size, newsize, objtype, fixup) { \
-  objtype* newobj = NULL, oldobj = obj;                              \
-  int oldsize = *size;                                               \
+  objtype* newobj = NULL;                                            \
+  objtype* oldobj = obj;                                            \
+  int oldsize = size;                                               \
   /* Allocate the new memory */                                      \
   luaM_reallocvector(L, memtype, newobj, 0, newsize, objtype);       \
   /* Block the collector */                                          \
   luaC_blockcollector(L);                                            \
   /* Copy the old memory to the new memory */                        \
   memcpy(newobj, oldobj, oldsize * sizeof(objtype));                 \
-  *size = newsize;                                                   \
+  obj = newobj;                                                     \
+  size = newsize;                                                   \
   /* do whatever assignment needed for the new memory */             \
   fixup;                                                             \
   /* Unblock the collector */                                        \
