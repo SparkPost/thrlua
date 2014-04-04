@@ -341,18 +341,18 @@ static void close_func (LexState *ls) {
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
 
-  Instruction *new_fcode = NULL, old_fcode = f->code;
+  Instruction *new_fcode = NULL, *old_fcode = f->code;
   int old_fcode_size = f->sizecode;
-  int *new_flineinfo = NULL, old_flineinfo = f->lineinfo; 
+  int *new_flineinfo = NULL, *old_flineinfo = f->lineinfo; 
   int old_flineinfo_size = f->sizelineinfo;
-  TValue *new_fk = NULL, old_fk = f->k;
+  TValue *new_fk = NULL, *old_fk = f->k;
   int old_fk_size = f->sizek;
-  Proto **new_fp = NULL, old_fp = f->p;
+  Proto **new_fp = NULL, **old_fp = f->p;
   int old_fp_size = f->sizep;
-  LocVar *new_flocvars = NULL, old_flocvars = f->locvars;
+  LocVar *new_flocvars = NULL, *old_flocvars = f->locvars;
   int old_flocvars_size = f->sizelocvars;
-  GCheader **new_fupvalues = NULL, old_fupvalues = f->upvalues;
-  int old_fupvalues = f->sizeupvalues;
+  GCheader **new_fupvalues = NULL, **old_fupvalues = f->upvalues;
+  int old_fupvalues_size = f->sizeupvalues;
 
   removevars(ls, 0);
   luaK_ret(fs, 0, 0);  /* final return */
@@ -368,7 +368,7 @@ static void close_func (LexState *ls) {
   luaC_blockcollector(L);
   /* copy the old memory to the new memory */
   memcpy(new_fcode, f->code, f->sizecode * sizeof(Instruction));
-  memcpy(new_flineinfo, f->flineinfo, f->sizelineinfo * sizeof(int));
+  memcpy(new_flineinfo, f->lineinfo, f->sizelineinfo * sizeof(int));
   memcpy(new_fk, f->k, f->sizek * sizeof(TValue));
   memcpy(new_fp, f->p, f->sizep * sizeof(Proto*));
   memcpy(new_flocvars, f->locvars, f->sizelocvars * sizeof(LocVar));
