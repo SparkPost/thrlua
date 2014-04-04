@@ -62,6 +62,25 @@
 #define luaM_reallocvector(L, objtype, v,oldn,n,t) \
    ((v)=cast(t *, luaM_reallocv(L, objtype, v, oldn, n, sizeof(t))))
 
+#define do_nothing do { } while(0)
+
+#define luaM_reallocvector2(L, memtype, obj, size, newsize, objtype, fixup) { \
+  objtype* newobj = NULL, oldobj = obj;                              \
+  int oldsize = *size;                                               \
+  /* Allocate the new memory */                                      \
+  luaM_reallocvector(L, memtype, newobj, 0, newsize, objtype);       \
+  /* Block the collector */                                          \
+  luaC_blockcollector(L);                                            \
+  /* Copy the old memory to the new memory */                        \
+  memcpy(newobj, oldobj, oldsize * sizeof(objtype));                 \
+  *size = newsize;                                                   \
+  /* do whatever assignment needed for the new memory */             \
+  fixup;                                                             \
+  /* Unblock the collector */                                        \
+  luaC_unblockcollector(L);                                          \
+  /* Free the old memory */                                          \
+  luaM_freemem(L, memtype, oldobj, oldsize * sizeof(objtype));       \
+}
 
 LUAI_FUNC void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype,
 	void *block, size_t oldsize, size_t size);
