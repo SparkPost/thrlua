@@ -123,7 +123,7 @@ void luaD_reallocstack (lua_State *L, int newsize) {
    * Also can't allocate/free memory with the collector blocked. */
   luaM_reallocvector(L, LUA_MEM_STACK, newstack, 0, realsize, TValue);
   luaC_blockcollector(L);
-  memcpy(newstack, oldstack, oldstacksize * sizeof(TValue));
+  memcpy(newstack, oldstack, MIN(oldstacksize, realsize) * sizeof(TValue));
   L->stack = newstack;
   L->stacksize = realsize;
   L->stack_last = L->stack+newsize;
@@ -135,12 +135,12 @@ void luaD_reallocstack (lua_State *L, int newsize) {
 
 void luaD_reallocCI (lua_State *L, int newsize) {
   CallInfo *oldci = L->base_ci;
-#define fixup do { \
+#define __fixup do { \
   L->size_ci = newsize; \
   L->ci = (L->ci - oldci) + L->base_ci; \
   L->end_ci = L->base_ci + L->size_ci - 1; \
   } while(0)
-  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo, fixup);
+  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo, __fixup);
 }
 
 

@@ -7,6 +7,8 @@
 #ifndef lmem_h
 #define lmem_h
 
+#include <sys/param.h>
+
 #define MEMERRMSG	"not enough memory"
 
 
@@ -73,7 +75,7 @@
   /* Block the collector */ \
   luaC_blockcollector(L); \
   /* Copy the old memory to the new memory */ \
-  memcpy(__newobj, __oldobj, __oldsize * sizeof(objtype)); \
+  memcpy(__newobj, __oldobj, MIN(__oldsize,newsize) * sizeof(objtype)); \
   obj = __newobj; \
   /* do whatever assignment needed for the new memory */ \
   fixup; \

@@ -8,6 +8,7 @@
 #define LUA_CORE
 
 #include "thrlua.h"
+#include <sys/param.h>
 
 #define hasmultret(k)		((k) == VCALL || (k) == VVARARG)
 
@@ -341,6 +342,11 @@ static void close_func (LexState *ls) {
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
 
+  removevars(ls, 0);
+  luaK_ret(fs, 0, 0);  /* final return */
+
+  /* Note we must take these variables out after the call to luaK_ret(), 
+   * because it may change the values */
   Instruction *new_fcode = NULL, *old_fcode = f->code;
   int old_fcode_size = f->sizecode;
   int *new_flineinfo = NULL, *old_flineinfo = f->lineinfo; 
@@ -353,9 +359,6 @@ static void close_func (LexState *ls) {
   int old_flocvars_size = f->sizelocvars;
   GCheader **new_fupvalues = NULL, **old_fupvalues = f->upvalues;
   int old_fupvalues_size = f->sizeupvalues;
-
-  removevars(ls, 0);
-  luaK_ret(fs, 0, 0);  /* final return */
   
   /* Allocate new memory */
   luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fcode, 0, fs->pc, Instruction);
@@ -367,12 +370,12 @@ static void close_func (LexState *ls) {
   /* Block the collector */
   luaC_blockcollector(L);
   /* copy the old memory to the new memory */
-  memcpy(new_fcode, f->code, f->sizecode * sizeof(Instruction));
-  memcpy(new_flineinfo, f->lineinfo, f->sizelineinfo * sizeof(int));
-  memcpy(new_fk, f->k, f->sizek * sizeof(TValue));
-  memcpy(new_fp, f->p, f->sizep * sizeof(Proto*));
-  memcpy(new_flocvars, f->locvars, f->sizelocvars * sizeof(LocVar));
-  memcpy(new_fupvalues, f->upvalues, f->sizeupvalues * sizeof(GCheader*));
+  memcpy(new_fcode, f->code, MIN(f->sizecode, fs->pc) * sizeof(Instruction));
+  memcpy(new_flineinfo, f->lineinfo, MIN(f->sizelineinfo, fs->pc) * sizeof(int));
+  memcpy(new_fk, f->k, MIN(f->sizek, fs->nk) * sizeof(TValue));
+  memcpy(new_fp, f->p, MIN(f->sizep, fs->np) * sizeof(Proto*));
+  memcpy(new_flocvars, f->locvars, MIN(f->sizelocvars, fs->nlocvars) * sizeof(LocVar));
+  memcpy(new_fupvalues, f->upvalues, MIN(f->sizeupvalues, f->nups) * sizeof(GCheader*));
   /* assign the new memory and size */
   f->code = new_fcode;
   f->sizecode = fs->pc;
