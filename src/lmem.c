@@ -40,6 +40,31 @@ static void *default_alloc(void *ud, enum lua_memtype objtype, void *ptr,
   return realloc(ptr, nsize);
 }
 
+#ifndef MINSIZEARRAY
+#define MINSIZEARRAY	4
+#endif
+
+void *luaM_growaux_(lua_State *L, enum lua_memtype objtype, void *block,
+    int *size, size_t size_elems, int limit, const char *errormsg)
+{
+  void *newblock;
+  int newsize;
+  if (*size >= limit/2) {  /* cannot double it? */
+    if (*size >= limit)  /* cannot grow even a little? */
+      luaG_runerror(L, errormsg);
+    newsize = limit;  /* still have at least one free place */
+  }
+  else {
+    newsize = (*size)*2;
+    if (newsize < MINSIZEARRAY)
+      newsize = MINSIZEARRAY;  /* minimum size */
+  }
+  newblock = luaM_reallocv(L, objtype, block, *size, newsize, size_elems);
+  *size = newsize;  /* update only when everything else is OK */
+  return newblock;
+}
+
+
 void *luaM_toobig (lua_State *L) {
   luaG_runerror(L, "memory allocation error: block too big");
   return NULL;  /* to avoid warnings */

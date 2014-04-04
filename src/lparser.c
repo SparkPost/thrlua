@@ -126,7 +126,7 @@ static int registerlocalvar (LexState *ls, TString *varname) {
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
   int oldsize = f->sizelocvars;
-  luaM_growvector(ls->L, LUA_MEM_PROTO_DATA, f->locvars, fs->nlocvars,
+  luaM_growvector_safe(ls->L, LUA_MEM_PROTO_DATA, f->locvars, fs->nlocvars,
     f->sizelocvars, LocVar, SHRT_MAX, "too many local variables");
   while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL;
   luaC_writebarrier(ls->L, &f->gch,
@@ -174,7 +174,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   }
   /* new one */
   luaY_checklimit(fs, f->nups + 1, LUAI_MAXUPVALUES, "upvalues");
-  luaM_growvector(fs->L, LUA_MEM_PROTO_DATA, f->upvalues,
+  luaM_growvector_safe(fs->L, LUA_MEM_PROTO_DATA, f->upvalues,
     f->nups, f->sizeupvalues, GCheader *, MAX_INT, "");
   while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL;
   luaC_writebarrier(fs->L, &f->gch,
@@ -295,7 +295,7 @@ static void pushclosure (LexState *ls, FuncState *func, expdesc *v) {
   Proto *f = fs->f;
   int oldsize = f->sizep;
   int i;
-  luaM_growvector(ls->L, LUA_MEM_PROTO_DATA, f->p, fs->np, f->sizep, Proto *,
+  luaM_growvector_safe(ls->L, LUA_MEM_PROTO_DATA, f->p, fs->np, f->sizep, Proto *,
                   MAXARG_Bx, "constant table overflow");
   while (oldsize < f->sizep) f->p[oldsize++] = NULL;
   luaC_writebarrier(ls->L, &f->gch, (GCheader**)&f->p[fs->np], &func->f->gch);
