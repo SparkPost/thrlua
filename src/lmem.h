@@ -57,7 +57,7 @@
     v = __newmem; \
     size = __newsize; \
     luaC_unblockcollector(L); \
-    luaM_freearray(L, objtype, __oldmem, __oldsize, sizeof(t)); \
+    luaM_freearray(L, objtype, __oldmem, __oldsize, t); \
   } \
 } while(0)
 
