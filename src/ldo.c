@@ -121,7 +121,7 @@ void luaD_reallocstack (lua_State *L, int newsize) {
   lua_assert(L->stack_last - L->stack == L->stacksize - EXTRA_STACK - 1);
   /* Can't muck with the stack like this without the collector blocked.
    * Also can't allocate/free memory with the collector blocked. */
-  luaM_reallocvector(L, LUA_MEM_STACK, newstack, 0, realsize, TValue);
+  newstack = luaM_newvector(L, LUA_MEM_STACK, realsize, TValue);
   luaC_blockcollector(L);
   memcpy(newstack, oldstack, MIN(oldstacksize, realsize) * sizeof(TValue));
   L->stack = newstack;

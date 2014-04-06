@@ -49,7 +49,7 @@
         __newsize = MINSIZEARRAY;  /* minimum size */ \
       } \
     } \
-    luaM_reallocvector(L, objtype, __newmem, 0, __newsize, t); \
+    __newmem = luaM_newvector(L, objtype, __newsize, t); \
     /* Cannot change the existing data structures without the collector \
      * blocked */ \
     luaC_blockcollector(L); \
@@ -71,7 +71,7 @@
   objtype* __oldobj = obj; \
   int __oldsize = size; \
   /* Allocate the new memory */ \
-  luaM_reallocvector(L, memtype, __newobj, 0, newsize, objtype); \
+  __newobj = luaM_newvector(L, memtype, newsize, objtype); \
   /* Block the collector */ \
   luaC_blockcollector(L); \
   /* Copy the old memory to the new memory */ \

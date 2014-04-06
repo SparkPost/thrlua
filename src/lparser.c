@@ -361,12 +361,12 @@ static void close_func (LexState *ls) {
   int old_fupvalues_size = f->sizeupvalues;
   
   /* Allocate new memory */
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fcode, 0, fs->pc, Instruction);
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_flineinfo, 0, fs->pc, int);
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fk, 0, fs->nk, TValue);
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fp, 0, fs->np, Proto *);
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_flocvars, 0, fs->nlocvars, LocVar);
-  luaM_reallocvector(L, LUA_MEM_PROTO_DATA, new_fupvalues, 0, f->nups, GCheader *);
+  new_fcode = luaM_newvector(L, LUA_MEM_PROTO_DATA, fs->pc, Instruction);
+  new_flineinfo = luaM_newvector(L, LUA_MEM_PROTO_DATA, fs->pc, int);
+  new_fk = luaM_newvector(L, LUA_MEM_PROTO_DATA, fs->nk, TValue);
+  new_fp = luaM_newvector(L, LUA_MEM_PROTO_DATA, fs->np, Proto *);
+  new_flocvars = luaM_newvector(L, LUA_MEM_PROTO_DATA, fs->nlocvars, LocVar);
+  new_fupvalues = luaM_newvector(L, LUA_MEM_PROTO_DATA, f->nups, GCheader *);
   /* Block the collector */
   luaC_blockcollector(L);
   /* copy the old memory to the new memory */
