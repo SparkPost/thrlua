@@ -27,9 +27,12 @@
 		cast(t *, luaM_reallocv(L, objtype, NULL, 0, n, sizeof(t)))
 
 #define MINSIZEARRAY  4
-#define luaM_growvector(L, objtype, v,nelems,size,t,limit,e) \
-          if ((nelems)+1 > (size)) \
-            ((v)=cast(t *, luaM_growaux_(L,objtype, v,&(size),sizeof(t),limit,e)))
+#define luaM_growvector(L, objtype, v,nelems,size,t,limit,e) do {\
+  if ((nelems)+1 > (size)) { \
+    ((v)=cast(t *, luaM_growaux_(L,objtype, v,&(size),sizeof(t),limit,e))); \
+  } \
+} while(0)
+		  
 
 #define luaM_growvector_safe(L, objtype, v, nelems, size, t, limit, e) do { \
   if ((nelems)+1 > (size)) { \
