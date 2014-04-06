@@ -129,7 +129,7 @@ void luaD_reallocstack (lua_State *L, int newsize) {
   L->stack_last = L->stack+newsize;
   correctstack(L, oldstack);
   luaC_unblockcollector(L);
-  luaM_freearray(L, LUA_MEM_STACK, oldstack, oldstacksize, sizeof(TValue));
+  luaM_freearray(L, LUA_MEM_STACK, oldstack, oldstacksize, TValue);
 }
 
 
