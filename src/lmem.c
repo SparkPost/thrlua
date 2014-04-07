@@ -40,7 +40,9 @@ static void *default_alloc(void *ud, enum lua_memtype objtype, void *ptr,
   return realloc(ptr, nsize);
 }
 
+#ifndef MINSIZEARRAY
 #define MINSIZEARRAY	4
+#endif
 
 void *luaM_growaux_(lua_State *L, enum lua_memtype objtype, void *block,
     int *size, size_t size_elems, int limit, const char *errormsg)

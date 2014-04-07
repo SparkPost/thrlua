@@ -61,6 +61,12 @@ typedef struct GCheap {
    */
   ck_stack_t to_free;
 
+  /** List of external objects to be freed.
+   * For the same reasons as above, we can't do this when the gc is blocked
+   * so we need to defer calling the finalizer until we unblock the gc.
+   */
+  ck_stack_t to_finalize;
+
   /** backref to owning thread */
   struct lua_State *owner;
 
@@ -100,6 +106,12 @@ typedef struct GCheader {
 
   /** linkage into various marking stacks */
   ck_stack_entry_t instack;
+
+  /** Position in finalize stack.  This needs to be separate from the instack
+   * member above because members to be finalized will also be in the grey
+   * list.
+   */
+  ck_stack_entry_t finalize_instack;
 
   /** if pinned from C, count of number of pins */
   uint32_t ref;

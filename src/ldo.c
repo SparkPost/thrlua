@@ -114,22 +114,33 @@ static void correctstack (lua_State *L, TValue *oldstack) {
 
 
 void luaD_reallocstack (lua_State *L, int newsize) {
-  TValue *oldstack = L->stack;
+  TValue *oldstack = L->stack, *newstack = NULL;
+  int oldstacksize = L->stacksize;
   int realsize = newsize + 1 + EXTRA_STACK;
+
   lua_assert(L->stack_last - L->stack == L->stacksize - EXTRA_STACK - 1);
-  luaM_reallocvector(L, LUA_MEM_STACK, L->stack, L->stacksize, realsize, TValue);
+  /* Can't muck with the stack like this without the collector blocked.
+   * Also can't allocate/free memory with the collector blocked. */
+  newstack = luaM_newvector(L, LUA_MEM_STACK, realsize, TValue);
+  luaC_blockcollector(L);
+  memcpy(newstack, oldstack, MIN(oldstacksize, realsize) * sizeof(TValue));
+  L->stack = newstack;
   L->stacksize = realsize;
   L->stack_last = L->stack+newsize;
   correctstack(L, oldstack);
+  luaC_unblockcollector(L);
+  luaM_freearray(L, LUA_MEM_STACK, oldstack, oldstacksize, TValue);
 }
 
 
 void luaD_reallocCI (lua_State *L, int newsize) {
   CallInfo *oldci = L->base_ci;
-  luaM_reallocvector(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo);
-  L->size_ci = newsize;
-  L->ci = (L->ci - oldci) + L->base_ci;
-  L->end_ci = L->base_ci + L->size_ci - 1;
+#define __fixup do { \
+  L->size_ci = newsize; \
+  L->ci = (L->ci - oldci) + L->base_ci; \
+  L->end_ci = L->base_ci + L->size_ci - 1; \
+  } while(0)
+  luaM_reallocvector2(L, LUA_MEM_CALLINFO, L->base_ci, L->size_ci, newsize, CallInfo, __fixup);
 }
 
 

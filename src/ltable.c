@@ -247,16 +247,16 @@ static int numusehash (const Table *t, int *nums, int *pnasize) {
   return totaluse;
 }
 
-
 static void setarrayvector (lua_State *L, Table *t, int size) {
-  int i;
-  luaM_reallocvector(L, LUA_MEM_TABLE_NODES, t->array,
-    t->sizearray, size, TValue);
-  for (i=t->sizearray; i<size; i++)
-     setnilvalue(&t->array[i]);
+  int oldsize = t->sizearray;
+#define fixup_tvalue do { \
+  int i; \
+  for (i=oldsize; i<size; i++) \
+    setnilvalue(&t->array[i]); \
+} while(0)
+  luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, t->sizearray, size, TValue, fixup_tvalue);
   t->sizearray = size;
 }
-
 
 static void setnodevector (lua_State *L, Table *t, int size) {
   int lsize;
@@ -282,7 +282,6 @@ static void setnodevector (lua_State *L, Table *t, int size) {
   t->lastfree = gnode(t, size);  /* all positions are free */
 }
 
-
 static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
   int i;
   int oldasize = t->sizearray;
@@ -300,7 +299,7 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
         setobjt2t(L, luaH_setnum(L, t, i+1), &t->array[i]);
     }
     /* shrink array */
-    luaM_reallocvector(L, LUA_MEM_TABLE_NODES, t->array, oldasize, nasize, TValue);
+    luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->array, oldasize, nasize, TValue, do_nothing);
   }
   /* re-insert elements from hash part */
   for (i = twoto(oldhsize) - 1; i >= 0; i--) {
