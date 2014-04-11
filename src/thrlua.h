@@ -54,6 +54,13 @@ LUAI_FUNC void lua_assert_fail(const char *expr, struct GCheader *obj, const cha
 #endif
 
 
+#ifndef MIN
+#define MIN(x, y)               (((x) < (y)) ? (x) : (y))
+#endif
+#ifndef MAX
+#define MAX(x, y)               (((x) > (y)) ? (x) : (y))
+#endif
+
 
 #include <setjmp.h>
 #include <locale.h>
