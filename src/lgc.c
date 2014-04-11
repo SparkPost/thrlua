@@ -638,11 +638,11 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
             traverse_value(L, o, &cl->c.upvalue[i], objfunc);
           }
         } else {
-          lua_assert(cl->l.nupvalues == cl->l.p->nups);
-          if (!cl->l.env) {
+          if (!cl->l.env || !cl->l.p) {
             /* Not done being setup yet, skip */
             return;
           }
+          lua_assert(cl->l.nupvalues == cl->l.p->nups);
           traverse_obj(L, o, &cl->l.p->gch, objfunc);
           traverse_obj(L, o, cl->l.env, objfunc);
           for (i = 0; i < cl->l.nupvalues; i++) {

@@ -328,7 +328,7 @@ typedef struct Node {
   TKey i_key;
 } Node;
 
-#define LUA_USE_RW_SPINLOCK 0
+#define LUA_USE_RW_SPINLOCK 1
 
 #if LUA_USE_RW_SPINLOCK
 typedef struct lua_rwspinlock {
