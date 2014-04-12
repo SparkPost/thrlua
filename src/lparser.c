@@ -127,9 +127,12 @@ static int registerlocalvar (LexState *ls, TString *varname) {
   FuncState *fs = ls->fs;
   Proto *f = fs->f;
   int oldsize = f->sizelocvars;
+#define mem_fixup do { \
+  while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL; \
+} while (0)
   luaM_growvector_safe(ls->L, LUA_MEM_PROTO_DATA, f->locvars, fs->nlocvars,
-    f->sizelocvars, LocVar, SHRT_MAX, "too many local variables");
-  while (oldsize < f->sizelocvars) f->locvars[oldsize++].varname = NULL;
+    f->sizelocvars, LocVar, SHRT_MAX, "too many local variables", mem_fixup);
+#undef mem_fixup
   luaC_writebarrier(ls->L, &f->gch,
     &f->locvars[fs->nlocvars].varname, &varname->tsv.gch);
   return fs->nlocvars++;
@@ -175,9 +178,12 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
   }
   /* new one */
   luaY_checklimit(fs, f->nups + 1, LUAI_MAXUPVALUES, "upvalues");
+#define mem_fixup do { \
+  while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL; \
+} while (0)
   luaM_growvector_safe(fs->L, LUA_MEM_PROTO_DATA, f->upvalues,
-    f->nups, f->sizeupvalues, GCheader *, MAX_INT, "");
-  while (oldsize < f->sizeupvalues) f->upvalues[oldsize++] = NULL;
+    f->nups, f->sizeupvalues, GCheader *, MAX_INT, "", mem_fixup);
+#undef mem_fixup
   luaC_writebarrier(fs->L, &f->gch,
     &f->upvalues[f->nups], &name->tsv.gch);
 
@@ -296,9 +302,12 @@ static void pushclosure (LexState *ls, FuncState *func, expdesc *v) {
   Proto *f = fs->f;
   int oldsize = f->sizep;
   int i;
+#define mem_fixup do { \
+  while (oldsize < f->sizep) f->p[oldsize++] = NULL; \
+} while (0)
   luaM_growvector_safe(ls->L, LUA_MEM_PROTO_DATA, f->p, fs->np, f->sizep, Proto *,
-                  MAXARG_Bx, "constant table overflow");
-  while (oldsize < f->sizep) f->p[oldsize++] = NULL;
+                  MAXARG_Bx, "constant table overflow", mem_fixup);
+#undef mem_fixup
   luaC_writebarrier(ls->L, &f->gch, (GCheader**)&f->p[fs->np], &func->f->gch);
   fs->np++;
   init_exp(v, VRELOCABLE, luaK_codeABx(fs, OP_CLOSURE, 0, fs->np-1));

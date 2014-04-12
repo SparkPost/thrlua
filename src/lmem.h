@@ -34,7 +34,7 @@
 } while(0)
 		  
 
-#define luaM_growvector_safe(L, objtype, v, nelems, size, t, limit, e) do { \
+#define luaM_growvector_safe(L, objtype, v, nelems, size, t, limit, e, fixup) do { \
   if ((nelems)+1 > (size)) { \
     t *__newmem = NULL; \
     t *__oldmem = v; \
@@ -59,6 +59,7 @@
     memcpy(__newmem, v, (size) * sizeof(t)); \
     v = __newmem; \
     size = __newsize; \
+    fixup; \
     luaC_unblockcollector(L); \
     luaM_freearray(L, objtype, __oldmem, __oldsize, t); \
   } \
@@ -85,7 +86,9 @@
   /* Unblock the collector */ \
   luaC_unblockcollector(L); \
   /* Free the old memory */ \
-  luaM_freemem(L, memtype, __oldobj, __oldsize * sizeof(objtype)); \
+  if (__oldobj && __oldsize) { \
+    luaM_freemem(L, memtype, __oldobj, __oldsize * sizeof(objtype)); \
+  } \
 } while(0)
 
 LUAI_FUNC void *luaM_realloc_ (lua_State *L, enum lua_memtype objtype,

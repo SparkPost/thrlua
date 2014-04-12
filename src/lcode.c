@@ -227,9 +227,12 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
     }
     else {  /* constant not found; create a new entry */
       setnvalue(idx, cast_num(fs->nk));
+#define mem_fixup do { \
+  while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]); \
+} while (0)
       luaM_growvector_safe(L, LUA_MEM_PROTO_DATA, f->k, fs->nk, f->sizek, TValue,
-          MAXARG_Bx, "constant table overflow");
-      while (oldsize < f->sizek) setnilvalue(&f->k[oldsize++]);
+          MAXARG_Bx, "constant table overflow", mem_fixup);
+#undef mem_fixup
       luaC_writebarriervv(L, &f->gch, &f->k[fs->nk], v);
       retval = fs->nk++;
     }
@@ -829,11 +832,11 @@ static int luaK_code (FuncState *fs, Instruction i, int line) {
   dischargejpc(fs);  /* `pc' will change */
   /* put new instruction in code array */
   luaM_growvector_safe(fs->L, LUA_MEM_PROTO_DATA, f->code, fs->pc, f->sizecode, Instruction,
-                       MAX_INT, "code size overflow");
+                       MAX_INT, "code size overflow", do_nothing);
   f->code[fs->pc] = i;
   /* save corresponding line information */
   luaM_growvector_safe(fs->L, LUA_MEM_PROTO_DATA, f->lineinfo, fs->pc, f->sizelineinfo, int,
-                  MAX_INT, "code size overflow");
+                  MAX_INT, "code size overflow", do_nothing);
   f->lineinfo[fs->pc] = line;
   return fs->pc++;
 }
