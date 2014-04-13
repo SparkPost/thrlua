@@ -278,7 +278,13 @@ static void setnodevector (lua_State *L, Table *t, int size) {
     setnilvalue(gval(n)); \
   } \
 } while (0)
-    /* Set t->node to NULL since the call takes care of freeing it in this case */
+    /* Size of t->node is marked as zero to keep it from doing any sort of copy
+     * since that is handled by the mem_fixup, and we don't want t->node to be
+     * freed, the caller does that.  luaM_reallocvector2 tests if the old memory
+     * is not NULL and old size is not zero before freeing.  So it will not be
+     * freed, the old pointer will just be dropped, but the caller has a stack
+     * pointer to it that it will use to free it after we return.  All good.
+     */
     luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->node, 0, size, Node, mem_fixup);
 #undef mem_fixup
   }
