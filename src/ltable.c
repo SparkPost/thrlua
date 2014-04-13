@@ -270,15 +270,17 @@ static void setnodevector (lua_State *L, Table *t, int size) {
     if (lsize > MAXBITS)
       luaG_runerror(L, "table overflow");
     size = twoto(lsize);
-    t->node = luaM_newvector(L, LUA_MEM_TABLE_NODES, size, Node);
-    luaC_blockcollector(L);
-    for (i=0; i<size; i++) {
-      Node *n = gnode(t, i);
-      gnext(n) = NULL;
-      setnilvalue(key2tval(n));
-      setnilvalue(gval(n));
-    }
-    luaC_unblockcollector(L);
+#define mem_fixup do { \
+  for (i=0; i<size; i++) { \
+    Node *n = gnode(t, i); \
+    gnext(n) = NULL; \
+    setnilvalue(key2tval(n)); \
+    setnilvalue(gval(n)); \
+  } \
+} while (0)
+    /* Set t->node to NULL since the call takes care of freeing it in this case */
+    luaM_reallocvector2(L, LUA_MEM_TABLE_NODES, t->node, 0, size, Node, mem_fixup);
+#undef mem_fixup
   }
   t->lsizenode = cast_byte(lsize);
   t->lastfree = gnode(t, size);  /* all positions are free */
