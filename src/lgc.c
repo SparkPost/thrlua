@@ -189,6 +189,12 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   int force)
 {
   if (lval->owner != rval->owner) {
+    if (!force && rval->xref != G(L)->isxref) {
+      /* If force isn't set, then we're doing an incremental xref set.  Mark
+       * it in the rval's owner's count.  This is just a hint so we don't
+       * have to bother with the atomics */
+      rval->owner->owner->xref_count++;
+    }
     ck_pr_store_32(&rval->xref, G(L)->isxref);
   } else if (force && is_unknown_xref(L, rval)) {
     ck_pr_store_32(&rval->xref, G(L)->notxref);
@@ -1186,6 +1192,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->gcstepmul = LUAI_GCMUL;
   g->gcpause = LUAI_GCPAUSE;
   g->global_trace_thresh = 10;
+  g->global_trace_xref_thresh = 300;
   g->allocdata = p->allocdata;
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
@@ -1773,6 +1780,7 @@ static void trace_heap(GCheap *h)
 {
   GCheader *o;
 
+  ck_pr_store_32(&h->owner->xref_count, 0);
   TAILQ_FOREACH(o, &h->objects, allocd) {
     global_trace_obj(h->owner, &h->owner->gch, o);
   }
@@ -1854,7 +1862,7 @@ static void global_trace(lua_State *L)
   /* we are a consumer too */
   while (1) {
     struct ck_stack_entry *ent = ck_stack_pop_upmc(&trace_stack);
-
+    
     if (!ent) {
       break;
     }
@@ -1871,6 +1879,8 @@ static void global_trace(lua_State *L)
   TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
     GCheader *o;
 
+    /* Zero out the new xref count */
+    ck_pr_store_32(&h->owner->xref_count, 0);
     TAILQ_FOREACH(o, &h->objects, allocd) {
       global_trace_obj(h->owner, &h->owner->gch, o);
     }
@@ -1899,7 +1909,8 @@ static void global_trace(lua_State *L)
 void luaC_checkGC(lua_State *L)
 {
   if (L->gcestimate >= L->thresh) {
-    if (ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) {
+    if ((ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) ||
+        (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
       global_trace(L);
     }
     local_collection(L);
@@ -1911,7 +1922,8 @@ int luaC_localgc (lua_State *L, int greedy)
   int reclaimed = 0;
   int x = 0;
 
-  if (ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) {
+  if ((ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) ||
+      (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
     global_trace(L);
   }
   if (!greedy) {

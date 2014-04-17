@@ -1184,6 +1184,10 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         res = g->global_trace_thresh;
         g->global_trace_thresh = data;
         break;
+      case LUA_GCSETGLOBALTRACEXREF:
+        res = g->global_trace_xref_thresh;
+        g->global_trace_xref_thresh = data;
+        break;
 
       default:
         res = -1;  /* invalid option */
