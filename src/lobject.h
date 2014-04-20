@@ -93,7 +93,7 @@ typedef struct GCheap {
 */
 typedef struct GCheader {
   /** external reference status */
-  uint32_t xref;
+  uint32_t xref CK_CC_CACHELINE;
 
   /** object type */
   enum lua_obj_type tt;

@@ -109,6 +109,8 @@ struct global_State {
   uint32_t need_global_trace;
   /** the global trace threshold */
   uint32_t global_trace_thresh;
+  /** the global trace xref threshold */
+  uint32_t global_trace_xref_thresh;
 
   lua_Alloc2 alloc;
   void *allocdata;
@@ -161,6 +163,9 @@ struct lua_State {
   /** Next threshold for collection; when allocd >= thresh, we will
    * perform a local collection */
   uint64_t thresh;
+
+  /** Number of xrefs since the last global trace */
+  uint32_t xref_count CK_CC_CACHELINE;
 
   /** What color is black? */
   uint8_t black;
