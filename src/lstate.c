@@ -76,13 +76,17 @@ void lua_unlock(lua_State *L)
 }
 
 static void stack_init (lua_State *L1, lua_State *L) {
+  void *base_ci = luaM_newvector(L, LUA_MEM_CALLINFO, BASIC_CI_SIZE, CallInfo);
+  void *stack = luaM_newvector(L, LUA_MEM_STACK, BASIC_STACK_SIZE + EXTRA_STACK, TValue);
+  /* This is unsafe to stop in the middle of, block the collector */
+  luaC_blockcollector(L1);
   /* initialize CallInfo array */
-  L1->base_ci = luaM_newvector(L, LUA_MEM_CALLINFO, BASIC_CI_SIZE, CallInfo);
+  L1->base_ci = base_ci;
   L1->ci = L1->base_ci;
   L1->size_ci = BASIC_CI_SIZE;
   L1->end_ci = L1->base_ci + L1->size_ci - 1;
   /* initialize stack array */
-  L1->stack = luaM_newvector(L, LUA_MEM_STACK, BASIC_STACK_SIZE + EXTRA_STACK, TValue);
+  L1->stack = stack;
   L1->stacksize = BASIC_STACK_SIZE + EXTRA_STACK;
   L1->top = L1->stack;
   L1->stack_last = L1->stack+(L1->stacksize - EXTRA_STACK)-1;
@@ -91,6 +95,7 @@ static void stack_init (lua_State *L1, lua_State *L) {
   setnilvalue(L1->top++);  /* `function' entry for this `ci' */
   L1->base = L1->ci->base = L1->top;
   L1->ci->top = L1->top + LUA_MINSTACK;
+  luaC_unblockcollector(L1);
 }
 
 
