@@ -670,6 +670,10 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         int i;
         struct stringtable_node *n;
 
+        if (!th->stack || !th->base_ci) {
+          /* Not setup yet, skip for now */
+          return;
+        }
         if (!is_world_stopped(L)) lua_lock(th);
         traverse_value(L, o, &th->l_gt, objfunc);
         traverse_value(L, o, &th->env, objfunc);
