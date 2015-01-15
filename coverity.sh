@@ -26,4 +26,6 @@ if test "$cruft" = "1" ; then
 fi
 
 # does not support parallel make
-make
+cov-build make
+cov-analyze
+cov-commit-defects --stream "thrlua develop x86_64 rh6"
