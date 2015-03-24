@@ -389,6 +389,9 @@ static int lcurl_easy_init(lua_State* L)
 	/* open curl handle */
 	c->curl = curl_easy_init();
 
+	/* Ensure curl doesn't use signal its handlers; they are not thread safe */
+	curl_easy_setopt(c->curl, CURLOPT_NOSIGNAL, 1L);
+
 	/* set metatable to curlT object */
 	luaL_getmetatable(L, CURLHANDLE);
 	lua_setmetatable(L, -2);
