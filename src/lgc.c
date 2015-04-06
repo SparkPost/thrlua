@@ -1033,6 +1033,7 @@ static void make_tls_key(void)
   if (use_trace_threads && 
       (!strcasecmp(use_trace_threads, "true") ||
        !strcasecmp(use_trace_threads, "on") ||
+       !strcasecmp(use_trace_threads, "1") ||
        !strcasecmp(use_trace_threads, "yes"))) {
     USE_TRACE_THREADS = 1;
   }
