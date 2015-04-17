@@ -1065,6 +1065,7 @@ static void make_tls_key(void)
 #endif
   pthread_mutex_init(&all_threads_lock, &m);
   pthread_mutexattr_destroy(&m);
+  pthread_rwlock_init(&trace_rwlock, NULL);
 
   if (USE_TRACE_THREADS && NUM_TRACE_THREADS) {
     /* spin up GC tracing threads */
@@ -1116,7 +1117,6 @@ thr_State *luaC_get_per_thread_(void)
   thr_State *pt;
 
   pthread_once(&tls_init, make_tls_key);
-  pthread_rwlock_init(&trace_rwlock, NULL);
 
   pt = calloc(1, sizeof(*pt));
   pthread_setspecific(lua_tls_key, pt);
