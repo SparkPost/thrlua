@@ -1996,7 +1996,7 @@ int luaC_localgc (lua_State *L, int greedy)
 int luaC_fullgc (lua_State *L)
 {
   global_trace(L);
-  return luaC_localgc(L, 1);
+  return luaC_localgc(L, 0);
 }
 
 /* The semantics of lua_close are to free up everything associated
