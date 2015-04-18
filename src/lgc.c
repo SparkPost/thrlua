@@ -15,23 +15,16 @@
 # define INLINE inline
 #endif
 
-/* This logic used to not only define the use of a parallel set of threads
- * to parallelize the globl trace, but it also invovled not stopping all
- * other system threads while a global trace was going on.  Based on various
- * edges we've found throughout the code, it isn't surprising that this 
- * behavior had issues, but at this point we aren't convinced that we have
- * fully found all of the areas where the global trace needs everything
- * stopped.  So, for the time being, make USE_TRACE_THREADS only spin up
- * more threads to parallelize the global trace.
- *
- * We will #if 0 out the code that avoids stopping threads while a global
- * trace is going on for the time being. */
+/* Perform global traces in parallel, as opposed to having just one thread
+ * do it. */
 static int USE_TRACE_THREADS = 0;
 
-/* Number of trace threads to use.  Start with 8 */
+/* Number of trace threads to use.  Start with 8, requires USE_TRACE_THREADS
+ * to be set to 1. */
 static int NUM_TRACE_THREADS = 8;
 
-/* Non-signal collector logic.  We believe this behavior is unsafe */
+/* Non-signal collector logic.  This behavior is still experimental, but is
+ * showing tremendous promise. */
 static int NON_SIGNAL_COLLECTOR = 0;
 
 #ifdef LUA_OS_LINUX
