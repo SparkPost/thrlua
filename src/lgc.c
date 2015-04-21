@@ -1989,6 +1989,11 @@ int luaC_localgc (lua_State *L, int greedy)
 int luaC_fullgc (lua_State *L)
 {
   global_trace(L);
+  /* We do a step garbage collection here, as opposed to a full one.  New objects
+   * are pushed into the global thread when threads are destroyed, and a step
+   * garbage collection is sufficient to reclaim enough memory.  This has been
+   * run in production and memory is stable.  The reason for not doing a full
+   * cycle is that it's relatively time-consuming. */
   return luaC_localgc(L, 0);
 }
 
