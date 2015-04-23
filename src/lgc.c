@@ -15,31 +15,17 @@
 # define INLINE inline
 #endif
 
-/* when entering a critical section in the mutator (the write barrier),
- * we need to ensure that we atomically update a structure wrt. global
- * trace.  We can either do this by blocking signals or by using a set
- * of atomic operations to coordinate with a potential collector.
- * In a single threaded run, using atomics is 2x faster than blocking
- * signals.  If you need to use blocked signals, you can define this to 1 */
-#define BLOCK_COLLECTOR_USING_SIGNALS 0
-/* This logic used to not only define the use of a parallel set of threads
- * to parallelize the globl trace, but it also invovled not stopping all
- * other system threads while a global trace was going on.  Based on various
- * edges we've found throughout the code, it isn't surprising that this 
- * behavior had issues, but at this point we aren't convinced that we have
- * fully found all of the areas where the global trace needs everything
- * stopped.  So, for the time being, make USE_TRACE_THREADS only spin up
- * more threads to parallelize the global trace.
- *
- * We will #if 0 out the code that avoids stopping threads while a global
- * trace is going on for the time being. */
+/* Perform global traces in parallel, as opposed to having just one thread
+ * do it. */
 static int USE_TRACE_THREADS = 0;
 
-/* Number of trace threads to use.  Start with 8 */
+/* Number of trace threads to use.  Start with 8, requires USE_TRACE_THREADS
+ * to be set to 1. */
 static int NUM_TRACE_THREADS = 8;
 
-/* Non-signal collector logic.  We believe this behavior is unsafe */
-#define NON_SIGNAL_COLLECTOR 0
+/* Non-signal collector logic.  This behavior is still experimental, but is
+ * showing tremendous promise. */
+static int NON_SIGNAL_COLLECTOR = 0;
 
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
@@ -67,6 +53,17 @@ static sigset_t suspend_handler_mask;
 static struct ck_stack trace_stack;
 static pthread_cond_t trace_cond;
 static pthread_mutex_t trace_mtx;
+
+/* This lock is used to synchronize threads trying to enter a barrier
+ * in the NON_SIGNAL_COLLECTOR case.  This is only used to signal threads
+ * trying to block the collector while a global trace is going on.  The reason
+ * we don't use this in the general case (and use the in_barrier/intend_to_stop
+ * logic) is because this codepath is very hot, and using the rwlock as the 
+ * primary method of synchronization would be more expensive.  So we will 
+ * use the intend_to_stop/in_barrier method in normal circumstances, but to avoid
+ * busy waiting on the intend_to_stop test we will use sleep the threads on 
+ * the rwlock. */
+static pthread_rwlock_t trace_rwlock;
 
 static void *trace_thread(void *);
 static void trace_heap(GCheap *h);
@@ -265,7 +262,6 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-#if NON_SIGNAL_COLLECTOR
 /* NOTE: This is the alternate logic for stopping threads during a 
  * global trace. */
 /* called during a global trace; when it returns, all mutators will be in
@@ -275,12 +271,28 @@ static INLINE void block_mutators(lua_State *L)
   uint32_t pending;
   thr_State *pt;
 
+  /* For the non-signal thread stoppage, take a write lock.  Important that
+   * we do this before setting intend to stop, as we acquire the write
+   * lock after the test for intend_to_stop.  This doesn't actually mean
+   * we are yet safe to start the global trace, as when mutators are blocked
+   * the in_barrier test is the way we know somebody is writing.  This is done
+   * to avoid extra system calls on this lock in the case when the global
+   * trace is not running.  When we release the lock, that allows any threads
+   * blocking on the lock to acquire a read lock.  They will immediately
+   * release the lock and ensure intend_to_stop is set to 0 _after_ they 
+   * set their in_barirer flag to 1. */
+  if (NON_SIGNAL_COLLECTOR) {
+    pthread_rwlock_wrlock(&trace_rwlock);
+  }
+
   /* advertise our intent to stop everyone; this prevents any mutators
    * from returning from their respective barriers */
   ck_pr_store_32(&G(L)->intend_to_stop, 1);
   ck_pr_fence_memory();
 
-  /* don't leave until we know that all threads are outside a barrier */
+  /* don't leave until we know that all threads are outside a barrier. 
+   * No more threads will enter a barrier after this point because 
+   * intend_to_stop is set to 1. */
   while (1) {
     pending = 0;
   
@@ -304,8 +316,15 @@ static INLINE void block_mutators(lua_State *L)
 static INLINE void unblock_mutators(lua_State *L)
 {
   ck_pr_store_32(&G(L)->intend_to_stop, 0);
+  ck_pr_fence_memory();
+
+  /* For the non-signal collector, release the write lock.  This tells
+   * any threads trying to block the collector that they can now wake
+   * up and try to enter their write barrier. */
+  if (NON_SIGNAL_COLLECTOR) {
+    pthread_rwlock_unlock(&trace_rwlock);
+  }
 }
-#endif
 
 /* Per-thread collector block recursion counter.  As it is per-thread we
  * don't need to use any threadsafe operators to change or read it */
@@ -334,42 +353,30 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
     return;
   }
 
-#if BLOCK_COLLECTOR_USING_SIGNALS
-  sigset_t mask;
-
-  sigfillset(&mask);
-  pthread_sigmask(SIG_BLOCK, &mask, NULL);
-#else
-
   for (;;) {
     while (ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
-#if !NON_SIGNAL_COLLECTOR
-      /* we will get suspended momentarily */
-      ck_pr_stall();
-      ck_pr_fence_memory();
-#else
-      /* NOTE: We won't have other threads blocking on mutators help
-       * with global tracing.  We'll have dedicated threads for that
-       * purpose. */
-
-      /* a global trace is either about to commence, or is ongoing.
-       * Let's see if we can help out */
-      struct ck_stack_entry *ent;
-      int traced = 0;
-
-      while (1) {
-        ent = ck_stack_pop_upmc(&trace_stack);
-        if (!ent) {
-          break;
-        }
-        trace_heap(GCheap_from_stack(ent));
-        traced++;
-      }
-
-      if (!traced && ck_pr_load_32(&G(L)->intend_to_stop) == 1) {
+      if (!NON_SIGNAL_COLLECTOR) {
+        /* we will get suspended momentarily */
         ck_pr_stall();
+        ck_pr_fence_memory();
+      } else {
+        /* We synchronize with the guy trying to trace using the rwlock.  
+         * This replaces the 'stall' loop we were doing earlier which
+         * can cause a lot of context switching for systems with
+         * lots of threads. */
+        while (pthread_rwlock_rdlock(&trace_rwlock) == EAGAIN) ; 
+        /* Now the global trace is done.  We are good to unlock and
+         * proceed.  We will double check that we are safely in our
+         * barrier below. */
+        pthread_rwlock_unlock(&trace_rwlock);
+
+        /* NOTE: This logic used to also act as a trace thread, but
+         * that's been removed because when there is no tracing to do
+         * it busy waits until the global trace is done.  That extra
+         * context switching actually slows down the system more than
+         * necessary, which is why we are usign the rwlock strategy
+         * intead. */
       }
-#endif
     }
     /* tell a possible collector that we're in a write barrier */
     ck_pr_store_32(&pt->in_barrier, 1);
@@ -377,11 +384,11 @@ static INLINE void block_collector(lua_State *L, thr_State *pt)
     if (ck_pr_load_32(&G(L)->intend_to_stop) == 0) {
       return;
     }
-
+    /* Woops, a global trace started after we set the barrier flag,
+     * clear it out and loop again. */
     ck_pr_store_32(&pt->in_barrier, 0);
     ck_pr_fence_memory();
   }
-#endif
 }
 
 static INLINE void unblock_collector(lua_State *L, thr_State *pt)
@@ -394,15 +401,8 @@ static INLINE void unblock_collector(lua_State *L, thr_State *pt)
     return;
   }
 
-#if BLOCK_COLLECTOR_USING_SIGNALS
-  sigset_t mask;
-
-  sigfillset(&mask);
-  pthread_sigmask(SIG_UNBLOCK, &mask, NULL);
-#else
   ck_pr_store_32(&pt->in_barrier, 0);
   ck_pr_fence_memory();
-#endif
 }
 
 void luaC_blockcollector(lua_State *L) {
@@ -417,19 +417,18 @@ void luaC_unblockcollector(lua_State *L) {
   unblock_collector(L, pt);
 }
 
-#if !NON_SIGNAL_COLLECTOR
-# define GET_PT_FOR_NON_SIGNAL_COLLECTOR() do {} while(0)
-# define BLOCK_COLLECTOR() do {} while(0)
-# define UNBLOCK_COLLECTOR() do {} while(0)
-#else
-/* NOTE: The non-signal collector requires more blockages. */
 # define GET_PT_FOR_NON_SIGNAL_COLLECTOR() \
   thr_State *pt = luaC_get_per_thread(L)
-# define BLOCK_COLLECTOR() \
-  block_collector(L, pt)
-# define UNBLOCK_COLLECTOR() \
-  unblock_collector(L, pt)
-#endif
+# define BLOCK_COLLECTOR() do { \
+  if (NON_SIGNAL_COLLECTOR) {  \
+    block_collector(L, pt); \
+  } \
+} while(0)
+# define UNBLOCK_COLLECTOR() do {\
+  if (NON_SIGNAL_COLLECTOR) { \
+    unblock_collector(L, pt); \
+  } \
+} while (0)
 
 void luaC_writebarrierxmove(lua_State *L, TValue **lhs,
                             const TValue *rhs, int num) {
@@ -927,10 +926,8 @@ static int signal_all_threads(lua_State *L, int sig)
   int nthreads = 0;
   int r;
 
-#if !BLOCK_COLLECTOR_USING_SIGNALS
   ck_pr_store_32(&G(L)->intend_to_stop, sig == LUA_SIG_SUSPEND ? 1 : 0);
   ck_pr_fence_memory();
-#endif
 
   TAILQ_FOREACH(pt, &all_threads, threads) {
     if (pthread_equal(me, pt->tid)) {
@@ -940,7 +937,6 @@ static int signal_all_threads(lua_State *L, int sig)
     if (pt->dead) {
       continue;
     }
-#if !BLOCK_COLLECTOR_USING_SIGNALS
     if (sig == LUA_SIG_SUSPEND) {
       /* wait for thread to leave its barrier */
       while (ck_pr_load_32(&pt->in_barrier) == 1) {
@@ -948,7 +944,6 @@ static int signal_all_threads(lua_State *L, int sig)
         ck_pr_fence_memory();
       }
     }
-#endif
 
     r = pthread_kill(pt->tid, sig);
     if (r == 0) {
@@ -1021,26 +1016,39 @@ static void free_last_global_bits(void)
   }
 }
 
+static int is_bool_env_true(const char *env) {
+  if (env &&
+      (!strcasecmp(env, "true") || !strcasecmp(env, "on") ||
+       !strcasecmp(env, "1") || !strcasecmp(env, "enabled") ||
+       !strcasecmp(env, "yes"))) {
+    return 1;
+  }
+
+  return 0;
+}
+
 static void make_tls_key(void)
 {
   struct sigaction act;
   pthread_mutexattr_t m;
   pthread_attr_t ta;
   int i;
-  const char *use_trace_threads = getenv("USE_TRACE_THREADS");
-  const char *num_trace_threads = getenv("NUM_TRACE_THREADS");
+  const char *use_trace_threads = getenv("LUA_USE_TRACE_THREADS");
+  const char *num_trace_threads = getenv("LUA_NUM_TRACE_THREADS");
+  const char *non_signal_collector = getenv("LUA_NON_SIGNAL_COLLECTOR");
 
-  if (use_trace_threads && 
-      (!strcasecmp(use_trace_threads, "true") ||
-       !strcasecmp(use_trace_threads, "on") ||
-       !strcasecmp(use_trace_threads, "1") ||
-       !strcasecmp(use_trace_threads, "yes"))) {
+  if (use_trace_threads && is_bool_env_true(use_trace_threads)) {
     USE_TRACE_THREADS = 1;
   }
 
-  if (num_trace_threads && isdigit(*num_trace_threads)) {
+  if (USE_TRACE_THREADS && num_trace_threads && isdigit(*num_trace_threads)) {
     NUM_TRACE_THREADS = atoi(num_trace_threads);
   }
+
+  if (non_signal_collector && is_bool_env_true(non_signal_collector)) {
+    NON_SIGNAL_COLLECTOR = 1;
+  }
+
 
   atexit(free_last_global_bits);
 
@@ -1050,6 +1058,7 @@ static void make_tls_key(void)
 #endif
   pthread_mutex_init(&all_threads_lock, &m);
   pthread_mutexattr_destroy(&m);
+  pthread_rwlock_init(&trace_rwlock, NULL);
 
   if (USE_TRACE_THREADS && NUM_TRACE_THREADS) {
     /* spin up GC tracing threads */
@@ -1855,12 +1864,12 @@ static void global_trace(lua_State *L)
     return;
   }
 
-#if NON_SIGNAL_COLLECTOR
-/* non-signal collector logic */
-  block_mutators(L);
-#else
-  stop_all_threads(L);
-#endif
+  if (NON_SIGNAL_COLLECTOR) {
+    block_mutators(L);
+  }
+  else {
+    stop_all_threads(L);
+  }
 
 //  VALGRIND_PRINTF_BACKTRACE("STOP'd threads; setting stopped flag, flipping xref\n");
 
@@ -1926,12 +1935,12 @@ static void global_trace(lua_State *L)
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 #endif
 
-#if NON_SIGNAL_COLLECTOR
-  /* Non-signal collector logic */
-  unblock_mutators(L);
-#else
-  resume_threads(L);
-#endif
+  if (NON_SIGNAL_COLLECTOR) {
+    unblock_mutators(L);
+  }
+  else {
+    resume_threads(L);
+  }
 
   unlock_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
@@ -1980,7 +1989,12 @@ int luaC_localgc (lua_State *L, int greedy)
 int luaC_fullgc (lua_State *L)
 {
   global_trace(L);
-  return luaC_localgc(L, 1);
+  /* We do a step garbage collection here, as opposed to a full one.  New objects
+   * are pushed into the global thread when threads are destroyed, and a step
+   * garbage collection is sufficient to reclaim enough memory.  This has been
+   * run in production and memory is stable.  The reason for not doing a full
+   * cycle is that it's relatively time-consuming. */
+  return luaC_localgc(L, 0);
 }
 
 /* The semantics of lua_close are to free up everything associated
