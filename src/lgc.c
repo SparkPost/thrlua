@@ -968,7 +968,7 @@ static void stop_all_threads(lua_State *L)
 
 /* caller MUST hold all_threads_lock */
 /* MUST be async signal safe */
-static int resume_threads(lua_State *L)
+static void resume_threads(lua_State *L)
 {
   signal_all_threads(L, LUA_SIG_RESUME);
   while (ck_pr_load_32(&parked_threads)) {
