@@ -226,7 +226,7 @@ static int auxgetinfo (lua_State *L, const char *what, lua_Debug *ar,
 
 
 LUA_API int lua_getinfo (lua_State *L, const char *what, lua_Debug *ar) {
-  int status;
+  int status = 0;
   Closure *f = NULL;
   CallInfo *ci = NULL;
   lua_lock(L);

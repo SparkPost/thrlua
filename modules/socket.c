@@ -210,7 +210,7 @@ static int tcp_sockname(lua_State *L)
 {
   struct lua_socket *s = luaL_checkudata(L, 1, SOCKET_MT_TCP);
   struct sockaddr_storage sa;
-  int salen = sizeof(&sa);
+  int salen = sizeof(sa);
   int res;
 
   res = getsockname(s->fd, (struct sockaddr*)&sa, &salen);
@@ -226,7 +226,7 @@ static int tcp_peername(lua_State *L)
 {
   struct lua_socket *s = luaL_checkudata(L, 1, SOCKET_MT_TCP);
   struct sockaddr_storage sa;
-  int salen = sizeof(&sa);
+  int salen = sizeof(sa);
   int res;
 
   res = getpeername(s->fd, (struct sockaddr*)&sa, &salen);
