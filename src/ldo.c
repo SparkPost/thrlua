@@ -299,7 +299,7 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
   }
   else {  /* if is a C function, call it */
     CallInfo *ci;
-    int n;
+    int n = 0;
     luaD_checkstack(L, LUA_MINSTACK);  /* ensure minimum stack size */
     ci = inc_ci(L);  /* now `enter' new function */
     ci->func = restorestack(L, funcr);

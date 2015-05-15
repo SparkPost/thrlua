@@ -604,6 +604,8 @@ static int verify (lua_State *L, Instruction *op, const Instruction *p,
   while (p != e) {
     switch ((Opcode)p->i.code) {
       case IRet: {
+        if (backtop <= 0)
+          return luaL_error(L, "empty calls/choices");
         p = back[--backtop].p;
         continue;
       }

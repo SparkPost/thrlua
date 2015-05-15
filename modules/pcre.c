@@ -110,7 +110,7 @@ errnum: this will contain a numeric representation of the error condition.
 static int perform_regex(lua_State *thr, int mode)
 {
   const char *pattern, *subject, *replacement, *repend;
-  size_t patlen, subjlen, replen;
+  size_t patlen, subjlen, replen = 0;
   const char *error = NULL;
   int erroroffset;
   int rc, i;

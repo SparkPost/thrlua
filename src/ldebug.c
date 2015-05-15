@@ -63,7 +63,7 @@ LUA_API int lua_gethookcount (lua_State *L) {
 
 
 LUA_API int lua_getstack (lua_State *L, int level, lua_Debug *ar) {
-  int status;
+  int status = 0;
   CallInfo *ci;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {

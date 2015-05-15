@@ -399,7 +399,8 @@ void luaH_free (lua_State *L, Table *t) {
 
 
 static Node *getfreepos (Table *t) {
-  while (t->lastfree-- > t->node) {
+  while (t->lastfree > t->node) {
+    t->lastfree--;
     if (ttisnil(gkey(t->lastfree)))
       return t->lastfree;
   }
