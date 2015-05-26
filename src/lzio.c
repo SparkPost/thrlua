@@ -10,9 +10,9 @@
 #include "thrlua.h"
 
 int luaZ_fill (ZIO *z) {
-  size_t size;
+  size_t size = 0;
   lua_State *L = z->L;
-  const char *buff;
+  const char *buff = NULL;
   lua_unlock(L);
   LUAI_TRY_BLOCK(L) {
     buff = z->reader(L, z->data, &size);

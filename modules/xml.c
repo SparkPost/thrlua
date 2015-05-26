@@ -302,6 +302,7 @@ static int lua_xmlnode_attr(lua_State *L)
       return 1;
   }
   luaL_error(L,"must be called with one argument");
+  return 0;
 }
 
 /* node:setns(ns) -- see node:newns */
@@ -311,6 +312,7 @@ static int lua_xmlnode_setns(lua_State *L)
   xmlNsPtr ns = luaL_checkudata(L, 2, MT_NS);
 
   xmlSetNs(node, ns);
+  return 0;
 }
 
 /* ns = node:newns(node, uri, prefix) */

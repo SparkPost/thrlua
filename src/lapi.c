@@ -132,7 +132,7 @@ LUA_API lua_CFunction lua_atpanic (lua_State *L, lua_CFunction panicf) {
 
 LUA_API lua_State *lua_newthread (lua_State *L)
 {
-  lua_State *L1;
+  lua_State *L1 = NULL;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
@@ -342,7 +342,7 @@ LUA_API int lua_rawequal (lua_State *L, int index1, int index2) {
 
 LUA_API int lua_equal (lua_State *L, int index1, int index2) {
   StkId o1, o2;
-  int i;
+  int i = 0;
   lua_lock(L);  /* may call tag method */
   LUAI_TRY_BLOCK(L) {
     o1 = index2adr(L, index1);
@@ -358,7 +358,7 @@ LUA_API int lua_equal (lua_State *L, int index1, int index2) {
 
 LUA_API int lua_lessthan (lua_State *L, int index1, int index2) {
   StkId o1, o2;
-  int i;
+  int i = 0;
   lua_lock(L);  /* may call tag method */
   LUAI_TRY_BLOCK(L) {
     o1 = index2adr(L, index1);
@@ -433,7 +433,7 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
     case LUA_TSTRING: return tsvalue(o)->len;
     case LUA_TUSERDATA: return uvalue(o)->len;
     case LUA_TTABLE: {
-      size_t n;
+      size_t n = 0;
       Table *table = hvalue(o);
 
       luaH_rdlock(L, table);
@@ -445,7 +445,7 @@ LUA_API size_t lua_objlen (lua_State *L, int idx) {
       return n;
     }
     case LUA_TNUMBER: {
-      size_t l;
+      size_t l = 0;
       lua_lock(L);  /* `luaV_tostring' may create a new string */
       LUAI_TRY_BLOCK(L) {
         l = (luaV_tostring(L, o) ? tsvalue(o)->len : 0);
@@ -599,7 +599,7 @@ LUA_API void lua_pushstring (lua_State *L, const char *s) {
 
 LUA_API const char *lua_pushvfstring (lua_State *L, const char *fmt,
                                       va_list argp) {
-  const char *ret;
+  const char *ret = NULL;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
@@ -612,7 +612,7 @@ LUA_API const char *lua_pushvfstring (lua_State *L, const char *fmt,
 
 
 LUA_API const char *lua_pushfstring (lua_State *L, const char *fmt, ...) {
-  const char *ret;
+  const char *ret = NULL;
   va_list argp;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
@@ -775,7 +775,7 @@ LUA_API void lua_createtable (lua_State *L, int narray, int nrec) {
 LUA_API int lua_getmetatable (lua_State *L, int objindex) {
   const TValue *obj;
   Table *mt = NULL;
-  int res;
+  int res=0;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     obj = index2adr(L, objindex);
@@ -1116,7 +1116,7 @@ LUA_API int lua_load (lua_State *L, lua_Reader reader, void *data,
 
 
 LUA_API int lua_dump (lua_State *L, lua_Writer writer, void *data) {
-  int status;
+  int status = 1;
   TValue *o;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
@@ -1220,7 +1220,7 @@ LUA_API int lua_error (lua_State *L) {
 LUA_API int lua_next (lua_State *L, int idx) {
   StkId t;
   Table *table = NULL;
-  int more;
+  int more = 0;
 
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
@@ -1315,7 +1315,7 @@ LUA_API void lua_concat (lua_State *L, int n) {
 }
 
 LUA_API void *lua_newuserdata (lua_State *L, size_t size) {
-  Udata *u;
+  Udata *u = NULL;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
@@ -1325,7 +1325,7 @@ LUA_API void *lua_newuserdata (lua_State *L, size_t size) {
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
-  return u + 1;
+  return (u ? (u + 1) : NULL);
 }
 
 
@@ -1351,7 +1351,7 @@ static const char *aux_upvalue (StkId fi, int n, TValue **val, Closure **fptr) {
 
 
 LUA_API const char *lua_getupvalue (lua_State *L, int funcindex, int n) {
-  const char *name;
+  const char *name = NULL;
   TValue *val;
 
   lua_lock(L);
@@ -1369,7 +1369,7 @@ LUA_API const char *lua_getupvalue (lua_State *L, int funcindex, int n) {
 
 
 LUA_API const char *lua_setupvalue (lua_State *L, int funcindex, int n) {
-  const char *name;
+  const char *name = NULL;
   TValue *val;
   StkId fi;
   Closure *f;
