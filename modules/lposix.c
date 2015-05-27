@@ -622,7 +622,6 @@ static int Pdup(lua_State *L)			/** dup(old,[new]) */
   	FILE **newf = (FILE **)lua_touserdata(L, 2);
 	int fd;
 	const char *msg = "dup2";
-	fflush(*newf);
 	if (newf == NULL) {
 		fd = dup(fileno(*oldf));
 		msg = "dup";

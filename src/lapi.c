@@ -1038,7 +1038,7 @@ static void f_call (lua_State *L, void *ud) {
 
 LUA_API int lua_pcall (lua_State *L, int nargs, int nresults, int errfunc) {
   struct CallS c;
-  int status;
+  int status = -1;
   ptrdiff_t func;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
@@ -1086,7 +1086,7 @@ static void f_Ccall (lua_State *L, void *ud) {
 
 LUA_API int lua_cpcall (lua_State *L, lua_CFunction func, void *ud) {
   struct CCallS c;
-  int status;
+  int status = -1;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     c.func = func;
@@ -1102,7 +1102,7 @@ LUA_API int lua_cpcall (lua_State *L, lua_CFunction func, void *ud) {
 LUA_API int lua_load (lua_State *L, lua_Reader reader, void *data,
     const char *chunkname) {
   ZIO z;
-  int status;
+  int status = -1;
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     if (!chunkname) chunkname = "?";
