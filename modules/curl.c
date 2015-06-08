@@ -639,8 +639,10 @@ static size_t file_writer_callback(char *ptr, size_t size,
 																   size_t nmemb, void *userdata) 
 {
 	curlT* c = (curlT *)userdata;
+	int ret;
 
-	return write(c->tmp_fd, ptr, size * nmemb);
+	while ((ret = write(c->tmp_fd, ptr, size * nmemb)) == -1 && errno == EINTR) ; 
+	return ret;
 }
 
 static int lcurl_setup_fetch_into_file(lua_State* L) 
