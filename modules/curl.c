@@ -17,6 +17,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <sys/param.h>
 #include <curl/curl.h>
 #include <curl/easy.h>
 
@@ -254,6 +255,9 @@ typedef struct
 #define C_OPT_SL(n) struct curl_slist *list_##n;
 	ALL_CURL_OPT
 
+	char file_path[MAXPATHLEN];
+	int tmp_fd;
+	char tmp_file_path[MAXPATHLEN];
 } curlT;
 
 static inline is_ref_type(int t)
@@ -385,6 +389,8 @@ static int lcurl_easy_init(lua_State* L)
 	curlT* c = (curlT*)lua_newuserdata(L, sizeof(curlT));
 
 	memset(c, 0, sizeof(*c));
+	/* Make sure we start with a bogus FD */
+	c->tmp_fd = -1;
 
 	/* open curl handle */
 	c->curl = curl_easy_init();
@@ -629,6 +635,40 @@ static int apply_func_data_option(lua_State *L, curlT *c,
 	return 1;
 }
 
+static size_t file_writer_callback(char *ptr, size_t size, 
+																   size_t nmemb, void *userdata) 
+{
+	curlT* c = (curlT *)userdata;
+
+	return write(c->tmp_fd, ptr, size * nmemb);
+}
+
+static int lcurl_setup_fetch_into_file(lua_State* L) 
+{
+	union luaValueT v;                   /* the result option value */
+	int curlOpt;                         /* the provided option code  */
+	CURLcode code;                       /* return error code from curl */
+	curlT* c = tocurl(L, 1);             /* get self object */
+	const char *file;
+	void *ref = NULL;
+
+	luaL_checktype(L, 2, LUA_TSTRING);
+  file = lua_tostring(L, 2);
+  snprintf(c->file_path, sizeof(c->file_path), "%s", file);
+	snprintf(c->tmp_file_path, sizeof(c->tmp_file_path), "%s.XXXXXX", file);
+  c->tmp_fd = mkstemp(c->tmp_file_path);
+	if (c->tmp_fd == -1) {
+		memset(c->file_path, 0, sizeof(c->file_path));
+		memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
+		luaL_error(L, "Failed to open %s, errno %d\n", file, errno);
+	}
+
+  curl_easy_setopt(c->curl, CURLOPT_WRITEFUNCTION, file_writer_callback);
+	curl_easy_setopt(c->curl, CURLOPT_WRITEDATA, c);
+	lua_pushboolean(L, 1);
+	return 1;
+}
+
 /* set any supported curl option (see also ALL_CURL_OPT) */
 static int lcurl_easy_setopt(lua_State* L)
 {
@@ -749,6 +789,14 @@ static int lcurl_easy_perform(lua_State* L)
 	{
 		/* on success return true */
 		lua_pushboolean(L, 1);
+		/* If we were writing a file, move it to the real location */
+		if (c->file_path[0] && c->tmp_file_path[0] && c->tmp_fd != -1) {
+			close(c->tmp_fd);
+			rename(c->tmp_file_path, c->file_path);
+			c->tmp_fd = -1;
+			memset(c->file_path, 0, sizeof(c->file_path));
+			memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
+		}
 		return 1;
 	}
 	/* on fail return nil, error message, error code */
@@ -800,6 +848,7 @@ static const struct luaL_reg luacurl_meths[] =
 {
 	{"close", lcurl_easy_close},
 	{"setopt", lcurl_easy_setopt},
+	{"fetch_into_file", lcurl_setup_fetch_into_file},
 	{"perform", lcurl_easy_perform},
 	{"getinfo", lcurl_easy_getinfo},
 	{"__gc", lcurl_easy_close},
