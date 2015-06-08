@@ -636,7 +636,7 @@ static int apply_func_data_option(lua_State *L, curlT *c,
 }
 
 static size_t file_writer_callback(char *ptr, size_t size, 
-																   size_t nmemb, void *userdata) 
+                                   size_t nmemb, void *userdata) 
 {
 	curlT* c = (curlT *)userdata;
 	int ret;
