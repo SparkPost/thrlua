@@ -93,7 +93,7 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
       const TValue *res;
-      int done;
+      int done = 0;
 
       luaH_rdlock(L, h);
       LUAI_TRY_BLOCK(L) {
@@ -136,7 +136,7 @@ void luaV_settable (lua_State *L, const TValue *t, TValue *key, StkId val) {
     if (ttistable(t)) {  /* `t' is a table? */
       Table *h = hvalue(t);
       TValue *oldval;
-      int done;
+      int done = 0;
 
       luaH_wrlock(L, h);
       LUAI_TRY_BLOCK(L) {

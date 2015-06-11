@@ -216,7 +216,7 @@ static int addk (FuncState *fs, TValue *k, TValue *v) {
   TValue *idx;
   Proto *f = fs->f;
   int oldsize = f->sizek;
-  int retval;
+  int retval = 0;
 
   luaH_wrlock(L, fs->h);
   LUAI_TRY_BLOCK(L) {

@@ -708,7 +708,7 @@ static int jb_new_vm(lua_State *L)
   JavaVMInitArgs args;
   int nargs = lua_gettop(L);
   int i;
-  jint res;
+  jint res = -1;
   JNIEnv *jenv = NULL;
   void *lib;
   const char *jvmname;

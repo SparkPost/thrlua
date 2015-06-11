@@ -895,7 +895,9 @@ static void thread_resume_requested(int sig)
   int save = errno;
 
   pt = luaC_get_per_thread_raw();
-  ck_pr_store_uint(&pt->wake, 1);
+  if (pt != NULL) {
+    ck_pr_store_uint(&pt->wake, 1);
+  }
 
   errno = save;
 }

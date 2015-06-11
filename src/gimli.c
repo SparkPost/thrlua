@@ -324,7 +324,7 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
 
       if (!gimli_determine_source_line_number(proc, (gimli_addr_t)cl.c.f,
             file, sizeof(file), &line)) {
-        line = -1;
+        line = 0;
       }
       sym = gimli_pc_sym_name(proc, (gimli_addr_t)cl.c.f, buf, sizeof(buf));
       printf("[C:%p] ", cl.c.f);
@@ -334,8 +334,8 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         free(l);
       }
       printf("\n    %s", sym);
-      if (line >= 0) {
-        printf("\n    %s:%d", file, line);
+      if (line > 0) {
+        printf("\n    %s:%lu", file, line);
       }
       printf("\n");
     } else {
