@@ -639,6 +639,7 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
   LUAI_TRY_BLOCK(L) {
     luaC_checkGC(L);
     api_checknelems(L, n);
+    luaC_blockcollector(L);
     cl = luaF_newCclosure(L, n, luaA_getcurrenv(L));
     cl->c.f = fn;
     cl->c.fname = name;
@@ -646,6 +647,7 @@ LUA_API void lua_pushcclosure2(lua_State *L, const char *name,
     while (n--) {
       luaC_writebarriervv(L, &cl->gch, &cl->c.upvalue[n], L->top+n);
     }
+    luaC_unblockcollector(L);
     setclvalue(L, L->top, cl);
     api_incr_top(L);
   } LUAI_TRY_FINALLY(L) {
@@ -1074,9 +1076,11 @@ struct CCallS {  /* data to `f_Ccall' */
 static void f_Ccall (lua_State *L, void *ud) {
   struct CCallS *c = cast(struct CCallS *, ud);
   Closure *cl;
+  luaC_blockcollector(L);
   cl = luaF_newCclosure(L, 0, luaA_getcurrenv(L));
   cl->c.f = c->func;
   setclvalue(L, L->top, cl);  /* push function */
+  luaC_unblockcollector(L);
   api_incr_top(L);
   setpvalue(L->top, c->ud);  /* push only argument */
   api_incr_top(L);
