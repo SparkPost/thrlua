@@ -92,7 +92,7 @@ static void generate_error_message(struct lua_yaml_loader *loader) {
    luaL_addstring(&b, buf);
 
    if (loader->parser.problem_mark.line || loader->parser.problem_mark.column) {
-      snprintf(buf, sizeof(buf), ", line: %d, column: %d\n",
+      snprintf(buf, sizeof(buf), ", line: %u, column: %u\n",
          loader->parser.problem_mark.line + 1,
          loader->parser.problem_mark.column + 1);
       luaL_addstring(&b, buf);
@@ -101,7 +101,7 @@ static void generate_error_message(struct lua_yaml_loader *loader) {
    }
 
    if (loader->parser.context) {
-      snprintf(buf, sizeof(buf), "%s at line: %d, column: %d\n",
+      snprintf(buf, sizeof(buf), "%s at line: %u, column: %u\n",
          loader->parser.context,
          loader->parser.context_mark.line + 1,
          loader->parser.context_mark.column + 1);
