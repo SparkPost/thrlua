@@ -297,6 +297,8 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
   int oldasize = t->sizearray;
   int oldhsize = t->lsizenode;
   Node *nold = t->node;  /* save old hash ... */
+
+  luaC_blockcollector(L);
   if (nasize > oldasize)  /* array part must grow? */
     setarrayvector(L, t, nasize);
   /* create new hash part with appropriate size */
@@ -329,6 +331,7 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
     /* free old array */
     luaM_freearray(L, LUA_MEM_TABLE_NODES, nold, twoto(oldhsize), Node);
   }
+  luaC_unblockcollector(L);
 }
 
 
