@@ -427,6 +427,9 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
     }
     lua_assert(n != dummynode);
     othern = mainposition(t, key2tval(mp));
+    /* This whole process is mucking with data structures that the global
+     * trace needs to traverse.  Block the collector */
+    luaC_blockcollector(L);
     if (othern != mp) {  /* is colliding node out of its main position? */
       /* yes; move colliding node into free position */
       while (gnext(othern) != mp) othern = gnext(othern);  /* find previous */
@@ -441,6 +444,7 @@ static TValue *newkey (lua_State *L, Table *t, const TValue *key) {
       gnext(mp) = n;
       mp = n;
     }
+    luaC_unblockcollector(L);
   }
   luaC_writebarriervv(L, &t->gch, key2tval(mp), key);
   lua_assert(ttisnil(gval(mp)));
