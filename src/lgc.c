@@ -194,10 +194,7 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
 {
   if (lval->owner != rval->owner) {
     if (!force && rval->xref != G(L)->isxref) {
-      /* If force isn't set, then we're doing an incremental xref set.  Mark
-       * it in the rval's owner's count.  This is just a hint so we don't
-       * have to bother with the atomics */
-      rval->owner->owner->xref_count++;
+      ck_pr_inc_32(&rval->owner->owner->xref_count);
     }
     ck_pr_store_32(&rval->xref, G(L)->isxref);
   } else if (force && is_unknown_xref(L, rval)) {
