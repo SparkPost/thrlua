@@ -193,12 +193,12 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   int force)
 {
   if (lval->owner != rval->owner) {
-    if (!force && rval->xref != G(L)->isxref) {
+    if (!force && ck_pr_load_32(&rval->xref) != ck_pr_load_32(&G(L)->isxref)) {
       ck_pr_inc_32(&rval->owner->owner->xref_count);
     }
-    ck_pr_store_32(&rval->xref, G(L)->isxref);
+    ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->isxref));
   } else if (force && is_unknown_xref(L, rval)) {
-    ck_pr_store_32(&rval->xref, G(L)->notxref);
+    ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->notxref));
   }
 }
 
@@ -221,7 +221,7 @@ static INLINE void mark_object(lua_State *L, GCheader *obj)
 
   if (L->heap != obj->owner) {
     /* external reference */
-    ck_pr_store_32(&obj->xref, G(L)->isxref);
+    ck_pr_store_32(&obj->xref, ck_pr_load_32(&G(L)->isxref));
     return;
   }
 
@@ -450,10 +450,10 @@ void luaC_writebarrierov(lua_State *L, GCheader *object,
   lua_assert(ro != NULL);
   checkconsistency(rvalue);
 
+  BLOCK_COLLECTOR();
   mark_object(L, ro);
   set_xref(L, object, ro, 0);
 
-  BLOCK_COLLECTOR();
   ck_pr_store_ptr(lvalue, ro);
   UNBLOCK_COLLECTOR();
 }
@@ -463,10 +463,10 @@ void luaC_writebarriervo(lua_State *L, GCheader *object,
 {
   thr_State *pt = luaC_get_per_thread(L);
 
+  block_collector(L, pt);
   set_xref(L, object, rvalue, 0);
   mark_object(L, rvalue);
 
-  block_collector(L, pt);
   lvalue->value.gc = rvalue;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
@@ -481,13 +481,13 @@ void luaC_writebarriervv(lua_State *L, GCheader *object,
 {
   thr_State *pt = luaC_get_per_thread(L);
 
+  block_collector(L, pt);
   if (iscollectable(rvalue)) {
     GCheader *ro = gcvalue(rvalue);
     set_xref(L, object, ro, 0);
     mark_object(L, ro);
   }
 
-  block_collector(L, pt);
   lvalue->value = rvalue->value;
   /* RACE: a global trace can trigger here and catch us pants-down
    * wrt ->tt != value->tt; so this section must be protected by blocking
@@ -501,12 +501,12 @@ void luaC_writebarrier(lua_State *L, GCheader *object,
 {
   GET_PT_FOR_NON_SIGNAL_COLLECTOR();
 
+  BLOCK_COLLECTOR();
   if (rvalue) {
     set_xref(L, object, rvalue, 0);
     mark_object(L, rvalue);
   }
 
-  BLOCK_COLLECTOR();
   ck_pr_store_ptr(lvalue, rvalue);
   UNBLOCK_COLLECTOR();
 }
@@ -1268,7 +1268,7 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->owner = L->heap;
   o->tt = tt;
   o->marked = !L->black;
-  o->xref = G(L)->notxref;
+  o->xref = ck_pr_load_32(&G(L)->notxref);
   make_grey(L, o);
   /* The collector can be walking our heap, which isn't safe.  So block it
    * while we're adding to it */
@@ -1315,7 +1315,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       o = &n->gch;
       o->marked = !n->black;
 
-      n->gch.xref = G(L)->notxref;
+      n->gch.xref = ck_pr_load_32(&G(L)->notxref);
 
       lua_unlock(L);
       break;
