@@ -869,6 +869,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         int nup, j;
         p = cl->p->p[GETARG_Bx(i)];
         nup = p->nups;
+        luaC_blockcollector(L);
         ncl = luaF_newLclosure(L, nup, gch2h(cl->env));
         ncl->l.p = p;
         for (j=0; j<nup; j++, pc++) {
@@ -879,6 +880,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             ncl->l.upvals[j] = luaF_findupval(L, base + GETARG_B(*pc));
           }
         }
+        luaC_unblockcollector(L);
         setclvalue(L, ra, ncl);
         Protect(luaC_checkGC(L));
         continue;
