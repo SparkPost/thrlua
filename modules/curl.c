@@ -801,6 +801,16 @@ static int lcurl_easy_perform(lua_State* L)
 		}
 		return 1;
 	}
+	else
+	{
+		if (c->tmp_fd != -1) {
+			close(c->tmp_fd);
+			unlink(c->tmp_file_path);
+			memset(c->file_path, 0, sizeof(c->file_path));
+			memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
+			c->tmp_fd = -1;
+		}
+	}
 	/* on fail return nil, error message, error code */
 	lua_pushnil(L);
 	lua_pushstring(L, curl_easy_strerror(code));
@@ -824,6 +834,14 @@ static int lcurl_easy_close(lua_State* L)
 	if (c->curl) {
 		curl_easy_cleanup(c->curl);
 		c->curl = NULL;
+	}
+
+	if (c->tmp_fd != -1) {
+		close(c->tmp_fd);
+		unlink(c->tmp_file_path);
+		memset(c->file_path, 0, sizeof(c->file_path));
+		memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
+		c->tmp_fd = -1;
 	}
 
 	clear_func_and_data(L, &c->reader);
