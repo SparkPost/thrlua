@@ -790,7 +790,8 @@ static int lcurl_easy_perform(lua_State* L)
 
 	if (CURLE_OK == code)
 	{
-		/* If we were writing a file, move it to the real location */
+		/* If we were writing a file, and we get an http status of 200,
+		 * then move it to the real location */
 		if (c->file_path[0] && c->tmp_file_path[0] && c->tmp_fd != -1) {
       curl_easy_getinfo(c->curl, CURLINFO_RESPONSE_CODE, &http_code);
 			if (http_code != 200) {
