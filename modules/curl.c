@@ -793,7 +793,7 @@ static int lcurl_easy_perform(lua_State* L)
 		/* If we were writing a file, and we get an http status of 200,
 		 * then move it to the real location */
 		if (c->file_path[0] && c->tmp_file_path[0] && c->tmp_fd != -1) {
-      curl_easy_getinfo(c->curl, CURLINFO_RESPONSE_CODE, &http_code);
+			curl_easy_getinfo(c->curl, CURLINFO_RESPONSE_CODE, &http_code);
 			if (http_code != 200) {
 				close(c->tmp_fd);
 				unlink(c->tmp_file_path);
@@ -804,7 +804,7 @@ static int lcurl_easy_perform(lua_State* L)
 				lua_pushnil(L);
 				lua_pushstring(L, "CURL_OK, but http status NOT 200");
 				lua_pushnumber(L, http_code);
-        return 3;
+				return 3;
 			}
 			close(c->tmp_fd);
 			rename(c->tmp_file_path, c->file_path);
