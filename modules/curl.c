@@ -782,6 +782,7 @@ static int lcurl_easy_perform(lua_State* L)
 {
 	CURLcode code;                       /* return error code from curl */
 	curlT* c = tocurl(L, 1);             /* get self object */
+	long http_code = 0;
 	
 	c->L = L;
 	code = curl_easy_perform(c->curl);   /* do the curl perform */
@@ -789,16 +790,30 @@ static int lcurl_easy_perform(lua_State* L)
 
 	if (CURLE_OK == code)
 	{
-		/* on success return true */
-		lua_pushboolean(L, 1);
-		/* If we were writing a file, move it to the real location */
+		/* If we were writing a file, and we get an http status of 200,
+		 * then move it to the real location */
 		if (c->file_path[0] && c->tmp_file_path[0] && c->tmp_fd != -1) {
+			curl_easy_getinfo(c->curl, CURLINFO_RESPONSE_CODE, &http_code);
+			if (http_code != 200) {
+				close(c->tmp_fd);
+				unlink(c->tmp_file_path);
+				c->tmp_fd = -1;
+				memset(c->file_path, 0, sizeof(c->file_path));
+				memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
+				/* on fail return nil, error message, http_code */
+				lua_pushnil(L);
+				lua_pushstring(L, "CURL_OK, but http status NOT 200");
+				lua_pushnumber(L, http_code);
+				return 3;
+			}
 			close(c->tmp_fd);
 			rename(c->tmp_file_path, c->file_path);
 			c->tmp_fd = -1;
 			memset(c->file_path, 0, sizeof(c->file_path));
 			memset(c->tmp_file_path, 0, sizeof(c->tmp_file_path));
 		}
+		/* on success return true */
+		lua_pushboolean(L, 1);
 		return 1;
 	}
 	else
