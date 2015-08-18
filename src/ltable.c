@@ -298,6 +298,10 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
   int oldhsize = t->lsizenode;
   Node *nold = t->node;  /* save old hash ... */
 
+  /* There seems to be a problem with the dummynode logic and empty hash
+   * tables.  So ensure there's never an empty hash table */
+  nhsize = MAX(1, nhsize);
+
   luaC_blockcollector(L);
   if (nasize > oldasize)  /* array part must grow? */
     setarrayvector(L, t, nasize);
@@ -384,7 +388,9 @@ Table *luaH_new (lua_State *L, int narray, int nhash) {
   t->flags = cast_byte(~0);
   t->node = cast(Node *, dummynode);
   setarrayvector(L, t, narray);
-  setnodevector(L, t, nhash);
+  /* There seems to be a problem with the dummynode logic sometimes, so
+   * just avoid it by ensuring every table has at least one node */
+  setnodevector(L, t, MAX(1, nhash));
   ck_pr_store_uint(&t->initialized, 1);
   return t;
 }
