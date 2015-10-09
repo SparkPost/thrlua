@@ -65,6 +65,12 @@ LUALIB_API void (luaL_checkany) (lua_State *L, int narg);
 LUALIB_API int   (luaL_newmetatable) (lua_State *L, const char *tname);
 LUALIB_API void *(luaL_checkudata) (lua_State *L, int ud, const char *tname);
 
+/* Like luaL_checkudata, but does not throw a type error
+ * if the userdata type does not match. Returns NULL if the value
+ * is not a userdata, or if it is a userdata but does not match the type.
+ */
+LUALIB_API void *(luaL_checkudata_noerror) (lua_State *L, int ud, const char *tname);
+
 LUALIB_API void (luaL_where) (lua_State *L, int lvl);
 LUALIB_API int (luaL_error) (lua_State *L, const char *fmt, ...);
 

@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(107);
+plan(151);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -233,4 +233,87 @@ nj.results = nested4
 
 is(nj.results[1][1].flag, true, "Table nested in array nested in array")
 is(nj.results[1][2].flag2, false, "Table nested in array nested in array 2")
+
+-- json_is_array
+local jia_str = [[
+{
+  "recipients": [
+  ],
+  "recipients2": [
+    "fred@domain.com",
+  ],
+  "obj": {
+  },
+  "obj2": {
+    "foo": "bar"
+  },
+  "bool": true,
+  "number": 42,
+  "str": "string",
+  "anull": null
+}
+]]
+
+local jia = json.decode(jia_str)
+
+ok(json.is_json(jia), "JSON userdata recognised")
+is(json.is_json("notjson"), false, "Non-JSON userdata not detected as JSON")
+
+ok(json.is_array(jia.recipients), "is_array on empty array")
+ok(json.is_array(jia.recipients2), "is_array on non-empty array")
+is(json.is_array(jia.obj), false, "is_array on empty object")
+is(json.is_array(jia.obj2), false, "is_array on non-empty object")
+is(json.is_array(jia.bool), false, "is_array on boolean")
+is(json.is_array(jia.number), false, "is_array on number")
+is(json.is_array(jia.str), false, "is_array on string")
+is(json.is_array(jia.anull), false, "is_array on null")
+
+-- json_is_object
+ok(json.is_object(jia), "is_object on JSON")
+ok(json.is_object(jia.obj), "is_object on empty object")
+ok(json.is_object(jia.obj2), "is_object on non-empty object")
+is(json.is_object(jia.recipients), false, "is_object on empty array")
+is(json.is_object(jia.recipients2), false, "is_object on non-empty array")
+is(json.is_object(jia.bool), false, "is_object on boolean")
+is(json.is_object(jia.number), false, "is_object on number")
+is(json.is_object(jia.str), false, "is_object on string")
+is(json.is_object(jia.anull), false, "is_object on null")
+
+-- json_is_boolean
+ok(json.is_boolean(jia.bool), "is_boolean on boolean")
+is(json.is_boolean(jia.recipients), false, "is_boolean on empty array")
+is(json.is_boolean(jia.recipients2), false, "is_boolean on non-empty array")
+is(json.is_boolean(jia.obj), false, "is_boolean on empty object")
+is(json.is_boolean(jia.obj2), false, "is_boolean on non-empty object")
+is(json.is_boolean(jia.number), false, "is_boolean on number")
+is(json.is_boolean(jia.str), false, "is_boolean on string")
+is(json.is_boolean(jia.anull), false, "is_boolean on null")
+
+-- json_is_number
+ok(json.is_number(jia.number), "is_number on number")
+is(json.is_number(jia.recipients), false, "is_number on empty array")
+is(json.is_number(jia.recipients2), false, "is_number on non-empty array")
+is(json.is_number(jia.bool), false, "is_number on boolean")
+is(json.is_number(jia.obj), false, "is_number on empty object")
+is(json.is_number(jia.obj2), false, "is_number on non-empty object")
+is(json.is_number(jia.str), false, "is_number on string")
+is(json.is_number(jia.anull), false, "is_number on null")
+
+-- json_is_string
+ok(json.is_string(jia.str), "is_string on string")
+is(json.is_string(jia.recipients), false, "is_string on empty array")
+is(json.is_string(jia.recipients2), false, "is_string on non-empty array")
+is(json.is_string(jia.bool), false, "is_string on boolean")
+is(json.is_string(jia.number), false, "is_string on number")
+is(json.is_string(jia.obj), false, "is_string on empty object")
+is(json.is_string(jia.obj2), false, "is_string on non-empty object")
+is(json.is_string(jia.anull), false, "is_string on null")
+
+-- json_is_null
+local jin_str = [[
+{ "fred": null }
+]]
+
+local jin = json.decode(jin_str)
+ok(json.is_null(jin.fred), "null value for key")
 

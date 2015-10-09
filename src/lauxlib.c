@@ -111,7 +111,9 @@ LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
 }
 
 
-LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname) {
+static void *luaL_checkudata_internal (lua_State *L, int ud,
+                                       const char *tname, const int error_ok)
+{
   void *p = lua_touserdata(L, ud);
   const char *reason = "unknown";
 
@@ -134,10 +136,21 @@ LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname) {
   VALGRIND_PRINTF_BACKTRACE("userdata p=%p != type %s (%s) registry=%p\n",
     p, tname, reason, hvalue(registry(L)));
 #endif
-  luaL_typerror(L, ud, tname);  /* else error */
-  return NULL;  /* to avoid warnings */
+  if (error_ok) {
+    luaL_typerror(L, ud, tname);  /* else error */
+  }
+  return NULL;
 }
 
+LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname)
+{
+  return luaL_checkudata_internal(L, ud, tname, 1 /* error on mismatch */);
+}
+
+LUALIB_API void *luaL_checkudata_noerror (lua_State *L, int ud, const char *tname)
+{
+  return luaL_checkudata_internal(L, ud, tname, 0 /* no errors on mismatch */);
+}
 
 LUALIB_API void luaL_checkstack (lua_State *L, int space, const char *mes) {
   if (!lua_checkstack(L, space))

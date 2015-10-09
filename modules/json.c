@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2011-2015 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any
@@ -382,6 +382,69 @@ static int ljson_strerror(lua_State *L)
   return 1;
 }
 
+static int ljson_is_json(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  lua_pushboolean(L, json != NULL);
+  return 1;
+}
+
+static int ljson_is_array(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  int matched = 0;
+
+  if (json) {
+    matched = json_object_is_type(json, json_type_array);
+  }
+  lua_pushboolean(L, matched ? 1 : 0);
+  return 1;
+}
+
+static int ljson_is_object(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  int matched = 0;
+
+  if (json) {
+    matched = json_object_is_type(json, json_type_object);
+  }
+  lua_pushboolean(L, matched ? 1 : 0);
+  return 1;
+}
+
+static int ljson_is_boolean(lua_State *L)
+{
+  lua_pushboolean(L, lua_isboolean(L, 1));
+  return 1;
+}
+
+static int ljson_is_number(lua_State *L)
+{
+  lua_pushboolean(L, lua_isnumber(L, 1));
+  return 1;
+}
+
+static int ljson_is_string(lua_State *L)
+{
+  int matched = (lua_type(L, 1) == LUA_TSTRING);
+  lua_pushboolean(L, matched ? 1 : 0);
+  return 1;
+}
+
+static int ljson_is_null(lua_State *L)
+{
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  int matched = 0;
+
+  if (json) {
+    /*matched = json_object_is_type(json, json_type_object);*/
+    /* XXX: fix when we represent null as JSON object */
+  }
+  lua_pushboolean(L, matched ? 1 : 0);
+  return 1;
+}
+
 static int encode_json(lua_State *L)
 {
   struct json_object *json;
@@ -426,6 +489,16 @@ static const struct luaL_reg funcs[] = {
   { "free", free_json },
   { "addref", addref_json },
   { "strerror", ljson_strerror },
+
+  { "is_json", ljson_is_json },
+
+  { "is_array", ljson_is_array },
+  { "is_object", ljson_is_object },
+  { "is_boolean", ljson_is_boolean },
+  { "is_number", ljson_is_number },
+  { "is_string", ljson_is_string },
+  { "is_null", ljson_is_null },
+
   { NULL, NULL }
 };
 
