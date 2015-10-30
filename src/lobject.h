@@ -331,48 +331,30 @@ typedef struct Node {
 #define LUA_USE_RW_SPINLOCK 1
 
 #if LUA_USE_RW_SPINLOCK
-typedef struct lua_rwspinlock {
-  uint32_t readers;
-  ck_spinlock_fas_t writer;
-} lua_rwspinlock_t;
 
-static inline void lua_rwspinlock_init(lua_rwspinlock_t *rw)
+static inline void lua_rwspinlock_init(ck_rwlock_t *rw)
 {
-  ck_pr_store_32(&rw->readers, 0);
-  ck_spinlock_fas_init(&rw->writer);
+  ck_rwlock_init(rw);
 }
 
-static inline void lua_rwspinlock_write_lock(lua_rwspinlock_t *rw)
+static inline void lua_rwspinlock_write_lock(ck_rwlock_t *rw)
 {
-  ck_spinlock_fas_lock(&rw->writer);
-  while (ck_pr_load_32(&rw->readers) != 0) {
-    ck_pr_stall();
-  }
+  ck_rwlock_write_lock(rw);
 }
 
-static inline void lua_rwspinlock_write_unlock(lua_rwspinlock_t *rw)
+static inline void lua_rwspinlock_write_unlock(ck_rwlock_t *rw)
 {
-  ck_spinlock_fas_unlock(&rw->writer);
+  ck_rwlock_write_unlock(rw);
 }
 
-static inline void lua_rwspinlock_read_lock(lua_rwspinlock_t *rw)
+static inline void lua_rwspinlock_read_lock(ck_rwlock_t *rw)
 {
-  for (;;) {
-    while (ck_pr_load_uint(&rw->writer.value)) {
-      ck_pr_stall();
-    }
-
-    ck_pr_inc_32(&rw->readers);
-    if (ck_pr_load_uint(&rw->writer.value) == 0) {
-      return;
-    }
-    ck_pr_dec_32(&rw->readers);
-  }
+  ck_rwlock_read_lock(rw);
 }
 
-static inline void lua_rwspinlock_read_unlock(lua_rwspinlock_t *rw)
+static inline void lua_rwspinlock_read_unlock(ck_rwlock_t *rw)
 {
-  ck_pr_dec_32(&rw->readers);
+  ck_rwlock_read_unlock(rw);
 }
 #endif
 
@@ -381,7 +363,7 @@ typedef struct Table {
   lu_byte flags;  /* 1<<p means tagmethod(p) is not present */ 
   lu_byte lsizenode;  /* log2 of size of `node' array */
 #if LUA_USE_RW_SPINLOCK
-  lua_rwspinlock_t lock;
+  ck_rwlock_t lock;
 #else
   pthread_rwlock_t lock;
 #endif
