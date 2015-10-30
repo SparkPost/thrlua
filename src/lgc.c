@@ -25,7 +25,7 @@ static int NUM_TRACE_THREADS = 8;
 
 /* Non-signal collector logic.  This behavior is still experimental, but is
  * showing tremendous promise. */
-static int NON_SIGNAL_COLLECTOR = 0;
+static int NON_SIGNAL_COLLECTOR = 1;
 
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
@@ -176,12 +176,18 @@ static void removeentry(Node *n)
     setttype(key2tval(n), LUA_TDEADKEY);  /* dead key; remove it */
 }
 
-static INLINE int is_unknown_xref(lua_State *L, GCheader *o)
+static INLINE int is_unknown_xref_val(lua_State *L, uint32_t val)
 {
   if ((ck_pr_load_32(&G(L)->isxref) & 3) == 1) {
-    return (ck_pr_load_32(&o->xref) & 2) == 2;
+    return (val & 2) == 2;
   }
-  return (ck_pr_load_32(&o->xref) & 2) == 0;
+  return (val & 2) == 0;
+}
+
+static INLINE int is_unknown_xref(lua_State *L, GCheader *o) {
+  uint32_t val = ck_pr_load_32(&o->xref);
+
+  return is_unknown_xref_val(L, val);
 }
 
 static INLINE int is_not_xref(lua_State *L, GCheader *o)
@@ -197,8 +203,22 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
       ck_pr_inc_32(&rval->owner->owner->xref_count);
     }
     ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->isxref));
-  } else if (force && is_unknown_xref(L, rval)) {
-    ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->notxref));
+  } else if (force) {
+    uint32_t old_val = ck_pr_load_32(&rval->xref);
+
+    if (is_unknown_xref_val(L, old_val)) {
+      /* Here's the issue: There may be another thread marking this as an xref,
+       * and if we mark it as _not_ an xref at the same time, we're gonna have
+       * a bad time.  So, we:
+       *
+       * 1. Load the value and save it locally.
+       * 2. Check if it's unknown.
+       * 3. If it's unknown, we run atomic CAS to compare it against the old
+       *    value and make it 'not' xref.  If somebody else changed it (either to
+       *    not an xref, or an xref), that's cool.
+       */
+      ck_pr_cas_32(&rval->xref, old_val, ck_pr_load_32(&G(L)->notxref));
+    }
   }
 }
 
@@ -1892,9 +1912,9 @@ static void global_trace(lua_State *L)
     TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
       ck_pr_inc_32(&trace_heaps);
       ck_stack_push_upmc(&trace_stack, &h->instack);
+    }
       /* let consumers know they have things to do */
       pthread_cond_broadcast(&trace_cond);
-    }
 
     /* we are a consumer too */
     while (1) {
