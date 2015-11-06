@@ -20,7 +20,7 @@ const char lua_ident[] =
 
 #define api_checkvalidindex(L, i)	api_check(L, (i) != luaO_nilobject)
 
-#define api_incr_top(L)   {api_check(L, L->top < L->ci->top); L->top++;}
+#define api_incr_top(L)   {ck_pr_fence_memory();api_check(L, L->top < L->ci->top); L->top++;}
 
 
 
@@ -202,8 +202,11 @@ LUA_API void lua_settop (lua_State *L, int idx)
   LUAI_TRY_BLOCK(L) {
     if (idx >= 0) {
       api_check(L, idx <= L->stack_last - L->base);
-      while (L->top < L->base + idx)
-        setnilvalue(L->top++);
+      while (L->top < L->base + idx) {
+        setnilvalue(L->top);
+        ck_pr_fence_memory();
+        L->top++;
+      }
       L->top = L->base + idx;
     }
     else {

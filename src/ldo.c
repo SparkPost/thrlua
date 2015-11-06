@@ -200,7 +200,9 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
   Table *htab = NULL;
   StkId base, fixed;
   for (; actual < nfixargs; ++actual)
-    setnilvalue(L->top++);
+    setnilvalue(L->top);
+    ck_pr_fence_memory();
+    L->top++;
 #if defined(LUA_COMPAT_VARARG)
   if (p->is_vararg & VARARG_NEEDSARG) { /* compat. with old-style vararg? */
     int nvar = actual - nfixargs;  /* number of extra arguments */
@@ -222,12 +224,16 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
   fixed = L->top - actual;  /* first fixed argument */
   base = L->top;  /* final position of first argument */
   for (i=0; i<nfixargs; i++) {
-    setobjs2s(L, L->top++, fixed+i);
+    setobjs2s(L, L->top, fixed+i);
+    ck_pr_fence_memory();
+    L->top++;
     setnilvalue(fixed+i);
   }
   /* add `arg' parameter */
   if (htab) {
-    sethvalue(L, L->top++, htab);
+    sethvalue(L, L->top, htab);
+    ck_pr_fence_memory();
+    L->top++;
 //    lua_assert(iswhite(obj2gco(htab)));
   }
   return base;

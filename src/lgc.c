@@ -1064,8 +1064,12 @@ static void make_tls_key(void)
     NUM_TRACE_THREADS = atoi(num_trace_threads);
   }
 
-  if (non_signal_collector && is_bool_env_true(non_signal_collector)) {
-    NON_SIGNAL_COLLECTOR = 1;
+  if (non_signal_collector) {
+    if (is_bool_env_false(non_signal_collector)) {
+      NON_SIGNAL_COLLECTOR = 0;
+    } else {
+      NON_SIGNAL_COLLECTOR = 1;
+    }
   }
 
 

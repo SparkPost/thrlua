@@ -301,6 +301,7 @@ void luaL_pushuserptrandref(lua_State *L, const char *metatable,
 
     *(void**)(u + 1) = ptr;
     setuvalue(L, L->top, u);
+    ck_pr_fence_memory();
     L->top++;
 
   } LUAI_TRY_FINALLY(L) {
