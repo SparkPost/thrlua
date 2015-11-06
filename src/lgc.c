@@ -1065,10 +1065,10 @@ static void make_tls_key(void)
   }
 
   if (non_signal_collector) {
-    if (is_bool_env_false(non_signal_collector)) {
-      NON_SIGNAL_COLLECTOR = 0;
-    } else {
+    if (is_bool_env_true(non_signal_collector)) {
       NON_SIGNAL_COLLECTOR = 1;
+    } else {
+      NON_SIGNAL_COLLECTOR = 0;
     }
   }
 

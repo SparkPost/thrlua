@@ -13,7 +13,7 @@
   else condhardstacktests(luaD_reallocstack(L, L->stacksize - EXTRA_STACK - 1));
 
 
-#define incr_top(L) {luaD_checkstack(L,1); L->top++;}
+#define incr_top(L) {luaD_checkstack(L,1); ck_pr_fence_memory(); L->top++;}
 
 #define savestack(L,p)		((char *)(p) - (char *)L->stack)
 #define restorestack(L,n)	((TValue *)((char *)L->stack + (n)))
