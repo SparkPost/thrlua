@@ -805,6 +805,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           if (ttisfunction(tm)) {
             setobjs2s(L, cb + 1, ra);
             setobjs2s(L, cb, tm);
+            ck_pr_fence_memory();
             L->top = cb + 2; /* tag func + object param */
             Protect(luaD_call(L, cb, 3));
             L->top = L->ci->top;
@@ -815,12 +816,14 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             setobjs2s(L, ra + 2, cb + 2);
             setobjs2s(L, ra + 1, cb + 1);
             setobjs2s(L, ra, cb);
+            ck_pr_fence_memory();
             L->top = ra + 3;
           }
         }
         setobjs2s(L, cb+2, ra+2);
         setobjs2s(L, cb+1, ra+1);
         setobjs2s(L, cb, ra);
+        ck_pr_fence_memory();
         L->top = cb+3;  /* func. + 2 args (state and index) */
         Protect(luaD_call(L, cb, GETARG_C(i)));
         L->top = L->ci->top;
