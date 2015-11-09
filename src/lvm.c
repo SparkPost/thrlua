@@ -65,6 +65,7 @@ static void callTMres (lua_State *L, StkId res, const TValue *f,
   setobj2s(L, L->top+1, p1);  /* 1st argument */
   setobj2s(L, L->top+2, p2);  /* 2nd argument */
   luaD_checkstack(L, 3);
+  ck_pr_fence_memory();
   L->top += 3;
   luaD_call(L, L->top - 3, 1);
   res = restorestack(L, result);
@@ -81,6 +82,7 @@ static void callTM (lua_State *L, const TValue *f, const TValue *p1,
   setobj2s(L, L->top+2, p2);  /* 2nd argument */
   setobj2s(L, L->top+3, p3);  /* 3th argument */
   luaD_checkstack(L, 4);
+  ck_pr_fence_memory();
   L->top += 4;
   luaD_call(L, L->top - 4, 0);
 }

@@ -1551,6 +1551,7 @@ static void call_finalize(lua_State *L, GCheader *o)
 
       setobj2s(L, L->top, tm);
       setuvalue(L, L->top + 1, ud);
+      ck_pr_fence_memory();
       L->top += 2;
       unblock_collector(L, pt);
       LUAI_TRY_BLOCK(L) {
