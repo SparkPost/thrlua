@@ -92,7 +92,9 @@ static void stack_init (lua_State *L1, lua_State *L) {
   L1->stack_last = L1->stack+(L1->stacksize - EXTRA_STACK)-1;
   /* initialize first ci */
   L1->ci->func = L1->top;
-  setnilvalue(L1->top++);  /* `function' entry for this `ci' */
+  setnilvalue(L1->top);  /* `function' entry for this `ci' */
+  ck_pr_fence_memory();
+  L1->top++;
   L1->base = L1->ci->base = L1->top;
   L1->ci->top = L1->top + LUA_MINSTACK;
   luaC_unblockcollector(L1);

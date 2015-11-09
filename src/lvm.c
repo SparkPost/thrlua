@@ -65,6 +65,7 @@ static void callTMres (lua_State *L, StkId res, const TValue *f,
   setobj2s(L, L->top+1, p1);  /* 1st argument */
   setobj2s(L, L->top+2, p2);  /* 2nd argument */
   luaD_checkstack(L, 3);
+  ck_pr_fence_memory();
   L->top += 3;
   luaD_call(L, L->top - 3, 1);
   res = restorestack(L, result);
@@ -81,6 +82,7 @@ static void callTM (lua_State *L, const TValue *f, const TValue *p1,
   setobj2s(L, L->top+2, p2);  /* 2nd argument */
   setobj2s(L, L->top+3, p3);  /* 3th argument */
   luaD_checkstack(L, 4);
+  ck_pr_fence_memory();
   L->top += 4;
   luaD_call(L, L->top - 4, 0);
 }
@@ -805,6 +807,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           if (ttisfunction(tm)) {
             setobjs2s(L, cb + 1, ra);
             setobjs2s(L, cb, tm);
+            ck_pr_fence_memory();
             L->top = cb + 2; /* tag func + object param */
             Protect(luaD_call(L, cb, 3));
             L->top = L->ci->top;
@@ -815,12 +818,14 @@ void luaV_execute (lua_State *L, int nexeccalls) {
             setobjs2s(L, ra + 2, cb + 2);
             setobjs2s(L, ra + 1, cb + 1);
             setobjs2s(L, ra, cb);
+            ck_pr_fence_memory();
             L->top = ra + 3;
           }
         }
         setobjs2s(L, cb+2, ra+2);
         setobjs2s(L, cb+1, ra+1);
         setobjs2s(L, cb, ra);
+        ck_pr_fence_memory();
         L->top = cb+3;  /* func. + 2 args (state and index) */
         Protect(luaD_call(L, cb, GETARG_C(i)));
         L->top = L->ci->top;

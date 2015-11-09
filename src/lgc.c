@@ -1064,8 +1064,12 @@ static void make_tls_key(void)
     NUM_TRACE_THREADS = atoi(num_trace_threads);
   }
 
-  if (non_signal_collector && is_bool_env_true(non_signal_collector)) {
-    NON_SIGNAL_COLLECTOR = 1;
+  if (non_signal_collector) {
+    if (is_bool_env_true(non_signal_collector)) {
+      NON_SIGNAL_COLLECTOR = 1;
+    } else {
+      NON_SIGNAL_COLLECTOR = 0;
+    }
   }
 
 
@@ -1547,6 +1551,7 @@ static void call_finalize(lua_State *L, GCheader *o)
 
       setobj2s(L, L->top, tm);
       setuvalue(L, L->top + 1, ud);
+      ck_pr_fence_memory();
       L->top += 2;
       unblock_collector(L, pt);
       LUAI_TRY_BLOCK(L) {
