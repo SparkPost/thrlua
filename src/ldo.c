@@ -199,11 +199,12 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
   int i;
   int nfixargs = p->numparams;
   Table *htab = NULL;
-  StkId base, fixed;
-  for (; actual < nfixargs; ++actual)
-    setnilvalue(L->top);
-    ck_pr_fence_memory();
-    L->top++;
+  StkId base, fixed, newtop;
+  for (newtop = L->top; actual < nfixargs; ++actual) {
+    setnilvalue(newtop++);
+  }
+  ck_pr_fence_memory();
+  L->top = newtop;
 #if defined(LUA_COMPAT_VARARG)
   if (p->is_vararg & VARARG_NEEDSARG) { /* compat. with old-style vararg? */
     int nvar = actual - nfixargs;  /* number of extra arguments */
@@ -294,8 +295,9 @@ int luaD_precall (lua_State *L, StkId func, int nresults) {
     L->savedpc = p->code;  /* starting point */
     ci->tailcalls = 0;
     ci->nresults = nresults;
-    for (st = L->top; st < ci->top; st++)
+    for (st = L->top; st < ci->top; st++) {
       setnilvalue(st);
+    }
     ck_pr_fence_memory();
     L->top = ci->top;
     if (L->hookmask & LUA_MASKCALL) {
