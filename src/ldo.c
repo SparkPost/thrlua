@@ -203,8 +203,8 @@ static StkId adjust_varargs (lua_State *L, Proto *p, int actual) {
   for (newtop = L->top; actual < nfixargs; ++actual) {
     setnilvalue(newtop++);
   }
-  L->top = newtop;
   ck_pr_fence_memory();
+  L->top = newtop;
 #if defined(LUA_COMPAT_VARARG)
   if (p->is_vararg & VARARG_NEEDSARG) { /* compat. with old-style vararg? */
     int nvar = actual - nfixargs;  /* number of extra arguments */
