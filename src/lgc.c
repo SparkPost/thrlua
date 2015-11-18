@@ -199,9 +199,6 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   int force)
 {
   if (lval->owner != rval->owner) {
-    if (!force && ck_pr_load_32(&rval->xref) != ck_pr_load_32(&G(L)->isxref)) {
-      ck_pr_inc_32(&rval->owner->owner->xref_count);
-    }
     ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->isxref));
   } else if (force) {
     uint32_t old_val = ck_pr_load_32(&rval->xref);
@@ -1463,7 +1460,9 @@ static void reclaim_object(lua_State *L, GCheader *o, int remove_from_heap)
         if (th == G(L)->mainthread) {
           return;
         }
+        lua_lock(th);
         luaC_inherit_thread(L, th);
+        lua_unlock(th);
 
         luaE_freethread(L, th);
         break;
