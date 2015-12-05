@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(151);
+plan(173);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -106,16 +106,21 @@ is(json.strerror(json.ERROR_PARSE_NULL), "null expected", "strerror works")
 is(json.strerror(-1), "unknown error")
 is(json.strerror(20000), "unknown error")
 
+-- Compare JSON objects
+o1 = json.decode([[{ "key1": "val1" }]])
+o2 = json.decode([[{ "key2": "val2" }]])
+is(o1, o1, "o1 is itself")
+is(o2, o2, "o1 is itself")
+isnt(o1, o2, "o1 isn't o2")
+isnt(o2, o1, "o2 isn't o1")
+
 -- null vs nil
--- The json-c library doesn't allow us to distinguish the two, which is
--- unfortunate from a high-fidelity perspective, but in practical terms
--- it should not pose a huge problem
 null = json.decode([[{ "null": null }]])
-is(null.null, nil, "can't tell null from nil")
-is(null.nothere, nil, "can't tell nil from null")
+is(null.null, json.null(), "can tell null from nil")
+is(null.nothere, nil, "can tell nil from null")
 is(tostring(null), [[{ "null": null }]])
 null.null = nil
-is(null.null, nil, "can't tell if we deleted null")
+is(null.null, nil, "can tell if we deleted null")
 is(tostring(null), [[{ }]], "deleted null")
 
 
@@ -268,6 +273,16 @@ is(json.is_array(jia.number), false, "is_array on number")
 is(json.is_array(jia.str), false, "is_array on string")
 is(json.is_array(jia.anull), false, "is_array on null")
 
+local jia2 = json.decode("[]")
+ok(json.is_json(jia2), "JSON userdata recognised")
+ok(json.is_array(jia2), "is_array on top-level array")
+is(json.is_object(jia2), false, "is_object on top-level array")
+
+local jio = json.decode("{}")
+ok(json.is_json(jio), "JSON userdata recognised")
+ok(json.is_object(jio), "is_object on top-level object")
+is(json.is_array(jio), false, "is_array on top-level object")
+
 -- json_is_object
 ok(json.is_object(jia), "is_object on JSON")
 ok(json.is_object(jia.obj), "is_object on empty object")
@@ -316,4 +331,33 @@ local jin_str = [[
 
 local jin = json.decode(jin_str)
 ok(json.is_null(jin.fred), "null value for key")
+ok(tostring(jin.fred), "null", "tostring() returns null for null value")
+is(tostring(jin) .. "\n", jin_str, "null value roundtrips")
+
+ok(json.is_null(json.null()), "json.null is null")
+
+-- Try setting another key to null.
+jin.barney = json.null()
+is(tostring(jin), [[{ "fred": null, "barney": null }]], "inserted null")
+
+local jin2_str = [[
+[ 1, null, 2 ]
+]]
+local jin2 = json.decode(jin2_str)
+is(jin2[1], 1, "jin2 index 1")
+ok(json.is_null(jin2[2]), "jin2 index 2")
+is(jin2[3], 2, "jin2 index 3")
+is(tostring(jin2) .. "\n", jin2_str, "null value roundtrips")
+
+local jin2_array = {}
+for i, v in jin2 do
+  jin2_array[i] = v
+end
+is(#jin2_array, 3, "jin2 iterated array size")
+is(jin2_array[1], 1, "jin2 index 1, from iteration")
+ok(json.is_null(jin2_array[2]), "jin2 index 2, from iteration")
+is(jin2_array[3], 2, "jin2 index 3, from iteration")
+
+-- XXX: json.encode(json.null())
+-- XXX: Insert json.null() into array.
 

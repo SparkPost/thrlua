@@ -112,16 +112,24 @@ LUALIB_API int luaL_newmetatable (lua_State *L, const char *tname) {
 
 
 static void *luaL_checkudata_internal (lua_State *L, int ud,
-                                       const char *tname, const int error_ok)
+                                       const char *tname, int *matched,
+                                       const int error_ok)
 {
   void *p = lua_touserdata(L, ud);
   const char *reason = "unknown";
+
+  if (matched) {
+    *matched = 0;
+  }
 
   if (p != NULL) {  /* value is a userdata? */
     if (lua_getmetatable(L, ud)) {  /* does it have a metatable? */
       lua_getfield(L, LUA_REGISTRYINDEX, tname);  /* get correct metatable */
       if (lua_rawequal(L, -1, -2)) {  /* does it have the correct mt? */
         lua_pop(L, 2);  /* remove both metatables */
+        if (matched) {
+          *matched = 1;
+        }
         return p;
       } else {
         reason = "metatable mismatch";
@@ -144,12 +152,15 @@ static void *luaL_checkudata_internal (lua_State *L, int ud,
 
 LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname)
 {
-  return luaL_checkudata_internal(L, ud, tname, 1 /* error on mismatch */);
+  return luaL_checkudata_internal(L, ud, tname,
+                                  NULL, 1 /* error on mismatch */);
 }
 
-LUALIB_API void *luaL_checkudata_noerror (lua_State *L, int ud, const char *tname)
+LUALIB_API void *luaL_checkudata_noerror (lua_State *L, int ud,
+                                          const char *tname, int *matched)
 {
-  return luaL_checkudata_internal(L, ud, tname, 0 /* no errors on mismatch */);
+  return luaL_checkudata_internal(L, ud, tname,
+                                  matched, 0 /* no errors on mismatch */);
 }
 
 LUALIB_API void luaL_checkstack (lua_State *L, int space, const char *mes) {
