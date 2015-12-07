@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(173);
+plan(183);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -358,6 +358,27 @@ is(jin2_array[1], 1, "jin2 index 1, from iteration")
 ok(json.is_null(jin2_array[2]), "jin2 index 2, from iteration")
 is(jin2_array[3], 2, "jin2 index 3, from iteration")
 
--- XXX: json.encode(json.null())
--- XXX: Insert json.null() into array.
+-- Try adding a null to a JSON array.
+jin2[4] = json.null()
+ok(json.is_null(jin2[4]), "jin2 index 4")
+is(tostring(jin2), "[ 1, null, 2, null ]", "added null roundtrips")
+
+-- Try adding a null to the end of a Lua array, and serialise.
+table.insert(jin2_array, json.null())
+local jin2_encoded = json.encode(jin2_array)
+is(jin2_encoded[1], 1, "jin2_encoded index 1")
+ok(json.is_null(jin2_encoded[2]), "jin2_encoded index 2")
+is(jin2_encoded[3], 2, "jin2_encoded index 3")
+ok(json.is_null(jin2_encoded[4]), "jin2_encoded index 4")
+is(tostring(jin2_encoded), "[ 1, null, 2, null ]", "added null roundtrips")
+
+-- Try using a JSON null as the root node.
+-- This should return nil, since all JSON data should be wrapped
+-- in an array or object.
+local jin3 = json.encode(json.null())
+is(jin3, nil, "encode a null")
+
+local jin4, rc, err = json.decode("null")
+is(jin4, nil, "parse a lone null")
+isnt(rc, 0, "lone null parsing failed")
 
