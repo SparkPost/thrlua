@@ -68,10 +68,10 @@ LUALIB_API void *(luaL_checkudata) (lua_State *L, int ud, const char *tname);
 /* Like luaL_checkudata, but does not throw a type error
  * if the userdata type does not match. Returns NULL if the value
  * is not a userdata, or if it is a userdata but does not match the type.
- * If the type matched, *matched is set to 1, otherwise it's set to 0.
+ * Note: userdata cannot wrap a NULL pointer.
  */
 LUALIB_API void *(luaL_checkudata_noerror) (lua_State *L, int ud,
-                                            const char *tname, int *matched);
+                                            const char *tname);
 
 LUALIB_API void (luaL_where) (lua_State *L, int lvl);
 LUALIB_API int (luaL_error) (lua_State *L, const char *fmt, ...);

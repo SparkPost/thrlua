@@ -453,22 +453,20 @@ static int ljson_strerror(lua_State *L)
 
 static int ljson_is_json(lua_State *L)
 {
-  int type_matched = 0;
   struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON, &type_matched);
-  lua_pushboolean(L, type_matched);
+  json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  lua_pushboolean(L, json != NULL);
   return 1;
 }
 
 static int ljson_is_array(lua_State *L)
 {
   int matched = 0;
-  int type_matched = 0;
   struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON, &type_matched);
-  if (type_matched) {
+  json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  if (json) {
     matched = json_object_is_type(json, json_type_array);
   }
   lua_pushboolean(L, matched ? 1 : 0);
@@ -478,11 +476,10 @@ static int ljson_is_array(lua_State *L)
 static int ljson_is_object(lua_State *L)
 {
   int matched = 0;
-  int type_matched = 0;
   struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON, &type_matched);
-  if (type_matched) {
+  json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  if (json) {
     matched
       =  json_object_is_type(json, json_type_object)
       && (json != ljson_null_object);
@@ -513,14 +510,11 @@ static int ljson_is_string(lua_State *L)
 static int ljson_is_null(lua_State *L)
 {
   int matched = 0;
-  int type_matched = 0;
   struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON, &type_matched);
-  if (type_matched) {
-    matched
-      =  json_object_is_type(json, json_type_null)
-      || (json == ljson_null_object);
+  json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  if (json) {
+    matched = (json == ljson_null_object);
   }
   lua_pushboolean(L, matched ? 1 : 0);
   return 1;
