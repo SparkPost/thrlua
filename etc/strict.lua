@@ -14,12 +14,16 @@ if mt == nil then
   setmetatable(_G, mt)
 end
 
--- Save old metamethods, and chain to those.
-mt.__chain_newindex = mt.__newindex
-mt.__chain_index = mt.__index
+if mt.__strict == nil then
+  mt.__strict = true
 
-mt.__declared = {}
-mt.__exceptions = {}
+  -- Save old metamethods, and chain to those.
+  mt.__chain_newindex = mt.__newindex
+  mt.__chain_index = mt.__index
+
+  mt.__declared = {}
+  mt.__exceptions = {}
+end
 
 -- Detect if thread-local storage is defined (as it would be under thrlua).
 for _, k in ipairs{ "_TLS", "_OSTLS" } do
