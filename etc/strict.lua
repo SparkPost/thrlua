@@ -14,23 +14,28 @@ if mt == nil then
   setmetatable(_G, mt)
 end
 
+-- The _G table is not reinitialised across "config reload"s in Momentum.
+-- So, the first time that strict is loaded,
+-- we need to save the metamethods from the old _G metatable,
+-- and chain to those metamethods.
 if mt.__strict == nil then
   mt.__strict = true
 
-  -- Save old metamethods, and chain to those.
   mt.__chain_newindex = mt.__newindex
   mt.__chain_index = mt.__index
-
-  mt.__declared = {}
   mt.__exceptions = {}
-end
 
--- Detect if thread-local storage is defined (as it would be under thrlua).
-for _, k in ipairs{ "_TLS", "_OSTLS" } do
-  if _G[k] ~= nil then
-    mt.__exceptions[k] = true
+  -- Detect if thread-local storage is defined (as it would be under thrlua).
+  for _, k in ipairs{ "_TLS", "_OSTLS" } do
+    if _G[k] ~= nil then
+      mt.__exceptions[k] = true
+    end
   end
 end
+
+-- Always compute these from scratch -- global variables
+-- will need to be redeclared/redefined when scripts are loaded.
+mt.__declared = {}
 
 local function what ()
   local d = getinfo(3, "S")
