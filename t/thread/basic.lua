@@ -1,5 +1,6 @@
 -- vim:ts=2:sw=2:et:ft=lua:
 require('Test.More');
+require('strict');
 plan(20);
 
 local counter = 0;

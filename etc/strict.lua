@@ -14,6 +14,27 @@ if mt == nil then
   setmetatable(_G, mt)
 end
 
+-- The _G table is not reinitialised across "config reload"s in Momentum.
+-- So, the first time that strict is loaded,
+-- we need to save the metamethods from the old _G metatable,
+-- and chain to those metamethods.
+if mt.__strict == nil then
+  mt.__strict = true
+
+  mt.__chain_newindex = mt.__newindex
+  mt.__chain_index = mt.__index
+  mt.__exceptions = {}
+
+  -- Detect if thread-local storage is defined (as it would be under thrlua).
+  for _, k in ipairs{ "_TLS", "_OSTLS" } do
+    if _G[k] ~= nil then
+      mt.__exceptions[k] = true
+    end
+  end
+end
+
+-- Always compute these from scratch -- global variables
+-- will need to be redeclared/redefined when scripts are loaded.
 mt.__declared = {}
 
 local function what ()
@@ -22,20 +43,30 @@ local function what ()
 end
 
 mt.__newindex = function (t, n, v)
-  if not mt.__declared[n] then
+  if not mt.__declared[n] and not mt.__exceptions[n] then
     local w = what()
     if w ~= "main" and w ~= "C" then
       error("assign to undeclared variable '"..n.."'", 2)
     end
     mt.__declared[n] = true
   end
-  rawset(t, n, v)
+
+  if mt.__chain_newindex ~= nil then
+    mt.__chain_newindex(t, n, v)
+  else
+    rawset(t, n, v)
+  end
 end
   
 mt.__index = function (t, n)
-  if not mt.__declared[n] and what() ~= "C" then
+  if not mt.__declared[n] and not mt.__exceptions[n] and what() ~= "C" then
     error("variable '"..n.."' is not declared", 2)
   end
-  return rawget(t, n)
+
+  if mt.__chain_index ~= nil then
+    return mt.__chain_index(t, n)
+  else
+    return rawget(t, n)
+  end
 end
 
