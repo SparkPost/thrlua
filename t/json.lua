@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(107);
+plan(113);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -233,4 +233,26 @@ nj.results = nested4
 
 is(nj.results[1][1].flag, true, "Table nested in array nested in array")
 is(nj.results[1][2].flag2, false, "Table nested in array nested in array 2")
+
+-- Array nested in table, created from table
+local nested5 = {}
+local jkl = { mno = "pqr" }
+nested5.content = { jkl }
+local nj5 = json.encode(nested5)
+
+is(nj5.content[1].mno, "pqr", "Table nested in array nested in table")
+is(tostring(nj5), '{ "content": [ { "mno": "pqr" } ] }')
+
+local nested6 = { { { { "=o=" } } } }
+local nj6 = json.encode(nested6)
+
+is(nj6[1][1][1][1], "=o=", "Heavily nested arrays")
+is(tostring(nj6), '[ [ [ [ "=o=" ] ] ] ]')
+
+local nested7 = {}
+nested7.content = nested6
+local nj7 = json.encode(nested7)
+
+is (nj7.content[1][1][1][1], "=o=", "Heavily nested arrays in a table")
+is(tostring(nj7), '{ "content": [ [ [ [ "=o=" ] ] ] ] }')
 
