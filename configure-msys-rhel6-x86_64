@@ -1,0 +1,4 @@
+#!/bin/sh
+export PKG_CONFIG_PATH=/opt/msys/3rdParty/lib64/pkgconfig:/usr/lib64/pkgconfig
+./configure --prefix=/opt/msys/3rdParty --exec-prefix=/opt/msys/3rdParty --bindir=/opt/msys/3rdParty/bin --sbindir=/opt/msys/3rdParty/sbin --sysconfdir=/opt/msys/3rdParty/etc --datadir=/opt/msys/3rdParty/share --includedir=/opt/msys/3rdParty/include --libdir=/opt/msys/3rdParty/lib64 --libexecdir=/opt/msys/3rdParty/libexec --localstatedir=/opt/msys/3rdParty/var --sharedstatedir=/opt/msys/3rdParty/com --mandir=/opt/msys/3rdParty/man --infodir=/opt/msys/3rdParty/info
+
