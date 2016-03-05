@@ -2,7 +2,7 @@
 require("Test.More")
 require("json")
 
-plan(151);
+plan(156);
 
 local json_string = [[{"foo": "bar"}]]
 
@@ -268,6 +268,16 @@ is(json.is_array(jia.number), false, "is_array on number")
 is(json.is_array(jia.str), false, "is_array on string")
 is(json.is_array(jia.anull), false, "is_array on null")
 
+local jia2 = json.decode("[]")
+ok(json.is_json(jia2), "JSON userdata recognised")
+ok(json.is_array(jia2), "is_array on top-level array")
+is(json.is_object(jia2), false, "is_object on top-level array")
+
+local jio = json.decode("{}")
+ok(json.is_json(jio), "JSON userdata recognised")
+ok(json.is_object(jio), "is_object on top-level object")
+is(json.is_array(jio), false, "is_array on top-level object")
+
 -- json_is_object
 ok(json.is_object(jia), "is_object on JSON")
 ok(json.is_object(jia.obj), "is_object on empty object")
@@ -308,12 +318,3 @@ is(json.is_string(jia.number), false, "is_string on number")
 is(json.is_string(jia.obj), false, "is_string on empty object")
 is(json.is_string(jia.obj2), false, "is_string on non-empty object")
 is(json.is_string(jia.anull), false, "is_string on null")
-
--- json_is_null
-local jin_str = [[
-{ "fred": null }
-]]
-
-local jin = json.decode(jin_str)
-ok(json.is_null(jin.fred), "null value for key")
-

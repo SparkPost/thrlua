@@ -432,19 +432,6 @@ static int ljson_is_string(lua_State *L)
   return 1;
 }
 
-static int ljson_is_null(lua_State *L)
-{
-  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
-  int matched = 0;
-
-  if (json) {
-    /*matched = json_object_is_type(json, json_type_object);*/
-    /* XXX: fix when we represent null as JSON object */
-  }
-  lua_pushboolean(L, matched ? 1 : 0);
-  return 1;
-}
-
 static int encode_json(lua_State *L)
 {
   struct json_object *json;
@@ -497,7 +484,6 @@ static const struct luaL_reg funcs[] = {
   { "is_boolean", ljson_is_boolean },
   { "is_number", ljson_is_number },
   { "is_string", ljson_is_string },
-  { "is_null", ljson_is_null },
 
   { NULL, NULL }
 };
