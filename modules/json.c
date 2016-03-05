@@ -17,29 +17,10 @@
 
 #define MT_JSON "libjson:json_object*"
 
-/* json-c chooses to represent JSON null values as a C NULL pointer.
- * We can't wrap NULL pointers in a Lua userdata object,
- * because Lua translates that to a Lua nil.
- *
- * So, instead use a special JSON object that we use to represent a null.
- * Whenever we see a JSON object matching this, treat it as if it were
- * a JSON null.
- */
-static struct json_object *ljson_null_object = NULL;
-
-static int ljson_null(lua_State *L)
-{
-  luaL_pushuserptr(L, MT_JSON, ljson_null_object, 0);
-  return 1;
-}
-
 static int ljson_tostring(lua_State *L)
 {
   struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
 
-  if (json == ljson_null_object) {
-    json = NULL; /* Use json-c's stringification of null */
-  }
   lua_pushstring(L, json_object_to_json_string(json));
   return 1;
 }
@@ -86,43 +67,16 @@ static int ljson_index(lua_State *L)
 {
   struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
   const char *key;
-  struct json_lh_table *lh;
-  struct json_lh_entry *lhe;
-  int array_len, idx;
-  struct json_object *prop = NULL;
+  struct json_object *prop;
 
   switch (json_object_get_type(json)) {
     case json_type_object:
       key = luaL_checkstring(L, 2);
-      /* json-c stores a JSON null as a NULL value entry
-       * in its hash table. So to detect a JSON null,
-       * we need to check that the key exists,
-       * and then see if the value is NULL.
-       * If it is NULL, use our special JSON object
-       * that we use to signal JSON null.
-       */
-      lh = json_object_get_object(json);
-      lhe = json_lh_table_lookup_entry(lh, key);
-      if (lhe) {
-        prop = (struct json_object*) lhe->v;
-        if (!prop) {
-          prop = ljson_null_object;
-        }
-      }
+      prop = json_object_object_get(json, key);
       break;
     case json_type_array:
-      /* json-c stores a JSON null as a NULL value entry
-       * in the array. So to detect a JSON null,
-       * we need to check whether idx is past the end of the array.
-       * If it's in the array bounds, use our special JSON object
-       * that we use to signal JSON null.
-       */
-      array_len = json_object_array_length(json);
-      idx = luaL_checkinteger(L, 2) - 1;
-      prop = json_object_array_get_idx(json, idx);
-      if (!prop && (idx < array_len)) {
-        prop = ljson_null_object;
-      }
+      prop = json_object_array_get_idx(json,
+          luaL_checkinteger(L, 2) - 1);
       break;
     default:
       return 0;
@@ -154,12 +108,8 @@ static struct json_object *make_json_val(lua_State *L, int idx)
 
     case LUA_TUSERDATA:
       item = luaL_checkudata(L, idx, MT_JSON);
-      if (item == ljson_null_object) {
-        item = NULL;
-      } else {
-        /* caller owns its own ref */
-        json_object_get(item);
-      }
+      /* caller owns its own ref */
+      json_object_get(item);
       return item;
 
     case LUA_TNUMBER:
@@ -296,13 +246,9 @@ static int next_arr(lua_State *L)
   /* our upvalue holds the index of the next item to return */
   int idx = lua_tointeger(L, lua_upvalueindex(1));
   struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
-  const int array_len = json_object_array_length(json);
   struct json_object *item;
 
   item = json_object_array_get_idx(json, idx);
-  if (!item && (idx < array_len)) {
-    item = ljson_null_object;
-  }
 
   /* increment upvalue */
   lua_pushinteger(L, idx + 1);
@@ -332,10 +278,6 @@ static int next_obj(lua_State *L)
 
   key = (const char*)entry->k;
   item = (struct json_object*)entry->v;
-  if (!item) {
-    /* Use our JSON object that signals JSON null. */
-    item = ljson_null_object;
-  }
 
   /* step entry */
   *ep = entry->next;
@@ -389,16 +331,6 @@ static int ljson_len(lua_State *L)
   }
 }
 
-/* This is needed to support comparing a value with json.null().
- */
-static int ljson_eq(lua_State *L)
-{
-  struct json_object *json1 = luaL_checkudata(L, 1, MT_JSON);
-  struct json_object *json2 = luaL_checkudata(L, 2, MT_JSON);
-
-  return json1 == json2;
-}
-
 static const struct luaL_reg json_funcs[] = {
   { "__tostring", ljson_tostring },
   { "__gc", ljson_gc },
@@ -406,7 +338,6 @@ static const struct luaL_reg json_funcs[] = {
   { "__newindex", ljson_newindex },
   { "__iter", make_iter },
   { "__len", ljson_len },
-  { "__eq", ljson_eq },
   { NULL, NULL }
 };
 
@@ -453,19 +384,16 @@ static int ljson_strerror(lua_State *L)
 
 static int ljson_is_json(lua_State *L)
 {
-  struct json_object *json;
-
-  json = luaL_checkudata_noerror(L, 1, MT_JSON);
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
   lua_pushboolean(L, json != NULL);
   return 1;
 }
 
 static int ljson_is_array(lua_State *L)
 {
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
   int matched = 0;
-  struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON);
   if (json) {
     matched = json_object_is_type(json, json_type_array);
   }
@@ -475,14 +403,11 @@ static int ljson_is_array(lua_State *L)
 
 static int ljson_is_object(lua_State *L)
 {
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
   int matched = 0;
-  struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON);
   if (json) {
-    matched
-      =  json_object_is_type(json, json_type_object)
-      && (json != ljson_null_object);
+    matched = json_object_is_type(json, json_type_object);
   }
   lua_pushboolean(L, matched ? 1 : 0);
   return 1;
@@ -509,12 +434,12 @@ static int ljson_is_string(lua_State *L)
 
 static int ljson_is_null(lua_State *L)
 {
+  struct json_object *json = luaL_checkudata_noerror(L, 1, MT_JSON);
   int matched = 0;
-  struct json_object *json;
 
-  json = luaL_checkudata_noerror(L, 1, MT_JSON);
   if (json) {
-    matched = (json == ljson_null_object);
+    /*matched = json_object_is_type(json, json_type_object);*/
+    /* XXX: fix when we represent null as JSON object */
   }
   lua_pushboolean(L, matched ? 1 : 0);
   return 1;
@@ -574,8 +499,6 @@ static const struct luaL_reg funcs[] = {
   { "is_string", ljson_is_string },
   { "is_null", ljson_is_null },
 
-  { "null", ljson_null }, /* return representation of a JSON null */
-
   { NULL, NULL }
 };
 
@@ -607,14 +530,6 @@ static void addref(lua_State *L, void *ptr)
 LUALIB_API int luaopen_json(lua_State *L)
 {
   int i;
-
-  if (!ljson_null_object) {
-    json_object *obj;
-
-    ljson_null_object = json_object_new_object();
-    obj = json_object_new_boolean(1);
-    json_object_object_add(ljson_null_object, "fake_null", obj);
-  }
 
   luaL_registerptrtype(L, MT_JSON, json_funcs, addref);
 

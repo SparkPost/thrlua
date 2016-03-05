@@ -144,15 +144,12 @@ static void *luaL_checkudata_internal (lua_State *L, int ud,
 
 LUALIB_API void *luaL_checkudata (lua_State *L, int ud, const char *tname)
 {
-  return luaL_checkudata_internal(L, ud, tname,
-                                  1 /* error on mismatch */);
+  return luaL_checkudata_internal(L, ud, tname, 1 /* error on mismatch */);
 }
 
-LUALIB_API void *luaL_checkudata_noerror (lua_State *L, int ud,
-                                          const char *tname)
+LUALIB_API void *luaL_checkudata_noerror (lua_State *L, int ud, const char *tname)
 {
-  return luaL_checkudata_internal(L, ud, tname,
-                                  0 /* no errors on mismatch */);
+  return luaL_checkudata_internal(L, ud, tname, 0 /* no errors on mismatch */);
 }
 
 LUALIB_API void luaL_checkstack (lua_State *L, int space, const char *mes) {
