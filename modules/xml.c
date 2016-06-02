@@ -482,7 +482,20 @@ static int lua_xpathiter_gc(lua_State *L)
   struct xpath_iter *xpi;
   xpi = lua_touserdata(L, 1);
   xmlXPathFreeContext(xpi->ctxt);
-  if(xpi->pobj) xmlXPathFreeObject(xpi->pobj);
+  if(xpi->pobj) {
+    if ((xpi->pobj->nodesetval) 
+        && (xpi->pobj->nodesetval->nodeTab)) {
+
+      // Clear the node table ptrs, since the iterator doesn't own them, and
+      // we don't want xmlXPathFreeObject() to try and free these.  These are
+      // owned by the document (xmlDoc *).
+      int size = xpi->pobj->nodesetval->nodeMax;
+
+      memset(xpi->pobj->nodesetval->nodeTab, 0, size * sizeof(xmlNodePtr));
+      xpi->pobj->nodesetval->nodeNr = 0;
+    }
+    xmlXPathFreeObject(xpi->pobj);
+  }
   return 0;
 }
 
