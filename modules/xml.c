@@ -491,7 +491,7 @@ static int lua_xpathiter_gc(lua_State *L)
       // owned by the document (xmlDoc *).
       int size = xpi->pobj->nodesetval->nodeMax;
 
-      memset(xpi->pobj->nodesetval->nodeTab, 0, size *sizeof(xmlNodePtr));
+      memset(xpi->pobj->nodesetval->nodeTab, 0, size * sizeof(xmlNodePtr));
       xpi->pobj->nodesetval->nodeNr = 0;
     }
     xmlXPathFreeObject(xpi->pobj);
