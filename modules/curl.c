@@ -436,6 +436,17 @@ static curlT* tocurl (lua_State *L, int cindex)
 	return c;
 }
 
+/* Resets all options of a libcurl session handle */
+static int lcurl_easy_reset(lua_State* L)
+{
+  curlT* c = tocurl(L, 1);
+
+  /* void return */
+  curl_easy_reset(c->curl);
+
+  return 0;
+}
+
 /* Request internal information from the curl session */
 static int lcurl_easy_getinfo(lua_State* L)
 {
@@ -886,6 +897,7 @@ static const struct luaL_reg luacurl_meths[] =
 	{"fetch_into_file", lcurl_setup_fetch_into_file},
 	{"perform", lcurl_easy_perform},
 	{"getinfo", lcurl_easy_getinfo},
+        {"reset", lcurl_easy_reset},
 	{"__gc", lcurl_easy_close},
 	{0, 0}
 };
