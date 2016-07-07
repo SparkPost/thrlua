@@ -444,6 +444,9 @@ static int lcurl_easy_reset(lua_State* L)
   /* void return */
   curl_easy_reset(c->curl);
 
+  /* Ensure curl doesn't use signal handlers; they are not thread safe */
+  curl_easy_setopt(c->curl, CURLOPT_NOSIGNAL, 1L);
+
   return 0;
 }
 
