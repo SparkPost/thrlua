@@ -20,6 +20,8 @@ struct thrlib_thread {
   lua_State *L;
 };
 
+extern void lua_name_thread(char *thread_name);
+
 static int traceback(lua_State *L)
 {
   // FIXME: write a test for traceback inside a thread
@@ -58,11 +60,11 @@ static void *thrlib_thread_func(void *arg)
    * [3] closure argument
    * Therefore, we call pcall with 1 arg and a base of 1 (traceback) */
 
+  lua_name_thread("lua-tfunc");
   st = lua_pcall(L, 1, 0, 1);
   if (st != 0) {
     printf("thread pcall failed with status %d\n", st);
   }
-
   lua_settop(L, 0);
   luaC_localgc(L, 1);
 
@@ -83,6 +85,7 @@ static void *thrlib_detached_thread_func(void *arg)
    * [3] closure argument
    * Therefore, we call pcall with 1 arg and a base of 1 (traceback) */
 
+  lua_name_thread("lua-tfunc-det");
   st = lua_pcall(L, 1, 0, 1);
   if (st != 0) {
     printf("thread pcall failed with status %d\n", st);

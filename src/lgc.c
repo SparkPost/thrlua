@@ -1826,6 +1826,40 @@ static int local_collection(lua_State *L)
   return reclaimed;
 }
 
+static int  g_tnames_enabled = -1;
+
+static void
+tnames_enabled(void)
+{
+  char  *disable_thread_names;
+
+  disable_thread_names = getenv("LUA_DISABLE_THREAD_NAMES");
+  if(disable_thread_names == NULL) {
+    g_tnames_enabled = 1;
+  } else {
+    if ( (strcasecmp(disable_thread_names, "true") == 0)
+                      || (disable_thread_names[0] == '1')) {
+      g_tnames_enabled = 0;
+    } else {
+      g_tnames_enabled = 1;
+    }
+  }
+}
+
+void lua_name_thread(char *thread_name);
+void
+lua_name_thread(char *thread_name)
+{
+  int       tStatus;
+  pthread_t thread_id;
+
+  if (g_tnames_enabled < 0) tnames_enabled();
+  if (g_tnames_enabled == 0) return;
+
+  thread_id = pthread_self();
+  tStatus = pthread_setname_np(thread_id, thread_name);
+}
+
 static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
 {
   int recurse = is_unknown_xref(L, rval);
@@ -1856,6 +1890,7 @@ static void *trace_thread(void *unused)
 
   sigfillset(&set);
   pthread_sigmask(SIG_SETMASK, &set, NULL);
+  lua_name_thread("lua-gtrace");
 
   while (1) {
     struct ck_stack_entry *ent;
