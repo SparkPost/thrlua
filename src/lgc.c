@@ -1833,7 +1833,7 @@ tnames_enabled(void)
 {
   char  *disable_thread_names;
 
-  disable_thread_names = getenv("DISABLE_THREAD_NAMES");
+  disable_thread_names = getenv("LUA_DISABLE_THREAD_NAMES");
   if(disable_thread_names == NULL) {
     g_tnames_enabled = 1;
   } else {
