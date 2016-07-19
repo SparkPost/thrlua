@@ -454,7 +454,9 @@ static const int sentinel_ = 0;
 #define sentinel	((void *)&sentinel_)
 
 
-static int ll_require (lua_State *L) {
+
+
+static int ll_require_internal (lua_State *L) {
   const char *name = luaL_checkstring(L, 1);
   int i;
   lua_settop(L, 1);  /* _LOADED table will be at index 2 */
@@ -497,6 +499,19 @@ static int ll_require (lua_State *L) {
     lua_setfield(L, 2, name);  /* _LOADED[name] = true */
   }
   return 1;
+}
+
+static int ll_require (lua_State *L) {
+  int rv;
+
+  lua_lock(L);
+  LUAI_TRY_BLOCK(L) {
+    rv = ll_require_internal(L);
+  } LUAI_TRY_FINALLY(L) {
+    lua_unlock(L);
+  } LUAI_TRY_END(L);
+
+  return rv;
 }
 
 /* }====================================================== */
