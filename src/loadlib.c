@@ -37,7 +37,7 @@ static void ll_unloadlib (void *lib);
 static void *ll_load (lua_State *L, const char *path);
 static lua_CFunction ll_sym (lua_State *L, void *lib, const char *sym);
 
-static pthread_mutex_t ll_require_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t ll_require_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 #if defined(LUA_DL_DLOPEN)
 /*
