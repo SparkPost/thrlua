@@ -37,3 +37,4 @@ doc/reference/*.css
 *.vglog
 callgrind.out*
 .DS_Store
+TAGS

@@ -144,6 +144,13 @@ struct global_State {
   void (*on_state_finalize)(lua_State *L);
   /** if not NULL, replaces core ll_loadfunc */
   int (*loadfunc)(lua_State *L, const char *path, const char *sym);
+
+  /* Garbage collection statistics */
+  lua_GCstats gcstats;
+  /** if not NULL, called when a global trace completes */
+  lua_Globaltracehook on_global_trace_complete;
+  /** if not NULL, called when a local collection or step completes */
+  lua_Localcollectionhook on_local_collection_complete;
 };
 
 

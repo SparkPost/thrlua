@@ -11,6 +11,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
+#include "ck_pr.h"
 #include "luaconf.h"
 
 #if __GNUC__ > 2 || __GNUC__ == 2 && __GNUC_MINOR__ >= 5
@@ -438,6 +439,54 @@ LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud);
 /* hack */
 LUA_API void lua_setlevel	(lua_State *from, lua_State *to);
 
+/*
+** {======================================================================
+** Garbage Collection Statistics API
+** =======================================================================
+*/
+
+/* XXX: docs! */
+
+typedef struct lua_GCstats {
+  /* XXX: CK_CC_CACHELINE? 64-bit counters? */
+  uint32_t global_traces; /* number of global traces */
+  uint32_t traced_heaps; /* number of heaps traced in all global traces */
+  struct timeval trace_elapsed; /* clock time spent tracing heaps */
+
+  uint32_t collects; /* number of full local collections */
+  uint32_t steps; /* number of local step collections */
+  uint32_t reclaimed; /* number of objects reclaimed */
+  struct timeval collect_elapsed; /* clock time spent in local collects/steps */
+} lua_GCstats;
+
+typedef struct lua_Globaltracestats {
+  struct timeval start;
+  struct timeval end;
+  struct timeval elapsed;
+
+  int heaps; /* Number of Lua threads traced */
+} lua_Globaltracestats;
+
+typedef struct lua_Localcollectionstats {
+  struct timeval start;
+  struct timeval end;
+  struct timeval elapsed;
+
+  int greedy;
+  int reclaimed;
+} lua_Localcollectionstats;
+
+typedef void (*lua_Globaltracehook) (lua_State *L,
+    lua_GCstats *gcstats, lua_Globaltracestats *tracestats);
+
+typedef void (*lua_Localcollectionhook) (lua_State *L,
+    lua_GCstats *gcstats, lua_Localcollectionstats *collectstats);
+
+LUA_API int lua_setglobaltracehook (lua_State *L, lua_Globaltracehook func);
+LUA_API int lua_setlocalcollecthook (lua_State *L, lua_Localcollectionhook func);
+LUA_API lua_GCstats *lua_getgcstats (lua_State *L);
+
+/* }====================================================================== */
 
 /*
 ** {======================================================================

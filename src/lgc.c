@@ -1916,6 +1916,9 @@ static void global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
+  lua_Globaltracestats stats;
+
+  memset(&stats, 0, sizeof(stats));
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads()) {
@@ -1946,14 +1949,19 @@ static void global_trace(lua_State *L)
     ck_pr_store_32(&G(L)->notxref, 0);
   }
 
+  /* Maintain global trace stats */
+  /* XXX: count number of objects traced too? */
+  gettimeofday(&stats.start, NULL);
+
   if (USE_TRACE_THREADS) {
     /* now trace all objects and fix the xref bit */
     TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
+      ++stats.heaps;
       ck_pr_inc_32(&trace_heaps);
       ck_stack_push_upmc(&trace_stack, &h->instack);
     }
-      /* let consumers know they have things to do */
-      pthread_cond_broadcast(&trace_cond);
+    /* let consumers know they have things to do */
+    pthread_cond_broadcast(&trace_cond);
 
     /* we are a consumer too */
     while (1) {
@@ -1976,12 +1984,27 @@ static void global_trace(lua_State *L)
     TAILQ_FOREACH(h, &G(L)->all_heaps, heaps) {
       GCheader *o;
 
+      ++stats.heaps;
+
       /* Zero out the new xref count */
       ck_pr_store_32(&h->owner->xref_count, 0);
       TAILQ_FOREACH(o, &h->objects, allocd) {
         global_trace_obj(h->owner, &h->owner->gch, o);
       }
     }
+  }
+
+  /* Maintain global trace stats */
+  gettimeofday(&stats.end, NULL);
+  sub_times(stats.end, stats.start, &stats.elapsed);
+
+  ++(G(L)->gcstats.global_traces);
+  G(L)->gcstats.traced_heaps += stats.heaps;
+  add_times(G(L)->gcstats.trace_elapsed, stats.elapsed,
+      &(G(L)->gcstats.trace_elapsed));
+
+  if (G(L)->on_global_trace_complete) {
+    (G(L)->on_global_trace_complete)(L, &(G(L)->gcstats), &stats);
   }
 
   /* all heaps are traced */
@@ -2017,31 +2040,63 @@ void luaC_checkGC(lua_State *L)
 
 int luaC_localgc (lua_State *L, int greedy)
 {
-  int reclaimed = 0;
+  lua_Localcollectionstats stats;
   int x = 0;
+
+  memset(&stats, 0, sizeof(stats));
+  stats.greedy = greedy;
 
   if ((ck_pr_load_32(&G(L)->need_global_trace) > G(L)->global_trace_thresh) ||
       (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
     global_trace(L);
   }
+  gettimeofday(&stats.start);
   if (!greedy) {
-    return local_collection(L);
+    stats.reclaimed = local_collection(L);
+
+    /* XXX: common code for below */
+    gettimeofday(&stats.end);
+    sub_times(stats.end, stats.start, &stats.elapsed);
+
+    ck_pr_inc_32(&(G(L)->gcstats.steps));
+    ck_pr_faa_32(&(G(L)->gcstats.reclaimed), stats.reclaimed);
+    add_times(G(L)->gcstats.trace_elapsed, stats.elapsed,
+        &(G(L)->gcstats.collect_elapsed));
+
+    if (G(L)->on_local_collection_complete) {
+      (G(L)->on_local_collection_complete)(L, &(G(L)->gcstats), &stats);
+    }
+
+    return stats.reclaimed;
   }
   do {
 
     while ((x = local_collection(L)) > 0) {
-      reclaimed += x;
+      stats.reclaimed += x;
     }
 
     /* we may now find that some of the greys are now
      * white, so do another pass */
     x = local_collection(L);
     if (x) {
-      reclaimed += x;
+      stats.reclaimed += x;
     }
   } while (x);
 
-  return reclaimed;
+  /* XXX: common code for below */
+  gettimeofday(&stats.end);
+  sub_times(stats.end, stats.start, &stats.elapsed);
+
+  ck_pr_inc_32(&(G(L)->gcstats.collects));
+  ck_pr_faa_32(&(G(L)->gcstats.reclaimed), stats.reclaimed);
+  add_times(G(L)->gcstats.trace_elapsed, stats.elapsed,
+      &(G(L)->gcstats.collect_elapsed));
+
+  if (G(L)->on_local_collection_complete) {
+    (G(L)->on_local_collection_complete)(L, &(G(L)->gcstats), &stats);
+  }
+
+  return stats.reclaimed;
 }
 
 int luaC_fullgc (lua_State *L)
@@ -2108,6 +2163,23 @@ void lua_assert_fail(const char *expr, GCheader *obj, const char *file, int line
 #endif
   fprintf(stderr, "Assertion %s failed at %s:%d\n", expr, file, line);
   abort();
+}
+
+int lua_setglobaltracehook (lua_State *L, lua_Globaltracehook func)
+{
+  G(L)->on_global_trace_complete = func;
+  return 1;
+}
+
+int lua_setlocalcollectionhook (lua_State *L, lua_Localcollectionhook func)
+{
+  G(L)->on_local_collection_complete = func;
+  return 1;
+}
+
+lua_GCstats *lua_getgcstats (lua_State *L)
+{
+  return &(G(L)->gcstats);
 }
 
 /* vim:ts=2:sw=2:et:

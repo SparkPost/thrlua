@@ -37,7 +37,8 @@ libthrlua_la_SOURCES = \
 	src/lparser.c src/lstate.c src/lstring.c src/ltable.c src/ltm.c  \
 	src/lundump.c src/lvm.c src/lzio.c src/lauxlib.c src/lbaselib.c \
 	src/ldblib.c src/liolib.c src/lmathlib.c src/loslib.c src/ltablib.c \
-	src/lstrlib.c src/loadlib.c src/linit.c src/thrlib.c src/buf.c
+	src/lstrlib.c src/loadlib.c src/linit.c src/thrlib.c src/buf.c \
+	src/ltimefuncs.c
 
 if ARCH_X86_64
 libthrlua_la_SOURCES += src/amd64/setjmp.S
