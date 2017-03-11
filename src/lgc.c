@@ -2050,12 +2050,12 @@ int luaC_localgc (lua_State *L, int greedy)
       (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
     global_trace(L);
   }
-  gettimeofday(&stats.start);
+  gettimeofday(&stats.start, NULL);
   if (!greedy) {
     stats.reclaimed = local_collection(L);
 
     /* XXX: common code for below */
-    gettimeofday(&stats.end);
+    gettimeofday(&stats.end, NULL);
     sub_times(stats.end, stats.start, &stats.elapsed);
 
     ck_pr_inc_32(&(G(L)->gcstats.steps));
@@ -2084,7 +2084,7 @@ int luaC_localgc (lua_State *L, int greedy)
   } while (x);
 
   /* XXX: common code for below */
-  gettimeofday(&stats.end);
+  gettimeofday(&stats.end, NULL);
   sub_times(stats.end, stats.start, &stats.elapsed);
 
   ck_pr_inc_32(&(G(L)->gcstats.collects));
