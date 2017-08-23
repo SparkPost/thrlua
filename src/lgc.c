@@ -612,12 +612,16 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         Table *h = gco2h(o);
         int weakkey = 0, weakvalue = 0;
         const TValue *mode;
+        int is_locked = 0;
 
         if (!ck_pr_load_uint(&h->initialized)) {
           /* Not done being setup yet, skip */
           return;
         }
-        if (!is_world_stopped(L)) luaH_rdlock(L, h);
+        if (!is_world_stopped(L)) {
+          luaH_rdlock(L, h);
+          is_locked = 1;
+        }
         if (h->metatable) {
           traverse_obj(L, o, h->metatable, objfunc);
         }
@@ -653,7 +657,7 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
             }
           }
         }
-        if (!is_world_stopped(L)) luaH_rdunlock(L, h);
+        if (is_locked) luaH_rdunlock(L, h);
         break;
       }
 
