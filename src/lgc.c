@@ -700,12 +700,16 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
         CallInfo *ci;
         int i;
         struct stringtable_node *n;
+        int is_locked = 0;
 
         if (!th->stack || !th->base_ci) {
           /* Not setup yet, skip for now */
           return;
         }
-        if (!is_world_stopped(L)) lua_lock(th);
+        if (!is_world_stopped(L)) {
+          lua_lock(th);
+          is_locked = 1;
+        }
         traverse_value(L, o, &th->l_gt, objfunc);
         traverse_value(L, o, &th->env, objfunc);
         traverse_value(L, o, &th->tls, objfunc);
@@ -739,7 +743,7 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
             traverse_obj(L, o, &n->str->tsv.gch, objfunc);
           }
         }
-        if (!is_world_stopped(L)) lua_unlock(th);
+        if (is_locked) lua_unlock(th);
         break;
       }
     case LUA_TPROTO:
