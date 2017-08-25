@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2011-2017 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any
@@ -69,11 +69,12 @@ static int xml_save_writer(void *vstr, const char *buffer, int len)
 {
   struct xml_buffer_ptr *clv = vstr;
 
-  if (len + clv->len > clv->allocd) {
+  /* be sure to make room for null terminator written in xml_save_closer */
+  if (len + clv->len >= clv->allocd) {
     int newsize = clv->allocd ? clv->allocd * 2 : 8192;
     char *newbuff;
 
-    while (newsize < len + clv->len) {
+    while (newsize <= len + clv->len) {
       newsize *= 2;
     }
 
