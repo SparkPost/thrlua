@@ -15,6 +15,7 @@
  * collector is blocked and doing allocations in that state can cause a deadlock.
  */
 
+
 void luaS_resize (lua_State *L, stringtable *tb, int newsize,
                   struct stringtable_node **newhash)
 {
@@ -55,12 +56,16 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
   memcpy(ts+1, str, l*sizeof(char));
   ((char *)(ts+1))[l] = '\0';  /* ending 0 */
 
-  tb = &L->strt;
+  /* if the string is too large, we don't want to intern it
+   * the likely hood of find another one being the same is slim */
+  if (l < LUA_LARGE_STRING_SIZE) {
+    tb = &L->strt;
 
-  n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
-  n->str = ts;
+    n = luaM_malloc(L, LUA_MEM_STRING_TABLE_NODE, sizeof(*n));
+    n->str = ts;
 
-  luaC_writebarrierstr(L, h, n);
+    luaC_writebarrierstr(L, h, n);
+  }
   return ts;
 }
 
@@ -72,20 +77,28 @@ TString *luaS_newlstr (lua_State *L, const char *str, size_t l) {
   size_t l1;
   TString *ts = NULL;
 
-  for (l1=l; l1>=step; l1-=step)  /* compute hash */
-    h = h ^ ((h<<5)+(h>>2)+cast(unsigned char, str[l1-1]));
+  /* if the string is too large, we don't want to intern it
+   * don't need to calculate the hash if we are not interning */
+  if (l < LUA_LARGE_STRING_SIZE) {
+    for (l1=l; l1>=step; l1-=step)  /* compute hash */
+      h = h ^ ((h<<5)+(h>>2)+cast(unsigned char, str[l1-1]));
+  }
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
-    for (o = L->strt.hash[lmod(h, L->strt.size)];
-        o != NULL;
-        o = o->next) {
-      ts = o->str;
-      if (ts->tsv.hash == h &&
-          ts->tsv.len == l &&
-          (memcmp(str, getstr(ts), l) == 0)) {
-        break;
+    /* if the string is too large, we don't want to intern it
+     * so no point in searching the previous strings interned */
+    if (l < LUA_LARGE_STRING_SIZE) {
+      for (o = L->strt.hash[lmod(h, L->strt.size)];
+          o != NULL;
+          o = o->next) {
+        ts = o->str;
+        if (ts->tsv.hash == h &&
+            ts->tsv.len == l &&
+            (memcmp(str, getstr(ts), l) == 0)) {
+          break;
+        }
+        ts = NULL;
       }
-      ts = NULL;
     }
     if (ts == NULL) {
       ts = newlstr(L, str, l, h);  /* not found */

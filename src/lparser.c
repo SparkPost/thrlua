@@ -197,7 +197,7 @@ static int indexupvalue (FuncState *fs, TString *name, expdesc *v) {
 static int searchvar (FuncState *fs, TString *n) {
   int i;
   for (i=fs->nactvar-1; i >= 0; i--) {
-    if (n == (TString*)getlocvar(fs, i).varname)
+    if (luaV_strcmp(n, (TString*)getlocvar(fs, i).varname) == 0)
       return i;
   }
   return -1;  /* not found */
