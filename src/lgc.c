@@ -1189,7 +1189,7 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
   if (scope == LUA_MEM_SCOPE_LOCAL) {
     do {
       vers = ck_sequence_read_begin(&L->memlock);
-      memcpy(&data->global, &L->mem, sizeof(L->mem));
+      data->global = L->mem;
       memcpy(&data->bytype, L->memtype, sizeof(L->memtype));
     } while (ck_sequence_read_retry(&L->memlock, vers));
 
@@ -1203,7 +1203,7 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
 
     do {
       vers = ck_sequence_read_begin(&h->owner->memlock);
-      memcpy(&mem, &h->owner->mem, sizeof(mem));
+      mem = h->owner->mem;
       memcpy(memtype, h->owner->memtype, sizeof(memtype));
     } while (ck_sequence_read_retry(&h->owner->memlock, vers));
 
