@@ -17,6 +17,9 @@
 
 #define luaS_fix(s)	l_setbit((s)->tsv.marked, FIXEDBIT)
 
+#define LUA_MAX_STR_INTERN_AFTER_GC 128
+#define LUA_LARGE_STRING_SIZE 512
+
 LUAI_FUNC void luaS_resize (lua_State *L, stringtable *tb, int newsize,
 							struct stringtable_node **newhash);
 LUAI_FUNC Udata *luaS_newudata (lua_State *L, size_t s, Table *e);

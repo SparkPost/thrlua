@@ -1189,7 +1189,7 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
   if (scope == LUA_MEM_SCOPE_LOCAL) {
     do {
       vers = ck_sequence_read_begin(&L->memlock);
-      memcpy(&data->global, &L->mem, sizeof(L->mem));
+      data->global = L->mem;
       memcpy(&data->bytype, L->memtype, sizeof(L->memtype));
     } while (ck_sequence_read_retry(&L->memlock, vers));
 
@@ -1203,7 +1203,7 @@ void lua_mem_get_usage(lua_State *L, struct lua_mem_usage_data *data,
 
     do {
       vers = ck_sequence_read_begin(&h->owner->memlock);
-      memcpy(&mem, &h->owner->mem, sizeof(mem));
+      mem = h->owner->mem;
       memcpy(memtype, h->owner->memtype, sizeof(memtype));
     } while (ck_sequence_read_retry(&h->owner->memlock, vers));
 
@@ -1730,48 +1730,17 @@ static int local_collection(lua_State *L)
 
   /* prune out excess string table entries.
    * We don't want to be too aggressive, as we'd like to see some benefit
-   * from string interning.
-   * First pass is to find strings that are large and flush them out */
-  for (i = 0; i < L->strt.size; i++) {
-    struct stringtable_node *p;
-
-    if (!L->strt.hash[i]) continue;
-
-    p = NULL;
-    n = L->strt.hash[i];
-    while (n) {
-      if (n->str->tsv.len < 128) {
-        p = n;
-        n = n->next;
-        continue;
-      }
-      /* "too big" */
-      if (p) {
-        p->next = n->next;
-      } else {
-        L->strt.hash[i] = n->next;
-      }
-      n->next = tofree;
-      tofree = n;
-      L->strt.nuse--;
-      if (p) {
-        n = p->next;
-      } else {
+   * from string interning. We remove the head of each chain and repeat
+   * until we're below our threshold */
+  while (L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC) {
+    for (i = 0; L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC && i < L->strt.size; i++) {
+      if (L->strt.hash[i]) {
         n = L->strt.hash[i];
+        L->strt.hash[i] = n->next;
+        n->next = tofree;
+        tofree = n;
+        L->strt.nuse--;
       }
-    }
-  }
-
-  /* Second pass:
-   * We remove the head of each chain and repeat until we're
-   * below our threshold */
-  for (i = 0; L->strt.nuse > 128 && i < L->strt.size; i++) {
-    if (L->strt.hash[i]) {
-      n = L->strt.hash[i];
-      L->strt.hash[i] = n->next;
-      n->next = tofree;
-      tofree = n;
-      L->strt.nuse--;
     }
   }
 
