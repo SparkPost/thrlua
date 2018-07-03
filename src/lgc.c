@@ -307,6 +307,9 @@ static INLINE void block_mutators(lua_State *L)
   /* don't leave until we know that all threads are outside a barrier. 
    * No more threads will enter a barrier after this point because 
    * intend_to_stop is set to 1. */
+
+  gettimeofday(&G(L)->mutator_wait_start, NULL);
+
   while (1) {
     pending = 0;
   
@@ -320,6 +323,7 @@ static INLINE void block_mutators(lua_State *L)
     }
 
     if (!pending) {
+      gettimeofday(&G(L)->mutator_wait_end, NULL);
       return;
     }
 
