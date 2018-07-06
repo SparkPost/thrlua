@@ -379,6 +379,10 @@ LUA_API int   (lua_next) (lua_State *L, int idx);
 
 LUA_API void  (lua_concat) (lua_State *L, int n);
 
+/* timing stats for block_mutators() */
+LUA_API struct timeval (lua_get_mutator_wait_start) (lua_State *L);
+LUA_API struct timeval (lua_get_mutator_wait_end) (lua_State *L);
+
 #if 0
 LUA_API lua_Alloc (lua_getallocf) (lua_State *L, void **ud);
 LUA_API void lua_setallocf (lua_State *L, lua_Alloc f, void *ud);

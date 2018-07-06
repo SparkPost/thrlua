@@ -1145,6 +1145,13 @@ LUA_API int  lua_status (lua_State *L) {
   return L->status;
 }
 
+LUA_API struct timeval lua_get_mutator_wait_start(lua_State *L) {
+  return G(L)->mutator_wait_start;
+}
+
+LUA_API struct timeval lua_get_mutator_wait_end(lua_State *L) {
+  return G(L)->mutator_wait_end;
+}
 
 /*
 ** Garbage-collection function

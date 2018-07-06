@@ -112,6 +112,10 @@ struct global_State {
   /** the global trace xref threshold */
   uint32_t global_trace_xref_thresh;
 
+  /* timing stats for block_mutators() */
+  struct timeval mutator_wait_start;
+  struct timeval mutator_wait_end;
+
   lua_Alloc2 alloc;
   void *allocdata;
   int exiting;
