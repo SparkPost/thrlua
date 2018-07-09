@@ -27,6 +27,14 @@ static int NUM_TRACE_THREADS = 8;
  * showing tremendous promise. */
 static int NON_SIGNAL_COLLECTOR = 1;
 
+/* Maximum amount of time (in milliseconds) a global trace thread should
+ * wait for mutators to get out of a write barrier before assuming a deadlock
+ * has occurred.  Settable only on restart via environment variable
+ * 'LUA_BLOCK_MUTATORS_MAX_WAIT_MS'.
+ * A value of -1 indicates that the global trace thread should wait indefinitely.
+*/
+static int BLOCK_MUTATORS_MAX_WAIT_MS = -1;
+
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
 # define DEF_LUA_SIG_RESUME  SIGXCPU
@@ -276,11 +284,50 @@ static INLINE void traverse_value(lua_State *L, GCheader *obj, TValue *val,
   }
 }
 
-/* NOTE: This is the alternate logic for stopping threads during a 
- * global trace. */
-/* called during a global trace; when it returns, all mutators will be in
- * a safe state that blocks them from mutating state */
-static INLINE void block_mutators(lua_State *L)
+static INLINE void unblock_mutators(lua_State *L)
+{
+  ck_pr_store_32(&G(L)->intend_to_stop, 0);
+  ck_pr_fence_memory();
+
+  /* For the non-signal collector, release the write lock.  This tells
+   * any threads trying to block the collector that they can now wake
+   * up and try to enter their write barrier. */
+  if (NON_SIGNAL_COLLECTOR) {
+    pthread_rwlock_unlock(&trace_rwlock);
+  }
+}
+
+static void sub_times(struct timeval a, struct timeval b,
+                      struct timeval *result)
+{
+  result->tv_usec = a.tv_usec - b.tv_usec;
+  if (result->tv_usec < 0L) {
+    a.tv_sec--;
+    result->tv_usec += 1000000L;
+  }
+  result->tv_sec = a.tv_sec - b.tv_sec;
+  if (result->tv_sec < 0L) {
+    result->tv_sec++;
+    result->tv_usec -= 1000000L;
+  }
+}
+
+static double interval_in_msecs(struct timeval start_time,
+                                struct timeval end_time)
+{
+  double time_ms = 0;
+  struct timeval diff;
+
+  sub_times(end_time, start_time, &diff);
+  time_ms = diff.tv_sec * 1000 + diff.tv_usec / 1000;
+
+  return time_ms;
+}
+
+/* Returns 1 on success.
+   Returns 0 if a potential deadlock is detected
+*/
+static INLINE int try_block_mutators(lua_State *L)
 {
   uint32_t pending;
   thr_State *pt;
@@ -320,27 +367,40 @@ static INLINE void block_mutators(lua_State *L)
       if (ck_pr_load_32(&pt->in_barrier) == 1) {
         pending++;
       }
-    }
+    } /* end foreach thread */
 
     if (!pending) {
       gettimeofday(&G(L)->mutator_wait_end, NULL);
-      return;
+      return 1;
     }
 
+    if (BLOCK_MUTATORS_MAX_WAIT_MS > 0) {
+      gettimeofday(&G(L)->mutator_wait_end, NULL);
+      if (interval_in_msecs(G(L)->mutator_wait_start,
+                            G(L)->mutator_wait_end) > BLOCK_MUTATORS_MAX_WAIT_MS) {
+        /* we might be in a deadlock (TR-273) */
+        unblock_mutators(L);
+        return 0;
+      }
+    }
+
+    /* continue waiting */
     ck_pr_stall();
-  }
+
+  } /* end while(1) */
 }
 
-static INLINE void unblock_mutators(lua_State *L)
+/* NOTE: This is the alternate logic for stopping threads during a
+ * global trace. */
+/* called during a global trace; when it returns, all mutators will be in
+ * a safe state that blocks them from mutating state */
+static INLINE void block_mutators(lua_State *L)
 {
-  ck_pr_store_32(&G(L)->intend_to_stop, 0);
-  ck_pr_fence_memory();
-
-  /* For the non-signal collector, release the write lock.  This tells
-   * any threads trying to block the collector that they can now wake
-   * up and try to enter their write barrier. */
-  if (NON_SIGNAL_COLLECTOR) {
-    pthread_rwlock_unlock(&trace_rwlock);
+  while(!try_block_mutators(L)) {
+    /* try_block_mutators detected a potential deadlock.
+     * It has already given up trace_rwlock and set intend_to_stop = 0.
+     * wait and try again (TR-273). */
+    usleep(100);
   }
 }
 
@@ -1064,6 +1124,7 @@ static void make_tls_key(void)
   const char *use_trace_threads = getenv("LUA_USE_TRACE_THREADS");
   const char *num_trace_threads = getenv("LUA_NUM_TRACE_THREADS");
   const char *non_signal_collector = getenv("LUA_NON_SIGNAL_COLLECTOR");
+  const char *block_mutators_max_wait_ms = getenv("LUA_BLOCK_MUTATORS_MAX_WAIT_MS");
 
   if (use_trace_threads && is_bool_env_true(use_trace_threads)) {
     USE_TRACE_THREADS = 1;
@@ -1071,6 +1132,10 @@ static void make_tls_key(void)
 
   if (USE_TRACE_THREADS && num_trace_threads && isdigit(*num_trace_threads)) {
     NUM_TRACE_THREADS = atoi(num_trace_threads);
+  }
+
+  if (block_mutators_max_wait_ms && isdigit(*block_mutators_max_wait_ms)) {
+    BLOCK_MUTATORS_MAX_WAIT_MS = atoi(block_mutators_max_wait_ms);
   }
 
   if (non_signal_collector) {
