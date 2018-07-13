@@ -1970,6 +1970,41 @@ static void global_trace(lua_State *L)
   ck_pr_store_32(&G(L)->need_global_trace, 0);
   ck_pr_store_32(&G(L)->stopped, 0);
 
+  /* dump out all xrefs */
+  {
+    GCheader *o = NULL;
+    uint32_t xref_count = 0; /* lua_State.xref_count is not reliable */
+
+    TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+      if (!is_not_xref(L, o)) {
+        ++xref_count;
+      }
+    }
+    fprintf(stderr, "lua_State=%p, xrefs=%u\n", L, xref_count);
+    TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+      if (!is_not_xref(L, o)) {
+        fprintf(stderr, "o=%p, type=%s, ", o, luaT_typenames[o->tt]);
+
+        if (o->tt == LUA_TSTRING) {
+          TString *ts = (TString *) o;
+          const char *s = getstr(ts);
+          const size_t len = ts->tsv.len;
+          fprintf(stderr, "len=%zu, [[%.*s]]", len, len, s);
+        }
+
+        if (o->tt == LUA_TFUNCTION) {
+          Closure *cl = (Closure *) o;
+          lua_Debug ar;
+          memset(&ar, 0, sizeof(ar));
+          lua_funcinfo(&ar, cl);
+          fprintf(stderr, "%s:%d", ar.source, ar.linedefined);
+        }
+
+        fprintf(stderr, "\n");
+      }
+    }
+  }
+
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
 #endif

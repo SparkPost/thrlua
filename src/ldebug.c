@@ -137,7 +137,7 @@ LUA_API const char *lua_setlocal (lua_State *L, const lua_Debug *ar, int n) {
 }
 
 
-static void funcinfo (lua_Debug *ar, Closure *cl) {
+LUA_API void lua_funcinfo (lua_Debug *ar, Closure *cl) {
   if (cl->c.isC) {
     ar->source = "=[C]";
     ar->linedefined = -1;
@@ -196,7 +196,7 @@ static int auxgetinfo (lua_State *L, const char *what, lua_Debug *ar,
   for (; *what; what++) {
     switch (*what) {
       case 'S': {
-        funcinfo(ar, f);
+        lua_funcinfo(ar, f);
         break;
       }
       case 'l': {
