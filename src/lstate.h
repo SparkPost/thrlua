@@ -148,6 +148,8 @@ struct global_State {
   void (*on_state_finalize)(lua_State *L);
   /** if not NULL, replaces core ll_loadfunc */
   int (*loadfunc)(lua_State *L, const char *path, const char *sym);
+    /** A logging callback */
+  void (*logfunc)(int level, const char *fmt, ...);
 };
 
 
@@ -255,10 +257,29 @@ static inline thr_State *luaC_get_per_thread(lua_State *L)
 #define obj2gco(v)	(cast(GCObject *, (v)))
 #define gch2h(o)	check_exp((o) == NULL || (o)->tt == LUA_TTABLE, (Table*)(o))
 
+/* logging macro to send internal log statements to an
+ * optional application defined logging callback.
+ * __level is one of the integer logging levels defined below */
+#define thrlua_log(__lua_state, __level, __fmt, ...) do { \
+  if ( G(__lua_state)->logfunc ) { \
+    G(__lua_state)->logfunc(__level, __fmt, __VA_ARGS__); \
+  } \
+} while(0)
+
+/* logging levels */
+#define DDEBUG 0
+#define DINFO 1
+#define DNOTICE 2
+#define DWARNING 3
+#define DERROR 4
+#define DCRITICAL 5
+
 LUAI_FUNC lua_State *luaE_newthread (lua_State *L);
 LUAI_FUNC void luaE_freethread (lua_State *L, lua_State *L1);
 LUAI_FUNC void luaE_flush_stringtable(lua_State *L);
 LUAI_FUNC lua_State *luaE_newthreadG(global_State *g);
+
+
 
 #endif
 

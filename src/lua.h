@@ -184,6 +184,8 @@ struct lua_StateParams {
 #define LUA_LOADFUNC_SUCCESS 0
 #define LUA_LOADFUNC_ERR_LIB 1
 #define LUA_LOADFUNC_ERR_FUNC 2
+  /** A logging callback */
+  void (*logfunc)(int level, const char *fmt, ...);
 };
 
 LUA_API lua_State *(lua_newglobalstate)(struct lua_StateParams *p);
