@@ -13,6 +13,7 @@
 
 #define resethookcount(L)	(L->hookcount = L->basehookcount)
 
+LUA_API void lua_funcinfo (lua_Debug *ar, Closure *cl);
 
 LUAI_FUNC void luaG_typeerror (lua_State *L, const TValue *o,
                                              const char *opname);

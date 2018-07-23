@@ -1982,6 +1982,86 @@ static void *trace_thread(void *unused)
   }
 }
 
+/* written, but untested -- see comment below before (disabled) call site */
+#if 0
+static int gt_count_table_elements(lua_State *L, int idx)
+{
+  int count = 0;
+
+  lua_pushnil(L);
+  while (lua_next(L, idx)) {
+    ++count;
+    if (lua_istable(L, idx + 2)) {
+      count += gt_count_table_elements(L, idx + 2);
+    }
+    lua_pop(L, 1); /* pop value */
+  }
+  lua_pop(L, 1); /* pop table */
+  return count;
+}
+#endif
+
+static void dump_xref(lua_State *L, char *where)
+{
+  {
+    GCheader *o = NULL;
+    uint32_t xref_count = 0; /* lua_State.xref_count is not reliable */
+
+    TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+      if (!is_not_xref(L, o)) {
+        ++xref_count;
+      }
+    }
+    thrlua_log(L, DERROR, "XXXX %s lua_State=%p, xrefs=%u\n", where, L, xref_count);
+    TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+      if (!is_not_xref(L, o)) {
+        thrlua_log(L, DERROR, "o=%p, type=%s, ", o, luaT_typenames[o->tt]);
+
+        if (o->tt == LUA_TSTRING) {
+          TString *ts = (TString *) o;
+          const char *s = getstr(ts);
+          const size_t len = ts->tsv.len;
+          thrlua_log(L, DERROR, "len=%zu, [[%.*s]]", len, len, s);
+        }
+
+/* Ideally we would examine the table here, but that requires
+ * using Lua APIs that try to grab the mutator lock,
+ * and hence deadlock here.
+ *
+ * A different strategy is needed. Build a list of all the tables
+ * that are xrefs, and then explore and log data after the mutator
+ * and global trace locks are dropped at the end of the function.
+ */
+#if 0
+        if (o->tt == LUA_TTABLE) {
+          /* Push table onto stack */
+          Table *t = (Table *) o;
+          lua_settop(L, 0);
+          lua_checkstack(L, 128); /* enough stack space for recursive table exam? */
+          /*L->top = (TValue *) o;*/ /* <- deadlocks */
+          /*sethvalue(L, L->top, t);*/ /* <- deadlocks */
+          L->top++;
+          const int nelems = gt_count_table_elements(L, 1);
+
+          thrlua_log(L, DERROR, "elems=%d", nelems);
+        }
+#endif
+
+        if (o->tt == LUA_TFUNCTION) {
+          Closure *cl = (Closure *) o;
+          lua_Debug ar;
+          memset(&ar, 0, sizeof(ar));
+          lua_funcinfo(&ar, cl);
+          thrlua_log(L, DERROR, "%s:%d", ar.source, ar.linedefined);
+        }
+
+        thrlua_log(L, DERROR, "%c\n", '\n');
+      }
+    }
+  }
+}
+
+
 /* Global collection must only use async-signal safe functions,
  * or it will lead to a deadlock (especially in printf) */
 static void global_trace(lua_State *L)
@@ -2017,6 +2097,8 @@ static void global_trace(lua_State *L)
     ck_pr_store_32(&G(L)->isxref, 1);
     ck_pr_store_32(&G(L)->notxref, 0);
   }
+  /* dump out all xrefs */
+  dump_xref(L, "start");
 
   if (USE_TRACE_THREADS) {
     /* now trace all objects and fix the xref bit */
@@ -2060,6 +2142,9 @@ static void global_trace(lua_State *L)
 
   ck_pr_store_32(&G(L)->need_global_trace, 0);
   ck_pr_store_32(&G(L)->stopped, 0);
+
+  /* dump out all xrefs */
+  dump_xref(L, "end");
 
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
