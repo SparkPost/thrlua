@@ -42,6 +42,14 @@ static int BLOCK_MUTATORS_MAX_WAIT_MS = -1;
 */
 static int BLOCK_MUTATORS_RETRY_WAIT_MS = 10;
 
+/*
+ * TR-316 data collection
+ * Enable/Disable only on restart via environment variable
+ * 'LUA_TRACE_XREFS_FILENAME'
+ */
+static pthread_mutex_t trace_xrefs_mutex = PTHREAD_MUTEX_INITIALIZER;
+static FILE *trace_xrefs_file = NULL;
+
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
 # define DEF_LUA_SIG_RESUME  SIGXCPU
@@ -216,6 +224,12 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
 {
   if (lval->owner != rval->owner) {
     ck_pr_store_32(&rval->xref, ck_pr_load_32(&G(L)->isxref));
+
+    if (trace_xrefs_file) {
+      pthread_mutex_lock(&trace_xrefs_mutex);
+      fprintf(trace_xrefs_file, "x:%p\n", rval);
+      pthread_mutex_unlock(&trace_xrefs_mutex);
+    }
   } else if (force) {
     uint32_t old_val = ck_pr_load_32(&rval->xref);
 
@@ -255,6 +269,13 @@ static INLINE void mark_object(lua_State *L, GCheader *obj)
   if (L->heap != obj->owner) {
     /* external reference */
     ck_pr_store_32(&obj->xref, ck_pr_load_32(&G(L)->isxref));
+
+    if (trace_xrefs_file) {
+      pthread_mutex_lock(&trace_xrefs_mutex);
+      fprintf(trace_xrefs_file, "x:%p\n", obj);
+      pthread_mutex_unlock(&trace_xrefs_mutex);
+    }
+
     return;
   }
 
@@ -1171,6 +1192,12 @@ static void make_tls_key(void)
     }
   }
 
+  const char *trace_xrefs_filename = getenv("LUA_TRACE_XREFS_FILENAME");
+  if (trace_xrefs_filename) {
+    if ((trace_xrefs_file = fopen(trace_xrefs_filename, "w")) == NULL) {
+      fprintf(stderr, "thrlua: Couldn't open %s for writing!\n", trace_xrefs_filename);
+    }
+  }
 
   atexit(free_last_global_bits);
 
@@ -1393,6 +1420,28 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->tt = tt;
   o->marked = !L->black;
   o->xref = ck_pr_load_32(&G(L)->notxref);
+
+  if (trace_xrefs_file) {
+    lua_Debug ar;
+    memset(&ar, 0, sizeof(ar));
+    lua_getstack (L, 0, &ar);
+    lua_getinfo (L, "nSl", &ar);
+
+    lua_Debug ar2;
+    memset(&ar2, 0, sizeof(ar2));
+    lua_getstack (L, 1, &ar2);
+    lua_getinfo (L, "nSl", &ar2);
+
+    pthread_mutex_lock(&trace_xrefs_mutex);
+
+    fprintf(trace_xrefs_file, "o:%p %s %s:%d (%s) caller: %s:%d (%s)\n",
+            o, luaT_typenames[o->tt],
+            ar.short_src, ar.currentline, ar.name,
+            ar2.short_src, ar2.currentline, ar2.name);
+
+    pthread_mutex_unlock(&trace_xrefs_mutex);
+  }
+
   make_grey(L, o);
   /* The collector can be walking our heap, which isn't safe.  So block it
    * while we're adding to it */
@@ -2089,6 +2138,10 @@ static void global_trace(lua_State *L)
 
   ck_pr_store_32(&G(L)->stopped, 1);
 
+  /* dump out all xrefs */
+  // CARNOLD temporary disable
+  // dump_xref(L, "start");
+
   /* flip sense of definitive xref bit */
   if (ck_pr_load_32(&G(L)->isxref) == 1) {
     ck_pr_store_32(&G(L)->isxref, 3);
@@ -2097,8 +2150,7 @@ static void global_trace(lua_State *L)
     ck_pr_store_32(&G(L)->isxref, 1);
     ck_pr_store_32(&G(L)->notxref, 0);
   }
-  /* dump out all xrefs */
-  dump_xref(L, "start");
+
 
   if (USE_TRACE_THREADS) {
     /* now trace all objects and fix the xref bit */
@@ -2144,7 +2196,8 @@ static void global_trace(lua_State *L)
   ck_pr_store_32(&G(L)->stopped, 0);
 
   /* dump out all xrefs */
-  dump_xref(L, "end");
+  // CARNOLD temporary disable
+  // dump_xref(L, "end");
 
 #ifdef ANNOTATE_IGNORE_READS_AND_WRITES_END
   ANNOTATE_IGNORE_READS_AND_WRITES_END();
