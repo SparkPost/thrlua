@@ -734,8 +734,20 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
             if (!is_world_stopped(L)) removeentry(n);
           } else {
             lua_assert(!ttisnil(gkey(n)));
+
+            /* These have been temporarily made volatile to prevent the
+               compiler from optimizing them out to gain more visibility
+               into the TR-298 crashes (TR-439) */
+            const char * volatile key_char_ptr = NULL;
+            TValue * volatile key_value = key2tval(n);
+
+            if (key_value->tt == LUA_TSTRING) {
+              TString *key_tstring = (TString*) (key_value->value.gc);
+              key_char_ptr = getstr(key_tstring);
+            }
+
             if (!weakkey) {
-              traverse_value(L, o, key2tval(n), objfunc);
+              traverse_value(L, o, key_value, objfunc);
             }
             if (!weakvalue) {
               traverse_value(L, o, gval(n), objfunc);
