@@ -1366,6 +1366,7 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->gcpause = LUAI_GCPAUSE;
   g->global_trace_thresh = 10;
   g->global_trace_xref_thresh = 300;
+  g->str_intern_cleanup_thresh = 1024;
   g->allocdata = p->allocdata;
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
@@ -1820,6 +1821,7 @@ static int local_collection(lua_State *L)
 {
   int reclaimed;
   int i;
+  uint32_t count;;
   struct stringtable_node *n;
   thr_State *pt = luaC_get_per_thread(L);
   struct stringtable_node *tofree = NULL;
@@ -1839,7 +1841,9 @@ static int local_collection(lua_State *L)
    * We don't want to be too aggressive, as we'd like to see some benefit
    * from string interning. We remove the head of each chain and repeat
    * until we're below our threshold */
-  while (L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC) {
+  count = 0;
+  while ((L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC) &&
+     (count < G(L)->str_intern_cleanup_thresh)) {
     for (i = 0; L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC && i < L->strt.size; i++) {
       if (L->strt.hash[i]) {
         n = L->strt.hash[i];
@@ -1847,6 +1851,11 @@ static int local_collection(lua_State *L)
         n->next = tofree;
         tofree = n;
         L->strt.nuse--;
+        /* clean up only a few at a time or else we will be stuck here.
+         * and block global trace and hence the whole system */
+        if (++count >= G(L)->str_intern_cleanup_thresh) {
+          break;
+        }
       }
     }
   }
