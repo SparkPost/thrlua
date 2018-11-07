@@ -1204,8 +1204,10 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         g->global_trace_xref_thresh = data;
         break;
       case LUA_GCSETINTERNCLEANUPMAX:
-        res = g->str_intern_cleanup_thresh;
-        g->str_intern_cleanup_thresh = data;
+        if (data > LUA_MAX_STR_INTERN_AFTER_GC) {
+          res = g->str_intern_cleanup_thresh;
+          g->str_intern_cleanup_thresh = data;
+        }
         break;
 
       default:
