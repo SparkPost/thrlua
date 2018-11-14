@@ -92,7 +92,7 @@ static uint32_t trace_heaps = 0;
 #define FINALBIT    (1<<4)
 #define FREEDBIT    (1<<7)
 
-static int local_collection(lua_State *L);
+static int local_collection(lua_State *L, int type);
 static void global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
 
@@ -1366,7 +1366,6 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   g->gcpause = LUAI_GCPAUSE;
   g->global_trace_thresh = 10;
   g->global_trace_xref_thresh = 300;
-  g->str_intern_cleanup_thresh = 1024;
   g->allocdata = p->allocdata;
   g->extraspace = p->extraspace;
   g->on_state_create = p->on_state_create;
@@ -1817,7 +1816,7 @@ static void sanity_check_mark_status(lua_State *L)
   }
 }
 
-static int local_collection(lua_State *L)
+static int local_collection(lua_State *L, int type)
 {
   int reclaimed;
   int i;
@@ -1841,19 +1840,30 @@ static int local_collection(lua_State *L)
    * We don't want to be too aggressive, as we'd like to see some benefit
    * from string interning. We remove the head of each chain and repeat
    * until we're below our threshold */
-  count = 0;
-  while ((L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC) &&
-     (count < G(L)->str_intern_cleanup_thresh)) {
-    for (i = 0; L->strt.nuse > LUA_MAX_STR_INTERN_AFTER_GC && i < L->strt.size; i++) {
-      if (L->strt.hash[i]) {
+  if (type == GCDESTROY) {
+    // We are about to destroy the thread. Clean everything.
+    // This makes the overall local GC faster and clean up more memory.
+    count = L->strt.nuse;
+  }
+  else if (L->strt.nuse < LUA_MAX_STR_INTERN_AFTER_GC) {
+    // Nothing to clean in the stingtables
+    count = 0;
+  }
+  else {
+    // Keep the max allowed. Free everything else.
+    count = L->strt.nuse - LUA_MAX_STR_INTERN_AFTER_GC;
+  }
+  while (count > 0) {
+    for (i = 0; count > 0 && i < L->strt.size; i++) {
+      while (L->strt.hash[i]) {
         n = L->strt.hash[i];
         L->strt.hash[i] = n->next;
         n->next = tofree;
         tofree = n;
         L->strt.nuse--;
-        /* clean up only a few at a time or else we will be stuck here.
-         * and block global trace and hence the whole system */
-        if (++count >= G(L)->str_intern_cleanup_thresh) {
+        count--;
+        if (type != GCDESTROY) {
+          // when we are freeing the thread, free all the stringtable entries.
           break;
         }
       }
@@ -2104,11 +2114,11 @@ void luaC_checkGC(lua_State *L)
         (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
       global_trace(L);
     }
-    local_collection(L);
+    local_collection(L, GCSTEP);
   }
 }
 
-int luaC_localgc (lua_State *L, int greedy)
+int luaC_localgc (lua_State *L, int type)
 {
   int reclaimed = 0;
   int x = 0;
@@ -2117,22 +2127,17 @@ int luaC_localgc (lua_State *L, int greedy)
       (ck_pr_load_32(&L->xref_count) > G(L)->global_trace_xref_thresh)) {
     global_trace(L);
   }
-  if (!greedy) {
-    return local_collection(L);
+  if (type == GCSTEP) {
+    reclaimed = local_collection(L, type);
   }
-  do {
-
-    while ((x = local_collection(L)) > 0) {
-      reclaimed += x;
-    }
+  else {
 
     /* we may now find that some of the greys are now
      * white, so do another pass */
-    x = local_collection(L);
-    if (x) {
+    while ((x = local_collection(L, type)) > 0) {
       reclaimed += x;
     }
-  } while (x);
+  }
 
   return reclaimed;
 }
@@ -2145,7 +2150,7 @@ int luaC_fullgc (lua_State *L)
    * garbage collection is sufficient to reclaim enough memory.  This has been
    * run in production and memory is stable.  The reason for not doing a full
    * cycle is that it's relatively time-consuming. */
-  return luaC_localgc(L, 0);
+  return luaC_localgc(L, GCSTEP);
 }
 
 /* The semantics of lua_close are to free up everything associated
@@ -2164,7 +2169,7 @@ LUA_API void lua_close (lua_State *L)
   /* attempt a graceful first pass */
   lua_settop(L, 0);
   global_trace(L);
-  local_collection(L);
+  local_collection(L, GCSTEP);
 
   /* Don't think we need to block the collector here */
 
