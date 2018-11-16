@@ -1819,8 +1819,8 @@ static void sanity_check_mark_status(lua_State *L)
 static int local_collection(lua_State *L, int type)
 {
   int reclaimed;
-  int i;
-  uint32_t count;;
+  int i, jj;
+  uint32_t n_total, n_per_bucket;
   struct stringtable_node *n;
   thr_State *pt = luaC_get_per_thread(L);
   struct stringtable_node *tofree = NULL;
@@ -1843,30 +1843,32 @@ static int local_collection(lua_State *L, int type)
   if (type == GCDESTROY) {
     // We are about to destroy the thread. Clean everything.
     // This makes the overall local GC faster and clean up more memory.
-    count = L->strt.nuse;
+    n_total = L->strt.nuse;
+    n_per_bucket = L->strt.nuse;
   }
   else if (L->strt.nuse < LUA_MAX_STR_INTERN_AFTER_GC) {
     // Nothing to clean in the stingtables
-    count = 0;
+    n_total = 0;
+    n_per_bucket = 0;
   }
   else {
     // Keep the max allowed. Free everything else.
-    count = L->strt.nuse - LUA_MAX_STR_INTERN_AFTER_GC;
+    n_total = L->strt.nuse - LUA_MAX_STR_INTERN_AFTER_GC;
+
+    //often times we endup with multiple entries in each bucket
+    //while running perl-tests/headless/common/perf.t, we have
+    //seen upto 400 nodes per bucket and 1M buckets. Lets clean up
+    //multiple entries per bucket so that we can reduce the string tables
+    n_per_bucket = (L->strt.size / 2560) + 1;
   }
-  while (count > 0) {
-    for (i = 0; count > 0 && i < L->strt.size; i++) {
-      while (L->strt.hash[i]) {
-        n = L->strt.hash[i];
-        L->strt.hash[i] = n->next;
-        n->next = tofree;
-        tofree = n;
-        L->strt.nuse--;
-        count--;
-        if (type != GCDESTROY) {
-          // when we are freeing the thread, free all the stringtable entries.
-          break;
-        }
-      }
+  for (i = 0; n_total > 0 && i < L->strt.size; i++) {
+    for (jj = 0; jj < n_per_bucket && L->strt.hash[i] && n_total > 0; jj++) {
+      n = L->strt.hash[i];
+      L->strt.hash[i] = n->next;
+      n->next = tofree;
+      tofree = n;
+      L->strt.nuse--;
+      n_total--;
     }
   }
 
@@ -2128,16 +2130,21 @@ int luaC_localgc (lua_State *L, int type)
     global_trace(L);
   }
   if (type == GCSTEP) {
-    reclaimed = local_collection(L, type);
+    return local_collection(L, type);
   }
-  else {
+  do {
 
-    /* we may now find that some of the greys are now
-     * white, so do another pass */
     while ((x = local_collection(L, type)) > 0) {
       reclaimed += x;
     }
-  }
+
+    /* we may now find that some of the greys are now
+     * white, so do another pass */
+    x = local_collection(L, type);
+    if (x) {
+      reclaimed += x;
+    }
+  } while (x);
 
   return reclaimed;
 }
