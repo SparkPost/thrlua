@@ -27,7 +27,7 @@ noinst_HEADERS = src/lcode.h src/ldebug.h src/ldo.h \
 	src/lobject.h src/lopcodes.h src/lparser.h src/lstate.h \
 	src/lstring.h src/ltable.h src/ltm.h src/lundump.h src/lvm.h src/lzio.h 
 
-CFLAGS += @CK_CFLAGS@ -Isrc -gdwarf-2 -fno-omit-frame-pointer
+CFLAGS += @CK_CFLAGS@ -Isrc -gdwarf-3 -fno-omit-frame-pointer
 
 libthrlua_la_LDFLAGS = -lpthread -lm
 libthrlua_la_CPPFLAGS = $(commonCFLAGS)

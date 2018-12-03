@@ -367,7 +367,7 @@ LUA_API int  (lua_status) (lua_State *L);
 #define LUA_GCSETGLOBALTRACE 9
 /** set a different global trace xref threshold */
 #define LUA_GCSETGLOBALTRACEXREF 10
-#define LUA_GCSETINTERNCLEANUPMAX 11
+#define LUA_GCDESTROY 11
 
 LUA_API int (lua_gc) (lua_State *L, int what, int data);
 

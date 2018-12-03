@@ -39,7 +39,12 @@ LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 LUAI_FUNC void luaC_checkGC(lua_State *L);
 LUAI_FUNC int64_t luaC_count(lua_State *L);
 LUAI_FUNC int luaC_fullgc (lua_State *L);
-LUAI_FUNC int luaC_localgc (lua_State *L, int greedy);
+
+/* Possible types of GC on the thread */
+#define GCSTEP 0
+#define GCFULL 1
+#define GCDESTROY 2
+LUAI_FUNC int luaC_localgc (lua_State *L, int type);
 
 #endif
 /* vim:ts=2:sw=2:et:

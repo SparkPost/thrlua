@@ -112,9 +112,6 @@ struct global_State {
   /** the global trace xref threshold */
   uint32_t global_trace_xref_thresh;
 
-  /** the local collection str intern cleanup threshold */
-  uint32_t str_intern_cleanup_thresh;;
-
   /* timing stats for block_mutators() */
   struct timeval mutator_wait_start;
   struct timeval mutator_wait_end;

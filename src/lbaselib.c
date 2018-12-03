@@ -576,7 +576,7 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
     if (status == 0) {
       /* coroutine finished; tidy it up */
       lua_settop(co, 0);
-      luaC_localgc(co, 1);
+      luaC_localgc(co, GCFULL);
       luaC_inherit_thread(L, co);
     }
     return nres;

@@ -160,7 +160,7 @@ LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
   lua_lock(L);
   lua_settop(L, 0);
   /* We already done this before calling lua_delrefthread */
-  /* luaC_localgc(L, 1); */
+  /* luaC_localgc(L, GCDESTROY); */
   /* that was the final ref; someone now gets to own us */
   lua_lock(inheritor);
   luaC_inherit_thread(inheritor, L);
@@ -1187,10 +1187,13 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
         g->gcstepmul = data;
         break;
       case LUA_GCCOLLECT:
-        res = luaC_localgc(L, 1);
+        res = luaC_localgc(L, GCFULL);
         break;
       case LUA_GCSTEP:
-        res = luaC_localgc(L, 0);
+        res = luaC_localgc(L, GCSTEP);
+        break;
+      case LUA_GCDESTROY:
+        res = luaC_localgc(L, GCDESTROY);
         break;
       case LUA_GCGLOBALTRACE:
         res = luaC_fullgc(L);
@@ -1202,12 +1205,6 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
       case LUA_GCSETGLOBALTRACEXREF:
         res = g->global_trace_xref_thresh;
         g->global_trace_xref_thresh = data;
-        break;
-      case LUA_GCSETINTERNCLEANUPMAX:
-        if (data > LUA_MAX_STR_INTERN_AFTER_GC) {
-          res = g->str_intern_cleanup_thresh;
-          g->str_intern_cleanup_thresh = data;
-        }
         break;
 
       default:
