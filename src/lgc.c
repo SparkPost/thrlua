@@ -16,15 +16,14 @@
 #endif
 
 /* Perform global traces in parallel, as opposed to having just one thread
- * do it. */
-static int USE_TRACE_THREADS = 0;
+ * do it. Set to 0 to disable. */
+static int USE_TRACE_THREADS = 1;
 
 /* Number of trace threads to use.  Start with 8, requires USE_TRACE_THREADS
  * to be set to 1. */
 static int NUM_TRACE_THREADS = 8;
 
-/* Non-signal collector logic.  This behavior is still experimental, but is
- * showing tremendous promise. */
+/* Non-signal collector logic. Set to 0 to disable.*/
 static int NON_SIGNAL_COLLECTOR = 1;
 
 /* Maximum amount of time (in milliseconds) a global trace thread should
@@ -33,14 +32,14 @@ static int NON_SIGNAL_COLLECTOR = 1;
  * 'LUA_BLOCK_MUTATORS_MAX_WAIT_MS'.
  * A value of -1 indicates that the global trace thread should wait indefinitely.
 */
-static int BLOCK_MUTATORS_MAX_WAIT_MS = -1;
+static int BLOCK_MUTATORS_MAX_WAIT_MS = 10000;
 
 /* Amount of time (in milliseconds) a global trace thread should
  * wait between reattempts of try_block_mutators().
  * Settable only on restart via environment variable
  * 'LUA_BLOCK_MUTATORS_RETRY_WAIT_MS'.
 */
-static int BLOCK_MUTATORS_RETRY_WAIT_MS = 10;
+static int BLOCK_MUTATORS_RETRY_WAIT_MS = 100;
 
 #ifdef LUA_OS_LINUX
 # define DEF_LUA_SIG_SUSPEND SIGPWR
