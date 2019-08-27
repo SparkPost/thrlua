@@ -4,14 +4,14 @@ require("xml");
 
 plan(29);
 
-local xml_sample = [[<?xml version="1.0" encoding="utf8"?>
+local xml_sample = [[<?xml version="1.0" encoding="utf-8"?>
 <doc>
-	<item name="one">
-		<property name="prop1" value="value1">hello</property>
-	</item>
-	<item name="two">
-		<property name="prop1" value="value2">there</property>
-	</item>
+  <item name="one">
+    <property name="prop1" value="value1">hello</property>
+  </item>
+  <item name="two">
+    <property name="prop1" value="value2">there</property>
+  </item>
 </doc>
 ]]
 

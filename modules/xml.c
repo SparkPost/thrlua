@@ -114,7 +114,7 @@ static void xmlSaveToBuffer(lua_State *L, xmlDocPtr doc)
   if (!out) {
     luaL_error(L, "unable to create xml output buffer");
   }
-  xmlSaveFormatFileTo(out, doc, "utf8", 1);
+  xmlSaveFormatFileTo(out, doc, "utf-8", 1);
 
   lua_pushstring(L, buf.buff);
   free(buf.buff);
@@ -172,7 +172,7 @@ static int lua_xmlnode_tostring(lua_State *L)
   if (!out) {
     luaL_error(L, "unable to create xml output buffer");
   }
-  xmlNodeDumpOutput(out, node->doc, node, 0, 1, "utf8");
+  xmlNodeDumpOutput(out, node->doc, node, 0, 1, "utf-8");
   xmlOutputBufferClose(out);
 
   lua_pushstring(L, buf.buff);

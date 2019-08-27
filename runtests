@@ -7,7 +7,7 @@ use File::Find;
 use Data::Dumper;
 use Getopt::Long;
 use IO::File;
-use lib 't';
+use lib '.';
 use t::strap;
 use t::TAP_Harness;
 
