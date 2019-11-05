@@ -1552,7 +1552,7 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   if (TEST_INHERIT_THREAD_DELAY_MS > 0) {
     /* TR-1945: Both global trace and thread delref will grab
      * the "all threads" lock. To induce false contention on that lock
-     * on a false system, it helps for the inherit code to take
+     * on a test system, it helps for the inherit code to take
      * a minimum amount of time. Set the environment variable
      * 'LUA_TEST_INHERIT_THREAD_DELAY_MS' to enable this delay.
      */
