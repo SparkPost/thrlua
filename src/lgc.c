@@ -955,8 +955,11 @@ static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
   if (wait_in_ms > 0) {
     struct timespec timeout;
     clock_gettime(CLOCK_REALTIME, &timeout);
-    /* XXX: need to cope with wait_in_ms >= 1000 ms and update tv_sec field appropriately. */
     timeout.tv_nsec += wait_in_ms * 1000000L; /* ms -> ns */
+    while (timeout.tv_nsec >= 1000000000L) {
+      timeout.tv_sec += 1L;
+      timeout.tv_nsec -= 1000000000L;
+    }
     r = pthread_mutex_timedlock(&all_threads_lock, &timeout);
   } else {
     r = pthread_mutex_trylock(&all_threads_lock);
