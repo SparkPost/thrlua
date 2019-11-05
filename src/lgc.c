@@ -1509,6 +1509,10 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
    * needs to steal its contents */
   lock_all_threads();
 
+  /* TR-1945 XXX remove once shown issue */
+  usleep(1000); /* 1000 usec = 1 ms */
+  /* End TR-1945 XXX remove once shown issue */
+
   ck_sequence_write_begin(&th->memlock);
   ck_sequence_write_begin(&L->memlock);
   L->gcestimate += th->gcestimate;
