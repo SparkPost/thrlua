@@ -92,7 +92,7 @@ static uint32_t trace_heaps = 0;
 #define FREEDBIT    (1<<7)
 
 static int local_collection(lua_State *L, int type);
-static void global_trace(lua_State *L);
+static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
@@ -2015,15 +2015,19 @@ static void *trace_thread(void *unused)
 }
 
 /* Global collection must only use async-signal safe functions,
- * or it will lead to a deadlock (especially in printf) */
-static void global_trace(lua_State *L)
+ * or it will lead to a deadlock (especially in printf).
+ * Returns 0 if unable to trace, > 0 on success.
+ */
+static int global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads()) {
-    return;
+    thrlua_log(L, DERROR, "thrlua: Tracing skipped in global trace -"
+               " unable to acquire all threads lock immediately\n", "");
+    return 0;
   }
 
   if (NON_SIGNAL_COLLECTOR) {
@@ -2106,6 +2110,7 @@ static void global_trace(lua_State *L)
 
   unlock_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
+  return 1;
 }
 
 void luaC_checkGC(lua_State *L)
