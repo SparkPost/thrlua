@@ -26,6 +26,18 @@ static int NUM_TRACE_THREADS = 8;
 /* Non-signal collector logic. Set to 0 to disable.*/
 static int NON_SIGNAL_COLLECTOR = 1;
 
+/* TR-1945: Maximum amount of time (in milliseconds) that global trace should
+ * should wait for the "all threads" lock before giving up.
+ * A value <= 0 means no wait -- just give up if the lock can't
+ * be acquired immediately.
+ */
+static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 0; /* off by default */
+
+/* TR-1945: In order to trigger lock contention between global trace
+ * and thread inheritance, set this to e.g.: 1. Don't do this in production.
+ */
+static int TEST_INHERIT_THREAD_DELAY_MS = 0; /* off by default */
+
 /* Maximum amount of time (in milliseconds) a global trace thread should
  * wait for mutators to get out of a write barrier before assuming a deadlock
  * has occurred.  Settable only on restart via environment variable
@@ -92,7 +104,7 @@ static uint32_t trace_heaps = 0;
 #define FREEDBIT    (1<<7)
 
 static int local_collection(lua_State *L, int type);
-static void global_trace(lua_State *L);
+static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
@@ -940,15 +952,40 @@ static INLINE void lock_all_threads(void)
   }
 }
 
-static INLINE int try_lock_all_threads(void)
+/* Try to grab the "all threads" lock.
+ *
+ * When wait_in_ms > 0, this will wait that many milliseconds,
+ * in order to acquire the lock. If it's <= 0,
+ * then it will try once and then fail if the mutex could not be acquired.
+ *
+ * The Lua state L can be NULL.
+ */
+static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
 {
-  int r = pthread_mutex_trylock(&all_threads_lock);
+  int r = EBUSY;
+
+  if (wait_in_ms > 0) {
+    struct timespec timeout;
+    clock_gettime(CLOCK_REALTIME, &timeout);
+    timeout.tv_nsec += wait_in_ms * 1000000L; /* ms -> ns */
+    while (timeout.tv_nsec >= 1000000000L) {
+      timeout.tv_sec += 1L;
+      timeout.tv_nsec -= 1000000000L;
+    }
+    r = pthread_mutex_timedlock(&all_threads_lock, &timeout);
+  } else {
+    r = pthread_mutex_trylock(&all_threads_lock);
+  }
   switch (r) {
     case 0:
       return 1;
-    case EBUSY:
+    case ETIMEDOUT: /* pthread_mutex_timedlock timed out */
+    case EBUSY: /* pthread_mutex_trylock failed to grab it */
       return 0;
     default:
+      if (L) {
+        thrlua_log(L, DCRITICAL, "thrlua: LOCK(all_threads): %d %s\n", r, strerror(r));
+      }
       fprintf(stderr, "LOCK(all_threads): %d %s\n", r, strerror(r));
       abort();
   }
@@ -1020,11 +1057,12 @@ static void thread_resume_requested(int sig)
   errno = save;
 }
 
+/* XXX: This appears to be unused. What should call it? */
 static void prune_dead_thread_states(void)
 {
   thr_State *pt, *pttmp;
 
-  if (!try_lock_all_threads()) {
+  if (!try_lock_all_threads(NULL, 0)) {
     return;
   }
   TAILQ_FOREACH_SAFE(pt, &all_threads, threads, pttmp) {
@@ -1105,7 +1143,7 @@ static void thread_exited(void *p)
   /* POSIX states that we are only called when p is non-NULL */
   lua_assert(p != NULL);
 
-  if (try_lock_all_threads()) {
+  if (try_lock_all_threads(NULL, 0)) {
     TAILQ_REMOVE(&all_threads, thr, threads);
     unlock_all_threads();
     free(thr);
@@ -1171,6 +1209,8 @@ static void make_tls_key(void)
     read_int_env("LUA_NUM_TRACE_THREADS", &NUM_TRACE_THREADS);
   }
 
+  read_int_env("LUA_GLOBAL_TRACE_ALL_THREADS_WAIT_MS", &GLOBAL_TRACE_ALL_THREADS_WAIT_MS);
+  read_int_env("LUA_TEST_INHERIT_THREAD_DELAY_MS", &TEST_INHERIT_THREAD_DELAY_MS);
   read_int_env("LUA_BLOCK_MUTATORS_MAX_WAIT_MS", &BLOCK_MUTATORS_MAX_WAIT_MS);
   read_int_env("LUA_BLOCK_MUTATORS_RETRY_WAIT_MS", &BLOCK_MUTATORS_RETRY_WAIT_MS);
 
@@ -1508,6 +1548,16 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   /* when a thread is reclaimed, the executing thread
    * needs to steal its contents */
   lock_all_threads();
+
+  if (TEST_INHERIT_THREAD_DELAY_MS > 0) {
+    /* TR-1945: Both global trace and thread delref will grab
+     * the "all threads" lock. To induce false contention on that lock
+     * on a test system, it helps for the inherit code to take
+     * a minimum amount of time. Set the environment variable
+     * 'LUA_TEST_INHERIT_THREAD_DELAY_MS' to enable this delay.
+     */
+    usleep(TEST_INHERIT_THREAD_DELAY_MS * 1000L); /* 1000 usec = 1 ms */
+  }
 
   ck_sequence_write_begin(&th->memlock);
   ck_sequence_write_begin(&L->memlock);
@@ -2015,15 +2065,20 @@ static void *trace_thread(void *unused)
 }
 
 /* Global collection must only use async-signal safe functions,
- * or it will lead to a deadlock (especially in printf) */
-static void global_trace(lua_State *L)
+ * or it will lead to a deadlock (especially in printf).
+ * Returns 0 if unable to trace, > 0 on success.
+ */
+static int global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
-  if (!try_lock_all_threads()) {
-    return;
+  if (!try_lock_all_threads(L, GLOBAL_TRACE_ALL_THREADS_WAIT_MS)) {
+    thrlua_log(L, DERROR, "thrlua: Tracing skipped in global trace -"
+               " unable to acquire all threads lock %s\n",
+               (GLOBAL_TRACE_ALL_THREADS_WAIT_MS > 0) ? "after waiting" : "immediately");
+    return 0;
   }
 
   if (NON_SIGNAL_COLLECTOR) {
@@ -2106,6 +2161,7 @@ static void global_trace(lua_State *L)
 
   unlock_all_threads();
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
+  return 1;
 }
 
 void luaC_checkGC(lua_State *L)
