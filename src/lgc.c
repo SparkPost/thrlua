@@ -31,7 +31,7 @@ static int NON_SIGNAL_COLLECTOR = 1;
  * A value <= 0 means no wait -- just give up if the lock can't
  * be acquired immediately.
  */
-static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 1000 /* 0 */; /* XXX: environment variable; default to 0 */
+static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 500 /* 0 */; /* XXX: environment variable; default to 0 */
 
 /* Maximum amount of time (in milliseconds) a global trace thread should
  * wait for mutators to get out of a write barrier before assuming a deadlock
@@ -947,13 +947,15 @@ static INLINE void lock_all_threads(void)
   }
 }
 
-static INLINE int try_lock_all_threads (int wait_in_ms)
+/* XXX: docs */
+static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
 {
   int r = EBUSY;
 
   if (wait_in_ms > 0) {
     struct timespec timeout;
     clock_gettime(CLOCK_REALTIME, &timeout);
+    /* XXX: need to cope with wait_in_ms >= 1000 ms and update tv_sec field appropriately. */
     timeout.tv_nsec += wait_in_ms * 1000000L; /* ms -> ns */
     r = pthread_mutex_timedlock(&all_threads_lock, &timeout);
   } else {
@@ -962,9 +964,13 @@ static INLINE int try_lock_all_threads (int wait_in_ms)
   switch (r) {
     case 0:
       return 1;
-    case EBUSY:
+    case ETIMEDOUT: /* pthread_mutex_timedlock timed out */
+    case EBUSY: /* pthread_mutex_trylock failed to grab it */
       return 0;
     default:
+      if (L) {
+        thrlua_log(L, DCRITICAL, "thrlua: LOCK(all_threads): %d %s\n", r, strerror(r));
+      }
       fprintf(stderr, "LOCK(all_threads): %d %s\n", r, strerror(r));
       abort();
   }
@@ -1041,7 +1047,7 @@ static void prune_dead_thread_states(void)
 {
   thr_State *pt, *pttmp;
 
-  if (!try_lock_all_threads(0)) {
+  if (!try_lock_all_threads(NULL, 0)) {
     return;
   }
   TAILQ_FOREACH_SAFE(pt, &all_threads, threads, pttmp) {
@@ -1122,7 +1128,7 @@ static void thread_exited(void *p)
   /* POSIX states that we are only called when p is non-NULL */
   lua_assert(p != NULL);
 
-  if (try_lock_all_threads(0)) {
+  if (try_lock_all_threads(NULL, 0)) {
     TAILQ_REMOVE(&all_threads, thr, threads);
     unlock_all_threads();
     free(thr);
@@ -2045,7 +2051,7 @@ static int global_trace(lua_State *L)
   GCheap *h;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
-  if (!try_lock_all_threads(GLOBAL_TRACE_ALL_THREADS_WAIT_MS)) {
+  if (!try_lock_all_threads(L, GLOBAL_TRACE_ALL_THREADS_WAIT_MS)) {
     thrlua_log(L, DERROR, "thrlua: Tracing skipped in global trace -"
                " unable to acquire all threads lock immediately\n", "");
     return 0;
