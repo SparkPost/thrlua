@@ -26,12 +26,17 @@ static int NUM_TRACE_THREADS = 8;
 /* Non-signal collector logic. Set to 0 to disable.*/
 static int NON_SIGNAL_COLLECTOR = 1;
 
-/* Maximum amount of time (in milliseconds) that global trace should
+/* TR-1945: Maximum amount of time (in milliseconds) that global trace should
  * should wait for the "all threads" lock before giving up.
  * A value <= 0 means no wait -- just give up if the lock can't
  * be acquired immediately.
  */
-static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 500 /* 0 */; /* XXX: environment variable; default to 0 */
+static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 0; /* off by default */
+
+/* TR-1945: In order to trigger lock contention between global trace
+ * and thread inheritance, set this to e.g.: 1. Don't do this in production.
+ */
+static int TEST_INHERIT_THREAD_DELAY_MS = 0; /* off by default */
 
 /* Maximum amount of time (in milliseconds) a global trace thread should
  * wait for mutators to get out of a write barrier before assuming a deadlock
@@ -947,7 +952,14 @@ static INLINE void lock_all_threads(void)
   }
 }
 
-/* XXX: docs */
+/* Try to grab the "all threads" lock.
+ *
+ * When wait_in_ms > 0, this will wait that many milliseconds,
+ * in order to acquire the lock. If it's <= 0,
+ * then it will try once and then fail if the mutex could not be acquired.
+ *
+ * The Lua state L can be NULL.
+ */
 static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
 {
   int r = EBUSY;
@@ -1197,6 +1209,8 @@ static void make_tls_key(void)
     read_int_env("LUA_NUM_TRACE_THREADS", &NUM_TRACE_THREADS);
   }
 
+  read_int_env("LUA_GLOBAL_TRACE_ALL_THREADS_WAIT_MS", &GLOBAL_TRACE_ALL_THREADS_WAIT_MS);
+  read_int_env("LUA_TEST_INHERIT_THREAD_DELAY_MS", &TEST_INHERIT_THREAD_DELAY_MS);
   read_int_env("LUA_BLOCK_MUTATORS_MAX_WAIT_MS", &BLOCK_MUTATORS_MAX_WAIT_MS);
   read_int_env("LUA_BLOCK_MUTATORS_RETRY_WAIT_MS", &BLOCK_MUTATORS_RETRY_WAIT_MS);
 
@@ -1535,9 +1549,15 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
    * needs to steal its contents */
   lock_all_threads();
 
-  /* TR-1945 XXX remove once shown issue */
-  usleep(1000); /* 1000 usec = 1 ms */
-  /* End TR-1945 XXX remove once shown issue */
+  if (TEST_INHERIT_THREAD_DELAY_MS > 0) {
+    /* TR-1945: Both global trace and thread delref will grab
+     * the "all threads" lock. To induce false contention on that lock
+     * on a false system, it helps for the inherit code to take
+     * a minimum amount of time. Set the environment variable
+     * 'LUA_TEST_INHERIT_THREAD_DELAY_MS' to enable this delay.
+     */
+    usleep(TEST_INHERIT_THREAD_DELAY_MS * 1000L); /* 1000 usec = 1 ms */
+  }
 
   ck_sequence_write_begin(&th->memlock);
   ck_sequence_write_begin(&L->memlock);
@@ -2056,7 +2076,8 @@ static int global_trace(lua_State *L)
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads(L, GLOBAL_TRACE_ALL_THREADS_WAIT_MS)) {
     thrlua_log(L, DERROR, "thrlua: Tracing skipped in global trace -"
-               " unable to acquire all threads lock immediately\n", "");
+               " unable to acquire all threads lock %s\n",
+               (GLOBAL_TRACE_ALL_THREADS_WAIT_MS > 0) ? "after waiting" : "immediately");
     return 0;
   }
 
