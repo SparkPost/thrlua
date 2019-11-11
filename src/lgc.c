@@ -31,7 +31,7 @@ static int NON_SIGNAL_COLLECTOR = 1;
  * A value <= 0 means no wait -- just give up if the lock can't
  * be acquired immediately.
  */
-static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 0; /* off by default */
+static int GLOBAL_TRACE_ALL_THREADS_WAIT_MS = 500; /* Default set, TR-1959 */
 
 /* TR-1945: In order to trigger lock contention between global trace
  * and thread inheritance, set this to e.g.: 1. Don't do this in production.
