@@ -2,7 +2,7 @@
 require('Test.More')
 require('strict')
 local posix = require("posix")
-plan(83)
+plan(91)
 
 local rwlock
 
@@ -22,6 +22,25 @@ is(rwlock:unlock(), true, "main thread can unlock twice for reads")
 rwlock = thread.rwlock() -- new lock, please
 is(rwlock:wrlock(), true, "main thread can lock for writes")
 is(rwlock:unlock(), true, "main thread can unlock for writes")
+
+-- try*lock tests
+rwlock = thread.rwlock() -- new lock, please
+is(rwlock:tryrdlock(), true, "main thread can trylock for reads")
+is(rwlock:unlock(), true, "main thread can unlock after tryrdlock")
+
+rwlock = thread.rwlock() -- new lock, please
+is(rwlock:trywrlock(), true, "main thread can trylock for writes")
+is(rwlock:unlock(), true, "main thread can unlock after trywrlock")
+
+rwlock = thread.rwlock() -- new lock, please
+rwlock:rdlock()
+isnt(rwlock:trywrlock(), true, "trywrlock fails when read lock held")
+rwlock:unlock()
+
+rwlock = thread.rwlock() -- new lock, please
+rwlock:wrlock()
+isnt(rwlock:tryrdlock(), true, "tryrdlock fails when write lock held")
+rwlock:unlock()
 
 -- Verify that unlocking an unlocked rwlock doesn't fault/crash.
 -- It may throw a Lua error, depending on what pthread_rwlock_unlock()

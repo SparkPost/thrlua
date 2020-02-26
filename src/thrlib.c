@@ -473,11 +473,25 @@ static int thrlib_rwlock_rdlock(lua_State *L)
   return handle_lock_return(L, "rwlock", "rdlock", ret);
 }
 
+static int thrlib_rwlock_tryrdlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_tryrdlock(rwlock);
+  return handle_lock_return(L, "rwlock", "tryrdlock", ret);
+}
+
 static int thrlib_rwlock_wrlock(lua_State *L)
 {
   pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
   int ret = pthread_rwlock_wrlock(rwlock);
   return handle_lock_return(L, "rwlock", "wrlock", ret);
+}
+
+static int thrlib_rwlock_trywrlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_trywrlock(rwlock);
+  return handle_lock_return(L, "rwlock", "trywrlock", ret);
 }
 
 static int thrlib_rwlock_unlock(lua_State *L)
@@ -528,7 +542,8 @@ static const luaL_Reg cond_funcs[] = {
 static const luaL_Reg rwlock_funcs[] = {
   {"rdlock", thrlib_rwlock_rdlock },
   {"wrlock", thrlib_rwlock_wrlock },
-  /* XXX: try variants of rdlock/wrlock */
+  {"tryrdlock", thrlib_rwlock_tryrdlock },
+  {"trywrlock", thrlib_rwlock_trywrlock },
   {"unlock", thrlib_rwlock_unlock },
   {"__gc", thrlib_rwlock_gc },
   {NULL, NULL}
