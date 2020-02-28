@@ -1,8 +1,9 @@
 #!/opt/msys/3rdParty/bin/perl -w
-# Copyright (c) 2008-2010 Message Systems, Inc.
+# Copyright (c) 2008-2020 Message Systems, Inc.
 # Runs unit tests
 # vim:ts=2:sw=2:et:
 use strict;
+use warnings;
 use File::Find;
 use Data::Dumper;
 use Getopt::Long;
@@ -46,15 +47,41 @@ platform = {
 }
 LUA
 
+my $INSTALLED_LUA = "/opt/msys/3rdParty/bin/rclua";
+
 $ENV{RCLUA_PATH} = './?.lua;./etc/?.lua;./etc/?/init.lua';
 $ENV{LUA_PATH} = './?.lua;./etc/?.lua;./etc/?/init.lua';
 $ENV{RCLUA_CPATH} = ".libs/?.so";
 if ($use_installed) {
-  $ENV{LUA_EXECUTABLE} ||= "/opt/msys/3rdParty/bin/rclua";
+  $ENV{LUA_EXECUTABLE} ||= $INSTALLED_LUA;
 } else {
   $ENV{DYLD_LIBRARY_PATH} = ".libs";
   $ENV{LD_LIBRARY_PATH} = ".libs";
   $ENV{LUA_EXECUTABLE} ||= ".libs/rclua";
+
+  if (-x $INSTALLED_LUA) {
+    # If Lua is installed, it will be picked up by the test harness.
+    # It's not possible to avoid this, because we link libraries
+    # using -rpath. LD_LIBRARY_PATH cannot override -rpath.
+    # Installed Lua needs to be removed before we can run tests.
+    print STDERR <<'EOT';
+!!!                                                   !!!
+!!! LUA IS INSTALLED - THIS WILL INTERFERE WITH TESTS !!!
+!!!                                                   !!!
+!!! Please remove it before running the tests.        !!!
+!!! This can be achieved using:                       !!!
+!!!                                                   !!!
+!!! sudo rpm -ev msys-lua msys-lua-devel --nodeps     !!!
+!!!                                                   !!!
+!!! Once you've finished with your Lua development,   !!!
+!!! reinstall Lua using your Core repo checkout.      !!!
+!!! E.g.:                                             !!!
+!!!                                                   !!!
+!!! cd /path/to/Core                                  !!!
+!!! ./build/check                                     !!!
+!!!                                                   !!!
+EOT
+  }
 }
 $ENV{THIS_ENV_VAR_IS_SET_FOR_THE_ENV_TEST} = "w00t";
 

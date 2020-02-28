@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2011 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2010-2020 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any
@@ -13,6 +13,7 @@
 #define THRLIB_THREAD "thread.thread"
 #define THRLIB_MUTEX  "thread.mutex"
 #define THRLIB_COND  "thread.cond"
+#define THRLIB_RWLOCK "thread.rwlock"
 
 struct thrlib_thread {
   pthread_t osthr;
@@ -22,23 +23,23 @@ struct thrlib_thread {
 
 extern void lua_name_thread(char *thread_name);
 
-static int traceback(lua_State *L)
+static int thrlib_traceback(lua_State *L)
 {
   // FIXME: write a test for traceback inside a thread
   if (!lua_isstring(L, 1))  {
     /* 'message' not a string? */
-    printf("TRACEBACK: error is not a string\n");
+    fprintf(stderr, "TRACEBACK: error is not a string\n");
     return 1;  /* keep it intact */
   }
   lua_getfield(L, LUA_GLOBALSINDEX, "debug");
   if (!lua_istable(L, -1)) {
-    printf("TRACEBACK: can't find debug lib?\n");
+    fprintf(stderr, "TRACEBACK: can't find debug lib?\n");
     lua_pop(L, 1);
     return 1;
   }
   lua_getfield(L, -1, "traceback");
   if (!lua_isfunction(L, -1)) {
-    printf("TRACEBACK: can't find debug.traceback?\n");
+    fprintf(stderr, "TRACEBACK: can't find debug.traceback?\n");
     lua_pop(L, 2);
     return 1;
   }
@@ -46,6 +47,18 @@ static int traceback(lua_State *L)
   lua_pushinteger(L, 2);  /* skip this function and traceback */
   lua_call(L, 2, 1);  /* call debug.traceback */
   return 1;
+}
+
+static void log_pcall_error (lua_State *L, int st)
+{
+    static const char *fmt = "thread pcall failed with status %d, error=%s\n";
+    const char *msg = lua_tostring(L, -1);
+
+    if (msg == NULL) {
+      msg = "<unknown>";
+    }
+    fprintf(stderr, fmt, st, msg);
+    thrlua_log(L, DERROR, fmt, st, msg);
 }
 
 static void *thrlib_thread_func(void *arg)
@@ -63,7 +76,7 @@ static void *thrlib_thread_func(void *arg)
   lua_name_thread("lua-tfunc");
   st = lua_pcall(L, 1, 0, 1);
   if (st != 0) {
-    printf("thread pcall failed with status %d\n", st);
+    log_pcall_error(L, st);
   }
   lua_settop(L, 0);
   luaC_localgc(L, GCFULL);
@@ -88,7 +101,7 @@ static void *thrlib_detached_thread_func(void *arg)
   lua_name_thread("lua-tfunc-det");
   st = lua_pcall(L, 1, 0, 1);
   if (st != 0) {
-    printf("thread pcall failed with status %d\n", st);
+    log_pcall_error(L, st);
   }
 
   lua_settop(L, 0);
@@ -130,7 +143,7 @@ static int thrlib_create(lua_State *L)
   ck_pr_inc_32(&newL->gch.ref);
 
   /* trace function is on the top of the stack */
-  lua_pushcfunction(newL, traceback);
+  lua_pushcfunction(newL, thrlib_traceback);
 
   /* make a copy of 1st function parameter; put on top of stack */
   lua_pushvalue(L, 1);
@@ -239,7 +252,19 @@ static int thrlib_mutex_new(lua_State *L)
   return 1;
 }
 
-static int handle_mutex_return(lua_State *L, const char *what, int ret)
+/**
+ * Diagnostics for pthread_* mutex/wrlock return codes.
+ *
+ * @param[in] L Lua thread
+ * @param[in] what String describing lock, e.g.: "mutex"
+ * @param[in] op String describing operation, e.g.: "unlock"
+ * @param[in] ret Return code from pthread_* functions
+ *
+ * @return Number of values pushed onto Lua stack
+ *
+ * @internal
+ */
+static int handle_lock_return(lua_State *L, const char *what, const char *op, int ret)
 {
   switch (ret) {
     case 0:
@@ -249,8 +274,8 @@ static int handle_mutex_return(lua_State *L, const char *what, int ret)
     case EINVAL:
     case EDEADLK:
     case EPERM:
-      return luaL_error(L, "failed to %s mutex: %d %s",
-        what, ret, strerror(ret));
+      return luaL_error(L, "failed to %s %s: %d %s",
+        op, what, ret, strerror(ret));
 
     default:
       lua_pushinteger(L, ret);
@@ -265,7 +290,7 @@ static int thrlib_mutex_lock(lua_State *L)
 
   ret = pthread_mutex_lock(mtx);
 
-  return handle_mutex_return(L, "lock", ret);
+  return handle_lock_return(L, "mutex", "lock", ret);
 }
 
 static int thrlib_mutex_trylock(lua_State *L)
@@ -275,7 +300,7 @@ static int thrlib_mutex_trylock(lua_State *L)
 
   ret = pthread_mutex_trylock(mtx);
 
-  return handle_mutex_return(L, "trylock", ret);
+  return handle_lock_return(L, "mutex", "trylock", ret);
 }
 
 static int thrlib_mutex_unlock(lua_State *L)
@@ -285,7 +310,7 @@ static int thrlib_mutex_unlock(lua_State *L)
 
   ret = pthread_mutex_unlock(mtx);
 
-  return handle_mutex_return(L, "unlock", ret);
+  return handle_lock_return(L, "mutex", "unlock", ret);
 }
 
 static int thrlib_mutex_gc(lua_State *L)
@@ -403,7 +428,7 @@ static int thrlib_cond_lock(lua_State *L)
 
   ret = pthread_mutex_lock(c->mtx);
 
-  return handle_mutex_return(L, "lock", ret);
+  return handle_lock_return(L, "mutex", "lock", ret);
 }
 
 static int thrlib_cond_unlock(lua_State *L)
@@ -413,7 +438,7 @@ static int thrlib_cond_unlock(lua_State *L)
 
   ret = pthread_mutex_unlock(c->mtx);
 
-  return handle_mutex_return(L, "unlock", ret);
+  return handle_lock_return(L, "mutex", "unlock", ret);
 }
 
 static int thrlib_cond_new(lua_State *L)
@@ -441,6 +466,61 @@ static int thrlib_cond_new(lua_State *L)
   return 1;
 }
 
+static int thrlib_rwlock_rdlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_rdlock(rwlock);
+  return handle_lock_return(L, "rwlock", "rdlock", ret);
+}
+
+static int thrlib_rwlock_tryrdlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_tryrdlock(rwlock);
+  return handle_lock_return(L, "rwlock", "tryrdlock", ret);
+}
+
+static int thrlib_rwlock_wrlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_wrlock(rwlock);
+  return handle_lock_return(L, "rwlock", "wrlock", ret);
+}
+
+static int thrlib_rwlock_trywrlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_trywrlock(rwlock);
+  return handle_lock_return(L, "rwlock", "trywrlock", ret);
+}
+
+static int thrlib_rwlock_unlock(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  int ret = pthread_rwlock_unlock(rwlock);
+  return handle_lock_return(L, "rwlock", "unlock", ret);
+}
+
+static int thrlib_rwlock_new(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = lua_newuserdata(L, sizeof(*rwlock));
+
+  /* XXX: support attributes like in thrlib_mutex_new() */
+  pthread_rwlock_init(rwlock, NULL);
+
+  luaL_getmetatable(L, THRLIB_RWLOCK);
+  lua_setmetatable(L, -2);
+
+  return 1;
+}
+
+static int thrlib_rwlock_gc(lua_State *L)
+{
+  pthread_rwlock_t *rwlock = luaL_checkudata(L, 1, THRLIB_RWLOCK);
+  pthread_rwlock_destroy(rwlock);
+  return 0;
+}
+
 static const luaL_Reg mutex_funcs[] = {
   {"lock", thrlib_mutex_lock },
   {"unlock", thrlib_mutex_unlock },
@@ -459,11 +539,22 @@ static const luaL_Reg cond_funcs[] = {
   {NULL, NULL}
 };
 
+static const luaL_Reg rwlock_funcs[] = {
+  {"rdlock", thrlib_rwlock_rdlock },
+  {"wrlock", thrlib_rwlock_wrlock },
+  {"tryrdlock", thrlib_rwlock_tryrdlock },
+  {"trywrlock", thrlib_rwlock_trywrlock },
+  {"unlock", thrlib_rwlock_unlock },
+  {"__gc", thrlib_rwlock_gc },
+  {NULL, NULL}
+};
+
 static const luaL_Reg thrlib[] = {
   {"create", thrlib_create },
   {"sleep", thrlib_sleep },
   {"mutex", thrlib_mutex_new },
   {"condition", thrlib_cond_new },
+  {"rwlock", thrlib_rwlock_new },
   {NULL, NULL}
 };
 
@@ -486,6 +577,12 @@ LUALIB_API int luaopen_thread(lua_State *L)
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, cond_funcs);
+
+  /* rwlock metatable */
+  luaL_newmetatable(L, THRLIB_RWLOCK);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -2, "__index");
+  luaL_register(L, NULL, rwlock_funcs);
 
   luaL_register(L, LUA_THREADLIBNAME, thrlib);
 

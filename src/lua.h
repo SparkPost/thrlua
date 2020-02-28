@@ -22,7 +22,7 @@
 #define LUA_VERSION	"thrLua 5.1"
 #define LUA_RELEASE	"thrLua " PACKAGE_VERSION
 #define LUA_VERSION_NUM	501
-#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2012 Message Systems, Inc"
+#define LUA_COPYRIGHT	"Copyright (C) 1994-2008 Lua.org, PUC-Rio\nCopyright (C) 2008-2020 Message Systems, Inc"
 #define LUA_AUTHORS 	"R. Ierusalimschy, L. H. de Figueiredo & W. Celes"
 
 
