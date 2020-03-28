@@ -35,6 +35,7 @@ LUAI_FUNC void luaC_blockcollector(lua_State *L);
 LUAI_FUNC void luaC_unblockcollector(lua_State *L);
 LUAI_FUNC void *luaC_newobj(lua_State *L, enum lua_obj_type tt);
 LUAI_FUNC void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size);
+LUAI_FUNC void *luaC_newobjv2(lua_State *L, enum lua_obj_type tt, size_t size, const int zero_obj_only);
 LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 LUAI_FUNC void luaC_checkGC(lua_State *L);
 LUAI_FUNC int64_t luaC_count(lua_State *L);
