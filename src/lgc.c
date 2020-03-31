@@ -1551,7 +1551,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
  */
 void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size)
 {
-  return luaC_newobjv2(L, tt, size, 0);
+  return luaC_newobjv2(L, tt, size, 0 /* zero whole buffer */);
 }
 
 /*
