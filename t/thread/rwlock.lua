@@ -2,7 +2,7 @@
 require('Test.More')
 require('strict')
 local posix = require("posix")
-plan(91)
+plan(93)
 
 local rwlock
 
