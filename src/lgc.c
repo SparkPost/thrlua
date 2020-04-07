@@ -1464,7 +1464,14 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   /* Sanity check: zerosize needs to zero the basic object header.
    * This won't catch all errors in zerosize.
    */
-  if (zerosize < sizeof(GCheader)) {
+  static const size_t min_zerosize = sizeof(GCheader);
+  if (zerosize < min_zerosize) {
+    const char *fmt = "thrlua: Lua object type %d (%s) zerosize too small"
+        " at %zd bytes, > %zd expected, total size %zd bytes\n";
+    thrlua_log(L, DCRITICAL, fmt, tt, luaT_typenames[tt],
+        zerosize, min_zerosize, size);
+    fprintf(stderr, fmt, tt, luaT_typenames[tt],
+        zerosize, min_zerosize, size);
     abort();
   }
 
