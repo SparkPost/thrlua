@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 Message Systems, Inc. All rights reserved
+ * Copyright (c) 2011-2020 Message Systems, Inc. All rights reserved
  *
  * THIS IS UNPUBLISHED PROPRIETARY SOURCE CODE OF MESSAGE SYSTEMS
  * The copyright notice above does not evidence any
@@ -21,8 +21,16 @@ static int ljson_tostring(lua_State *L)
 {
   struct json_object *json = luaL_checkudata(L, 1, MT_JSON);
 
-  lua_pushstring(L, json_object_to_json_string(json));
-  return 1;
+  switch (json_object_get_type(json)) {
+    case json_type_string:
+      lua_pushlstring(L, json_object_get_string(json),
+          json_object_get_string_len(json));
+      return 1;
+
+    default:
+      lua_pushstring(L, json_object_to_json_string(json));
+      return 1;
+  }
 }
 
 static int ljson_gc(lua_State *L)
@@ -55,7 +63,8 @@ static int push_json_value(lua_State *L, struct json_object *json, int root)
       lua_pushinteger(L, json_object_get_int(json));
       return 1;
     case json_type_string:
-      lua_pushstring(L, json_object_get_string(json));
+      lua_pushlstring(L, json_object_get_string(json),
+          json_object_get_string_len(json));
       return 1;
     default:
       luaL_pushuserptr(L, MT_JSON, json, 0);

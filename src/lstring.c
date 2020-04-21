@@ -50,7 +50,8 @@ static TString *newlstr (lua_State *L, const char *str, size_t l,
 
   if (l+1 > (MAX_SIZET - sizeof(TString))/sizeof(char))
     luaM_toobig(L);
-  ts = luaC_newobjv(L, LUA_TSTRING, (l+1)*sizeof(char)+sizeof(TString));
+  ts = luaC_newobjv2(L, LUA_TSTRING, (l+1)*sizeof(char)+sizeof(TString),
+      1 /* only zero TString object */);
   ts->tsv.len = l;
   ts->tsv.hash = h;
   memcpy(ts+1, str, l*sizeof(char));

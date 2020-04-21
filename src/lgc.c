@@ -1432,14 +1432,51 @@ global_State *luaC_newglobal(struct lua_StateParams *p)
   return g;
 }
 
+/**
+ * Create a new Lua object with the specified type,
+ * and associate it with the Lua thread's heap.
+ *
+ * @param[in] L The Lua thread that owns the new object
+ * @param[in] tt The Lua object type, one of LUA_T*
+ * @param[in] objtype Memory type to use for allocation, one of LUA_MEM_*
+ * @param[in] size The size of the object to be allocated,
+ * @param[in] size including internal object header
+ * @param[in] zerosize The size of the allocated buffer to zero.
+ *
+ * @return The new object
+ *
+ * The zerosize parameter allows callers to avoid zeroing parts
+ * of the buffer that will be immediately overwritten,
+ * by specifying zerosize < size. This is intended for use
+ * when creating a new Lua string.
+ *
+ * zerosize must be at least the size of the object header,
+ * to ensure that it is properly initialized.
+ *
+ * @internal
+ */
 static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
-  enum lua_memtype objtype, size_t size)
+  enum lua_memtype objtype, size_t size, size_t zerosize)
 {
   GCheader *o;
   thr_State *pt = luaC_get_per_thread(L);
 
+  /* Sanity check: zerosize needs to zero the basic object header.
+   * This won't catch all errors in zerosize.
+   */
+  static const size_t min_zerosize = sizeof(GCheader);
+  if (zerosize < min_zerosize) {
+    const char *fmt = "thrlua: Lua object type %d (%s) zerosize too small"
+        " at %zd bytes, > %zd expected, total size %zd bytes\n";
+    thrlua_log(L, DCRITICAL, fmt, tt, luaT_typenames[tt],
+        zerosize, min_zerosize, size);
+    fprintf(stderr, fmt, tt, luaT_typenames[tt],
+        zerosize, min_zerosize, size);
+    abort();
+  }
+
   o = luaM_realloc(L, objtype, NULL, 0, size);
-  memset(o, 0, size);
+  memset(o, 0, zerosize);
   o->owner = L->heap;
   o->tt = tt;
   o->marked = !L->black;
@@ -1463,7 +1500,7 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = new_obj(L, tt, objtype, sizeof(b)); \
+      o = new_obj(L, tt, objtype, sizeof(b), sizeof(b)); \
       lua_unlock(L); \
       break
     NEWIMPL(LUA_TUPVAL, UpVal, LUA_MEM_UPVAL);
@@ -1508,16 +1545,54 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
   return o;
 }
 
+/**
+ * Allocate a Lua object of a specified type,
+ * zero out its data part, and associate it with the Lua thread's heap.
+ *
+ * @param[in] L The Lua thread that owns the new object
+ * @param[in] tt The Lua object type, one of LUA_T*
+ * @param[in] size The size of the object to be allocated,
+ * @param[in] size including internal object header
+ *
+ * @return The new object
+ */
 void *luaC_newobjv(lua_State *L, enum lua_obj_type tt, size_t size)
 {
+  return luaC_newobjv2(L, tt, size, 0 /* zero whole buffer */);
+}
+
+/*
+ * Allocate a Lua object of a specified type,
+ * and associate it with the Lua thread's heap.
+ *
+ * @param[in] L The Lua thread that owns the new object
+ * @param[in] tt The Lua object type, one of LUA_T*
+ * @param[in] size The size of the object to be allocated,
+ * @param[in] size including internal object header
+ * @param[in] zero_obj_only When set, does not zero the data part,
+ * @param[in] zero_obj_only only the object header.
+ *
+ * @return The new object
+ *
+ * When zero_obj_only is non-zero, the caller is responsible
+ * for ensuring that the data part of the object is valid.
+ * E.g.: if it's allocating a LUA_TSTRING, the caller is expected
+ * to copy in the string and nul terminate it.
+ */
+void *luaC_newobjv2(lua_State *L, enum lua_obj_type tt, size_t size, const int zero_obj_only)
+{
   GCheader *o = NULL;
+  size_t zerosize = size; /* zero whole buffer by default */
 
   switch (tt) {
 #undef NEWIMPL
 #define NEWIMPL(a, b, objtype) \
     case a: \
       lua_lock(L); \
-      o = new_obj(L, tt, objtype, size); \
+      if (zero_obj_only) { \
+        zerosize = sizeof(b); \
+      } \
+      o = new_obj(L, tt, objtype, size, zerosize); \
       lua_unlock(L); \
       break
     NEWIMPL(LUA_TFUNCTION, Closure, LUA_MEM_FUNCTION);
