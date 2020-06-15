@@ -1198,6 +1198,9 @@ LUA_API int lua_gc (lua_State *L, int what, int data) {
       case LUA_GCGLOBALTRACE:
         res = luaC_fullgc(L);
         break;
+      case LUA_GCGLOBALTRACEONLY:
+        res = luaC_globaltrace(L);
+        break;
       case LUA_GCSETGLOBALTRACE:
         res = g->global_trace_thresh;
         g->global_trace_thresh = data;

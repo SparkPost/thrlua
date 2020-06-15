@@ -2279,6 +2279,11 @@ int luaC_localgc (lua_State *L, int type)
   return reclaimed;
 }
 
+int luaC_globaltrace (lua_State *L)
+{
+  return global_trace(L);
+}
+
 int luaC_fullgc (lua_State *L)
 {
   global_trace(L);
