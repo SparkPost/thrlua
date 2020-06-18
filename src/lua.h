@@ -362,7 +362,7 @@ LUA_API int  (lua_status) (lua_State *L);
 #define LUA_GCSETPAUSE		6
 #define LUA_GCSETSTEPMUL	7
 /** trigger a global trace and a full local collection;
- * equivalent to lua_gc() with LUA_GCGLOBALTRACEONLY followed by LUA_GCCOLLECT.
+ * equivalent to lua_gc() with LUA_GCGLOBALTRACEONLY followed by LUA_GCSTEP.
  */
 #define LUA_GCGLOBALTRACE 8
 /** set a different global trace threshold */
