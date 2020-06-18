@@ -183,7 +183,8 @@ static int luaB_collectgarbage (lua_State *L) {
       "stop", "restart", "collect",
       "count", "step", "setpause",
       "setstepmul", "globaltrace",
-      "setglobaltrace",
+      "setglobaltrace", "setglobaltracexref",
+      "destroy", "globaltraceonly",
       NULL
   };
   static const int optsnum[] = {
@@ -191,7 +192,8 @@ static int luaB_collectgarbage (lua_State *L) {
       LUA_GCSTOP, LUA_GCRESTART, LUA_GCCOLLECT,
       LUA_GCCOUNT, LUA_GCSTEP, LUA_GCSETPAUSE,
       LUA_GCSETSTEPMUL, LUA_GCGLOBALTRACE,
-      LUA_GCSETGLOBALTRACE,
+      LUA_GCSETGLOBALTRACE, LUA_GCSETGLOBALTRACEXREF,
+      LUA_GCDESTROY, LUA_GCGLOBALTRACEONLY,
   };
   int o = luaL_checkoption(L, 1, "collect", opts);
   int ex = luaL_optint(L, 2, 0);

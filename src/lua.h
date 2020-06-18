@@ -361,13 +361,18 @@ LUA_API int  (lua_status) (lua_State *L);
 #define LUA_GCSTEP		5
 #define LUA_GCSETPAUSE		6
 #define LUA_GCSETSTEPMUL	7
-/** trigger a global trace and a local collection */
+/** trigger a global trace and a full local collection;
+ * equivalent to lua_gc() with LUA_GCGLOBALTRACEONLY followed by LUA_GCSTEP.
+ */
 #define LUA_GCGLOBALTRACE 8
 /** set a different global trace threshold */
 #define LUA_GCSETGLOBALTRACE 9
 /** set a different global trace xref threshold */
 #define LUA_GCSETGLOBALTRACEXREF 10
+/** full local collection, and clean out cached strings */
 #define LUA_GCDESTROY 11
+/** trigger a global trace only, no garbage collection */
+#define LUA_GCGLOBALTRACEONLY 12
 
 LUA_API int (lua_gc) (lua_State *L, int what, int data);
 

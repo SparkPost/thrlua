@@ -39,6 +39,9 @@ LUAI_FUNC void *luaC_newobjv2(lua_State *L, enum lua_obj_type tt, size_t size, c
 LUAI_FUNC global_State *luaC_newglobal(struct lua_StateParams *p);
 LUAI_FUNC void luaC_checkGC(lua_State *L);
 LUAI_FUNC int64_t luaC_count(lua_State *L);
+/** Global trace only */
+LUAI_FUNC int luaC_globaltrace (lua_State *L);
+/** Global trace followed by full local garbage collection */
 LUAI_FUNC int luaC_fullgc (lua_State *L);
 
 /* Possible types of GC on the thread */
