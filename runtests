@@ -1,4 +1,4 @@
-#!/opt/msys/3rdParty/bin/perl -w
+#!/usr/bin/env -S perl -w
 # Copyright (c) 2008-2020 Message Systems, Inc.
 # Runs unit tests
 # vim:ts=2:sw=2:et:

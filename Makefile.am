@@ -61,6 +61,9 @@ rclua_CPPFLAGS = @RL_CFLAGS@
 rcluac_SOURCES = src/luac.c src/print.c
 rcluac_LDADD = -lthrlua
 
+# force build order
+rclua_DEPENDENCIES = libthrlua.la
+
 # pcre
 pcre_la_SOURCES = modules/pcre.c
 pcre_la_LDFLAGS = -module @PCRE_LIBS@

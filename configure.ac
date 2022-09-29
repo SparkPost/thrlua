@@ -158,10 +158,10 @@ fi
 
 case $host in
 	*-*-linux*)
-		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/java/default/lib/$JARCH/server/libjvm.so", [jvm])
+		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/lib/jvm/java-openjdk/jre/lib/$JARCH/server/libjvm.so", [jvm])
 		JAVA_LIBS=""
 		dnl find latest jdk
-		for jdk in /usr/java/jdk* ; do
+		for jdk in /usr/lib/jvm/java-*jdk ; do
 			JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
 		done
 		AC_DEFINE(LUA_OS_LINUX, 1, [Running on Linux])
