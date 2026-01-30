@@ -316,14 +316,21 @@ static size_t readerCallback(void *ptr, size_t size, size_t nmemb, void *stream)
 {
 	const char *readBytes;
 	curlT *c = stream;
+	size_t len, max;
 
 	push_func_and_data(c->L, &c->reader);
 	lua_pushnumber(c->L, size * nmemb);
 	lua_call(c->L, 2, 1);
 	readBytes = lua_tostring(c->L, -1);
 	if (readBytes) {
-		memcpy(ptr, readBytes, lua_strlen(c->L, -1));
-		return lua_strlen(c->L, -1);
+		len = lua_strlen(c->L, -1);
+		max = size * nmemb;
+		if (len > max) {
+			fprintf(stderr, "thrlua:readerCallback buffer overflow. Truncated len %zu max %zu\n", len, max);
+			len = max;
+		}
+		memcpy(ptr, readBytes, len);
+		return len;
 	}
 	return 0;
 }

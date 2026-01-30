@@ -302,13 +302,27 @@ static int perform_regex(lua_State *thr, int mode)
                   } else if (in_brace) {
                     /* a named capture */
                     bref = 0;
-                    while (walk < repend) {
+                    while (walk < repend && bref < sizeof(name) - 1) {
                       if (walk[0] == '}') {
                         walk++;
                         break;
                       }
                       name[bref++] = walk[0];
                       walk++;
+                    }
+                    /* handle case where buffer limit was reached */
+                    if (bref >= sizeof(name) - 1 && walk < repend) {
+                      if (walk[0] != '}') {
+                        /* name was truncated, skip remaining and warn */
+                        fprintf(stderr, "thrlua:perform_regex buffer overflow. Truncated max %zu\n", sizeof(name));
+                        while (walk < repend && walk[0] != '}') {
+                          walk++;
+                        }
+                      }
+                      /* always skip the closing brace if present */
+                      if (walk < repend && walk[0] == '}') {
+                        walk++;
+                      }
                     }
                     name[bref] = '\0';
                   } else {
