@@ -1,0 +1,49 @@
+# Build artifacts
+aclocal.m4
+autom4te.cache/
+config*
+compile
+depcomp
+.libs/
+*/Makefile.in
+Makefile
+Makefile.in
+etc/rclua.pc
+install-sh
+ltmain.sh
+libtool
+rclua
+rcluac
+stamp*
+missing
+rcluaconfig.h*
+
+# Object files
+*.lo
+*.loT
+*.o
+*.so
+*.dylib
+*.la
+*.a
+.deps/
+.dirstamp
+
+# Coverage
+*.lcovinfo
+*.gcno
+*.gcda
+lcovhtml/
+
+# Debug
+*.dSYM/
+vg.vg
+*.vglog
+callgrind.out*
+
+# Generated docs
+doc/reference/*.html
+doc/reference/*.css
+
+# macOS
+.DS_Store
