@@ -314,7 +314,7 @@ static int perform_regex(lua_State *thr, int mode)
                     if (bref >= sizeof(name) - 1 && walk < repend) {
                       if (walk[0] != '}') {
                         /* name was truncated, skip remaining and warn */
-                        fprintf(stderr, "thrlua:perform_regex buffer overflow. Truncated max %zu\n", sizeof(name));
+                        thrlua_log(thr, DCRITICAL, "thrlua:perform_regex buffer overflow. Truncated max %zu\n", sizeof(name));
                         while (walk < repend && walk[0] != '}') {
                           walk++;
                         }

@@ -326,7 +326,7 @@ static size_t readerCallback(void *ptr, size_t size, size_t nmemb, void *stream)
 		len = lua_strlen(c->L, -1);
 		max = size * nmemb;
 		if (len > max) {
-			fprintf(stderr, "thrlua:readerCallback buffer overflow. Truncated len %zu max %zu\n", len, max);
+			thrlua_log(c->L, DCRITICAL, "thrlua:readerCallback buffer overflow. Truncated len %zu max %zu\n", len, max);
 			len = max;
 		}
 		memcpy(ptr, readBytes, len);

@@ -1481,11 +1481,12 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   o->tt = tt;
   o->marked = !L->black;
   o->xref = ck_pr_load_32(&G(L)->notxref);
-  make_grey(L, o);
-  /* The collector can be walking our heap, which isn't safe.  So block it
-   * while we're adding to it */
+  /* Block the collector while modifying the heap.
+   * Insert into heap BEFORE make_grey to ensure the object is fully linked
+   * before it becomes visible to the GC via the grey stack. */
   block_collector(L, pt);
   TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
+  make_grey(L, o);
   unblock_collector(L, pt);
 
   return o;
