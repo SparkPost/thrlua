@@ -1647,11 +1647,15 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   luaE_flush_stringtable(th);
 
   TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
-    TAILQ_REMOVE(&th->heap->objects, steal, allocd);
-
+    /* Update owner before removing from source heap. This ensures that
+     * if any concurrent reader sees this object, it will either:
+     * - See it in th->heap with owner=L->heap (will mark as xref, safe)
+     * - See it in L->heap with owner=L->heap (correct)
+     * This is safer than the object being in neither heap during transfer. */
     steal->owner = L->heap;
     steal->instack.next = NULL;
 
+    TAILQ_REMOVE(&th->heap->objects, steal, allocd);
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
 
     make_grey(L, steal);
