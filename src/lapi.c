@@ -162,9 +162,11 @@ LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
   /* We already done this before calling lua_delrefthread */
   /* luaC_localgc(L, GCDESTROY); */
   /* that was the final ref; someone now gets to own us */
-  lua_lock(inheritor);
-  luaC_inherit_thread(inheritor, L);
-  lua_unlock(inheritor);
+  if (inheritor != NULL) {
+    lua_lock(inheritor);
+    luaC_inherit_thread(inheritor, L);
+    lua_unlock(inheritor);
+  }
   lua_unlock(L);
 }
 

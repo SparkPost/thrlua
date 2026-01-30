@@ -386,12 +386,13 @@ static int thrlib_cond_wait(lua_State *L)
     switch (res) {
       case ETIMEDOUT:
         lua_pushboolean(L, 0);
-        break;
+        return 1;
       case 0:
         lua_pushboolean(L, 1);
-        break;
+        return 1;
       default:
         luaL_error(L, "cond:wait failed %s", strerror(res));
+        return 0;
     }
   }
 
