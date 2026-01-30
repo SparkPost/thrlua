@@ -310,12 +310,16 @@ static int perform_regex(lua_State *thr, int mode)
                       name[bref++] = walk[0];
                       walk++;
                     }
-                    /* skip remaining characters if name was truncated */
-                    if (walk < repend && walk[0] != '}') {
-                      luaL_error(thr, "thrlua:perform_regex buffer overflow. Truncated max %d\n", sizeof(name));
-                      while (walk < repend && walk[0] != '}') {
-                        walk++;
+                    /* handle case where buffer limit was reached */
+                    if (bref >= sizeof(name) - 1 && walk < repend) {
+                      if (walk[0] != '}') {
+                        /* name was truncated, skip remaining and warn */
+                        luaL_error(thr, "thrlua:perform_regex buffer overflow. Truncated max %zu\n", sizeof(name));
+                        while (walk < repend && walk[0] != '}') {
+                          walk++;
+                        }
                       }
+                      /* always skip the closing brace if present */
                       if (walk < repend && walk[0] == '}') {
                         walk++;
                       }
