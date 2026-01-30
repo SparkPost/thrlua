@@ -302,12 +302,19 @@ static int perform_regex(lua_State *thr, int mode)
                   } else if (in_brace) {
                     /* a named capture */
                     bref = 0;
-                    while (walk < repend) {
+                    while (walk < repend && bref < sizeof(name) - 1) {
                       if (walk[0] == '}') {
                         walk++;
                         break;
                       }
                       name[bref++] = walk[0];
+                      walk++;
+                    }
+                    /* skip remaining characters if name was truncated */
+                    while (walk < repend && walk[0] != '}') {
+                      walk++;
+                    }
+                    if (walk < repend && walk[0] == '}') {
                       walk++;
                     }
                     name[bref] = '\0';
