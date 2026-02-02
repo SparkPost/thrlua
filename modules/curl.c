@@ -26,6 +26,7 @@
 #endif
 
 #include <lauxlib.h>
+#include "thrlua.h"
 
 #if !defined(LUA_VERSION_NUM) || (LUA_VERSION_NUM <= 500)
 #define luaL_checkstring luaL_check_string

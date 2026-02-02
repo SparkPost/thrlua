@@ -714,6 +714,8 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
           /* Not done being setup yet, skip */
           return;
         }
+        /* Acquire fence: ensure we see all table data after initialized flag */
+        ck_pr_fence_load();
         if (!is_world_stopped(L)) {
           luaH_rdlock(L, h);
           is_locked = 1;
@@ -1519,6 +1521,13 @@ void *luaC_newobj(lua_State *L, enum lua_obj_type tt)
       G(n) = G(L);
       /* threads own themselves. their creators hold a ref */
       n->heap = new_heap(n);
+      if (n->heap == NULL) {
+        luaM_realloc(L, LUA_MEM_THREAD, n,
+            sizeof(lua_State) + G(L)->extraspace, 0);
+        lua_unlock(L);
+        luaM_toobig(L);
+        return NULL;  /* not reached, luaM_toobig throws */
+      }
       n->gch.owner = n->heap;
       ck_sequence_init(&n->memlock);
       block_collector(L, pt);
