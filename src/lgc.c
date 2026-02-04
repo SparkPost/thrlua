@@ -337,6 +337,7 @@ static INLINE int try_block_mutators(lua_State *L)
 {
   uint32_t pending;
   thr_State *pt;
+  int *recursion = get_recursion();
 
   /* For the non-signal thread stoppage, take a write lock.  Important that
    * we do this before setting intend to stop, as we acquire the write
@@ -351,6 +352,8 @@ static INLINE int try_block_mutators(lua_State *L)
   if (NON_SIGNAL_COLLECTOR) {
     pthread_rwlock_wrlock(&trace_rwlock);
   }
+
+  (*recursion)++;
 
   /* advertise our intent to stop everyone; this prevents any mutators
    * from returning from their respective barriers */
@@ -401,6 +404,10 @@ static INLINE int try_block_mutators(lua_State *L)
 
 static INLINE void unblock_mutators(lua_State *L)
 {
+  int *recursion = get_recursion();
+
+  (*recursion)--;
+
   ck_pr_store_32(&G(L)->intend_to_stop, 0);
   ck_pr_fence_memory();
 
