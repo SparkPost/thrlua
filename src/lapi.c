@@ -153,11 +153,14 @@ LUA_API void *(lua_get_extra)(lua_State *L)
 LUA_API void lua_delrefthread(lua_State *L, lua_State *inheritor)
 {
   bool last;
+
+  /* Lock L BEFORE decrementing ref count to prevent a race with GC */
+  lua_lock(L);
   ck_pr_dec_32_zero(&L->gch.ref, &last);
   if (!last) {
+    lua_unlock(L);
     return;
   }
-  lua_lock(L);
   lua_settop(L, 0);
   /* We already done this before calling lua_delrefthread */
   /* luaC_localgc(L, GCDESTROY); */
