@@ -224,6 +224,9 @@ struct lua_longjmp {
 #elif LUA_ARCH_I386
 # define lua_do_setjmp  LUA_ASMNAME(lua_setjmp_i386)
 # define lua_do_longjmp LUA_ASMNAME(lua_longjmp_i386)
+#elif LUA_ARCH_AARCH64
+# define lua_do_setjmp  LUA_ASMNAME(lua_setjmp_aarch64)
+# define lua_do_longjmp LUA_ASMNAME(lua_longjmp_aarch64)
 #endif
 #ifdef lua_do_setjmp
 extern int lua_do_setjmp(luai_jmpbuf env);

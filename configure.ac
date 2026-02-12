@@ -18,12 +18,16 @@ case $host in
 	i*86*linux*)
 		arch=i386
 		;;
+	aarch64*linux*|arm64*linux*)
+		arch=aarch64
+		;;
 	*darwin*)
 		arch=x86_64
 		;;
 esac
 AM_CONDITIONAL(ARCH_X86_64, test "$arch" = x86_64)
 AM_CONDITIONAL(ARCH_I386, test "$arch" = i386)
+AM_CONDITIONAL(ARCH_AARCH64, test "$arch" = aarch64)
 AM_CONDITIONAL(ARCH_SPARCV9, test "$arch" = sparcv9)
 
 case $host in

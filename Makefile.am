@@ -47,6 +47,10 @@ if ARCH_I386
 libthrlua_la_SOURCES += src/i386/setjmp.S
 CPPFLAGS += -DLUA_ARCH_I386=1
 endif
+if ARCH_AARCH64
+libthrlua_la_SOURCES += src/aarch64/setjmp.S
+CPPFLAGS += -DLUA_ARCH_AARCH64=1
+endif
 if ARCH_SPARCV9
 CPPFLAGS += -DLUA_ARCH_SPARCV9=1
 endif
