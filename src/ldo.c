@@ -75,7 +75,17 @@ void luaD_throw (lua_State *L, int errcode) {
     L->status = cast_byte(errcode);
     if (G(L)->panic) {
       resetstack(L, errcode);
-      lua_unlock(L);
+      /* Do NOT call lua_unlock(L) here.  When luaD_throw is reached
+       * via LUAI_TRY_END re-throw, the LUAI_TRY_FINALLY block has
+       * already run and the lock state depends on the call site:
+       * some FINALLY blocks call lua_unlock (lapi.c, lauxlib.c) while
+       * others call lua_lock (ldo.c callhook/precall).  Unconditionally
+       * unlocking here caused a double-unlock that corrupted the
+       * pthread mutex on Linux/glibc, making every subsequent
+       * lua_lock() on this lua_State fail with EINVAL and abort().
+       * All direct callers of luaD_throw (lmem.c, ldebug.c, lundump.c,
+       * llex.c) always have an outer errorJmp so they never reach
+       * this panic branch. */
       G(L)->panic(L);
     }
     exit(EXIT_FAILURE);

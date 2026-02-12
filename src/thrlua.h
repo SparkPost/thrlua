@@ -260,16 +260,6 @@ extern void lua_do_longjmp(luai_jmpbuf env, int val)
       "re-throwing with %s outer handler, L=%p", \
       lj.status, lj.file, lj.line, \
       lj.previous ? "an" : "NO", (void *)(L)); \
-    /* Re-acquire the lock before re-throwing.  The LUAI_TRY_FINALLY \
-     * block has already called lua_unlock(), but luaD_throw() expects \
-     * the lock to be held: if there is an outer error handler its \
-     * FINALLY will lua_unlock(), and if there is no outer handler the \
-     * panic path in luaD_throw() calls lua_unlock() explicitly.  \
-     * Without this re-lock we double-unlock the pthread mutex which \
-     * is undefined behavior and corrupts the mutex on Linux/glibc, \
-     * causing every subsequent lua_lock() on this lua_State to fail \
-     * with EINVAL and abort(). */ \
-    lua_lock((L)); \
     luaD_throw((L), lj.status); \
   } \
 } while(0)
