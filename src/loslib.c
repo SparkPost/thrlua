@@ -66,7 +66,8 @@ static int os_setenv (lua_State *L) {
   const char *name = luaL_checkstring(L, 1);
   const char *value = luaL_optstring(L, 2, NULL);
   if (value == NULL) {
-    unsetenv(name);
+    if (unsetenv(name) != 0)
+      return os_pushresult(L, 0, name);
   }
   else {
     int overwrite = lua_isnoneornil(L, 3) || lua_toboolean(L, 3);
