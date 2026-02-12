@@ -65,3 +65,4 @@ d:release()
 
 is(dcount, limit, "all items produced");
 
+os.exit(0);
