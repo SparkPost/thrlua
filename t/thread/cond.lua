@@ -61,6 +61,7 @@ d:acquire()
 while dcount != limit do
   d:wait()
 end
+d:release()
 
 is(dcount, limit, "all items produced");
 

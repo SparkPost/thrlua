@@ -94,7 +94,10 @@ like(err, 'not found');
 
 local ts = 1267403455;
 
--- this probably assumes you are in America/New_York
+-- explicitly set TZ to America/New_York for the local-time tests
+local orig_tz = os.getenv('TZ');
+os.setenv('TZ', 'America/New_York');
+
 cmp_ok(os.time(), '>=', ts, 'time()');
 d = os.date('*t', ts);
 is_deeply(d, {
@@ -110,6 +113,9 @@ is_deeply(d, {
 }, 'date');
 is(os.date('%Y-%m-%d', ts), '2010-02-28', 'strftime');
 is(os.time(d), ts, 'time');
+
+-- restore original TZ
+os.setenv('TZ', orig_tz);
 
 d = os.date('!*t', ts);
 is_deeply(d, {
