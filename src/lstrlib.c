@@ -793,8 +793,9 @@ static int str_format (lua_State *L) {
           break;
         }
         case 'o':  case 'u':  case 'x':  case 'X': {
+          lua_Number n = luaL_checknumber(L, arg);
           addintlen(form);
-          sprintf(buff, form, (uint64_t)luaL_checknumber(L, arg));
+          sprintf(buff, form, n < 0 ? (uint64_t)(int64_t)n : (uint64_t)n);
           break;
         }
         case 'e':  case 'E': case 'f':

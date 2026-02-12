@@ -158,12 +158,26 @@ fi
 
 case $host in
 	*-*-linux*)
-		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/lib/jvm/java-openjdk/jre/lib/$JARCH/server/libjvm.so", [jvm])
 		JAVA_LIBS=""
-		dnl find latest jdk
-		for jdk in /usr/lib/jvm/java-*jdk ; do
-			JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
+		dnl find libjvm.so and the latest jdk include dir
+		DEFAULT_JVM_PATH=""
+		for jdk in /usr/lib/jvm/java-*; do
+			dnl JDK 8 and earlier: jre/lib/$JARCH/server/libjvm.so
+			if test -f "$jdk/jre/lib/$JARCH/server/libjvm.so"; then
+				DEFAULT_JVM_PATH="$jdk/jre/lib/$JARCH/server/libjvm.so"
+			fi
+			dnl JDK 9+: lib/server/libjvm.so
+			if test -f "$jdk/lib/server/libjvm.so"; then
+				DEFAULT_JVM_PATH="$jdk/lib/server/libjvm.so"
+			fi
+			if test -d "$jdk/include"; then
+				JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
+			fi
 		done
+		if test -z "$DEFAULT_JVM_PATH"; then
+			DEFAULT_JVM_PATH="/usr/lib/jvm/java-openjdk/jre/lib/$JARCH/server/libjvm.so"
+		fi
+		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "$DEFAULT_JVM_PATH", [jvm])
 		AC_DEFINE(LUA_OS_LINUX, 1, [Running on Linux])
 		;;
 	*-*-solaris*)

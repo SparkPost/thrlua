@@ -62,6 +62,23 @@ static int os_getenv (lua_State *L) {
 }
 
 
+static int os_setenv (lua_State *L) {
+  const char *name = luaL_checkstring(L, 1);
+  const char *value = luaL_optstring(L, 2, NULL);
+  if (value == NULL) {
+    if (unsetenv(name) != 0)
+      return os_pushresult(L, 0, name);
+  }
+  else {
+    int overwrite = lua_isnoneornil(L, 3) || lua_toboolean(L, 3);
+    if (setenv(name, value, overwrite) != 0)
+      return os_pushresult(L, 0, name);
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+
 static int os_clock (lua_State *L) {
   lua_pushnumber(L, ((lua_Number)clock())/(lua_Number)CLOCKS_PER_SEC);
   return 1;
@@ -215,6 +232,7 @@ static const luaL_Reg syslib[] = {
   {"execute",   os_execute},
   {"exit",      os_exit},
   {"getenv",    os_getenv},
+  {"setenv",    os_setenv},
   {"remove",    os_remove},
   {"rename",    os_rename},
   {"setlocale", os_setlocale},

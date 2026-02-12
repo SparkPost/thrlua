@@ -108,15 +108,15 @@ function new(cls, ...)
   else
     thector = choices[1].ctor;
   end
-  if Array == nil then
-    Array = javabridge.findClass('java/lang/reflect/Array'):newInstance();
-  end
-  if Object == nil then
-    Object = javabridge.findClass('java/lang/Object');
-  end
   local a = nil;
   diag("calling with " .. #args .. " args");
   if #args > 0 then
+    if Array == nil then
+      Array = javabridge.findClass('java/lang/reflect/Array'):newInstance();
+    end
+    if Object == nil then
+      Object = javabridge.findClass('java/lang/Object');
+    end
     a = Array.newInstance(Object, #args);
     for i = 0, #args - 1 do
       diag("populating arg " .. i .. " " .. tostring(args[i+1]));
