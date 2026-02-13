@@ -631,6 +631,11 @@ void luaG_errormsg (lua_State *L) {
     incr_top(L);
     luaD_call(L, L->top - 2, 1);  /* call it */
   }
+  {
+    const char *msg = (L->top > L->base && ttisstring(L->top - 1))
+      ? svalue(L->top - 1) : "(non-string error)";
+    thrlua_log(L, DCRITICAL, "luaG_errormsg: %s\n", msg);
+  }
   luaD_throw(L, LUA_ERRRUN);
 }
 

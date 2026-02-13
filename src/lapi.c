@@ -1233,10 +1233,6 @@ LUA_API int lua_error (lua_State *L) {
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     api_checknelems(L, 1);
-    {
-      const char *msg = lua_isstring(L, -1) ? lua_tostring(L, -1) : "(non-string error)";
-      thrlua_log(L, DCRITICAL, "lua_error called: %s\n", msg);
-    }
     luaG_errormsg(L);
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
