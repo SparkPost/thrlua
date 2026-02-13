@@ -631,7 +631,12 @@ void luaG_errormsg (lua_State *L) {
     incr_top(L);
     luaD_call(L, L->top - 2, 1);  /* call it */
   }
-  {
+  /* Only log when there is no error handler -- that means the
+   * subsequent luaD_throw will hit the panic branch.  When
+   * L->errorJmp is set the error will be caught by pcall/xpcall
+   * and is part of normal control flow (e.g. lua-aws uses pcall
+   * for method-existence checks). */
+  if (!L->errorJmp) {
     const char *msg = (L->top > L->base && ttisstring(L->top - 1))
       ? svalue(L->top - 1) : "(non-string error)";
     thrlua_log(L, DCRITICAL, "luaG_errormsg: %s\n", msg);
