@@ -1233,6 +1233,21 @@ LUA_API int lua_error (lua_State *L) {
   lua_lock(L);
   LUAI_TRY_BLOCK(L) {
     api_checknelems(L, 1);
+    if (!lj.previous) {
+      /* Log only when there is no outer error handler -- i.e. the error
+       * will ultimately reach the panic branch.  We check lj.previous
+       * (not L->errorJmp) because LUAI_TRY_BLOCK already set
+       * L->errorJmp = &lj, so L->errorJmp is always non-NULL here.
+       *
+       * Use raw accessors (ttisstring/svalue) instead of the public API
+       * (lua_isstring/lua_tostring).  lua_isstring returns true for
+       * numbers, and lua_tostring -> lua_tolstring calls lua_lock for
+       * number-to-string conversion, which would deadlock since we
+       * already hold the lock from lua_error's lua_lock above. */
+      StkId o = L->top - 1;
+      const char *msg = ttisstring(o) ? svalue(o) : "(non-string error)";
+      thrlua_log(L, DCRITICAL, "lua_error (unhandled): %s\n", msg);
+    }
     luaG_errormsg(L);
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
