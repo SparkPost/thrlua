@@ -254,12 +254,16 @@ extern void lua_do_longjmp(luai_jmpbuf env, int val)
 #define LUAI_TRY_END(L) \
   (L)->errorJmp = lj.previous; \
   if (lj.status) { \
-    /* Log the error and re-throw path for diagnostics. */ \
-    thrlua_log((L), DCRITICAL, \
-      "LUAI_TRY_END: error status=%d in TRY block at %s:%d, " \
-      "re-throwing with %s outer handler, L=%p", \
-      lj.status, lj.file, lj.line, \
-      lj.previous ? "an" : "NO", (void *)(L)); \
+    /* Only log when there is NO outer handler -- that is the \
+     * dangerous path that hits luaD_throw's panic branch. \
+     * Normal error propagation (with an outer handler) is \
+     * high-frequency and must not be logged. */ \
+    if (!lj.previous) { \
+      thrlua_log((L), DCRITICAL, \
+        "LUAI_TRY_END: error status=%d in TRY block at %s:%d, " \
+        "re-throwing with NO outer handler, L=%p\n", \
+        lj.status, lj.file, lj.line, (void *)(L)); \
+    } \
     luaD_throw((L), lj.status); \
   } \
 } while(0)

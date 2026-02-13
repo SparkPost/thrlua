@@ -70,7 +70,7 @@ void luaD_throw (lua_State *L, int errcode) {
   }
   else {
     thrlua_log(L, DCRITICAL,
-      "luaD_throw: no error handler, errcode=%d, L=%p, invoking panic",
+      "luaD_throw: no error handler, errcode=%d, L=%p, invoking panic\n",
       errcode, (void *)L);
     L->status = cast_byte(errcode);
     if (G(L)->panic) {
