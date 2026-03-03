@@ -118,8 +118,6 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
     return 1;
   }
 
-  int total_entries = t.sizearray + twoto(t.lsizenode);
-
   printf("{ ");
   for (i = 0; i < t.sizearray; i++) {
     TValue val;
@@ -133,8 +131,8 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
     }
 
     if (entries >= table_entry_limit) {
-      printf("%.*s... (%d more entries not shown)\n",
-          indent, indent_str, total_entries - entries);
+      printf("%.*s... (truncated after %d entries)\n",
+          indent, indent_str, entries);
       goto done;
     }
 
@@ -159,8 +157,8 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
     }
 
     if (entries >= table_entry_limit) {
-      printf("%.*s... (%d more entries not shown)\n",
-          indent, indent_str, total_entries - entries);
+      printf("%.*s... (truncated after %d entries)\n",
+          indent, indent_str, entries);
       goto done;
     }
 
