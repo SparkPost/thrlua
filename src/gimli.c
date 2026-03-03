@@ -15,6 +15,7 @@
 static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
 static int table_dump_limit = 16;
+static int table_entry_limit = 100;
 
 static gimli_hash_t derefed = NULL;
 
@@ -91,6 +92,7 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
 {
   int i;
   int printed = 0;
+  int entries = 0;
   int indent = 2 + ((table_dump_limit - limit + 1) * 2);
   Table t;
   char ptrbuf[64];
@@ -128,6 +130,12 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
       continue;
     }
 
+    if (entries >= table_entry_limit) {
+      printf("%.*s... (truncated after %d entries)\n",
+          indent, indent_str, entries);
+      goto done;
+    }
+
     if (!printed) {
       printed = 1;
       printf("\n");
@@ -135,6 +143,7 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
     printf("%.*s[%d] = ", indent, indent_str, i + 1);
     show_tvalue(proc, t.array + i, limit - 1);
     printf("\n");
+    entries++;
   }
 
   for (i = twoto(t.lsizenode) - 1; i >= 0; i--) {
@@ -147,6 +156,12 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
       continue;
     }
 
+    if (entries >= table_entry_limit) {
+      printf("%.*s... (truncated after %d entries)\n",
+          indent, indent_str, entries);
+      goto done;
+    }
+
     if (!printed) {
       printed = 1;
       printf("\n");
@@ -157,7 +172,9 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
     printf("] = ");
     show_tvalue(proc, (TValue*)(t.node + i), limit - 1);
     printf("\n");
+    entries++;
   }
+done:
   if (printed) {
     indent -= 4;
     if (indent < 4) indent = 4;
@@ -415,6 +432,13 @@ int gimli_module_init(int api_version)
     int val = atoi(dump);
     if (val > 0) {
       table_dump_limit = val;
+    }
+  }
+  dump = getenv("GIMLI_LUA_TABLE_ENTRY_LIMIT");
+  if (dump) {
+    int val = atoi(dump);
+    if (val > 0) {
+      table_entry_limit = val;
     }
   }
   derefed = gimli_hash_new(NULL);
