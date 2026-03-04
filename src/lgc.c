@@ -1624,11 +1624,15 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 {
   int i;
   GCheader *steal, *tmp;
+  thr_State *pt;
 
   if (th->heap == NULL) {
     // already done
     return;
   }
+
+  pt = luaC_get_per_thread(L);
+  block_collector(L, pt);
 
   /* when a thread is reclaimed, the executing thread
    * needs to steal its contents */
@@ -1672,6 +1676,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
   unlock_all_threads();
+
+  unblock_collector(L, pt);
 
   free(th->heap);
   th->heap = NULL;
