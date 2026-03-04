@@ -1632,11 +1632,12 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   }
 
   pt = luaC_get_per_thread(L);
-  block_collector(L, pt);
 
   /* when a thread is reclaimed, the executing thread
    * needs to steal its contents */
   lock_all_threads();
+
+  block_collector(L, pt);
 
   if (TEST_INHERIT_THREAD_DELAY_MS > 0) {
     /* TR-1945: Both global trace and thread delref will grab
@@ -1675,9 +1676,9 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     make_grey(L, steal);
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
-  unlock_all_threads();
-
   unblock_collector(L, pt);
+
+  unlock_all_threads();
 
   free(th->heap);
   th->heap = NULL;
