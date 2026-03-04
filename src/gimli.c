@@ -16,6 +16,7 @@ static CallInfo *last_ci = NULL;
 static int dump_lua_state = 0;
 static int table_dump_limit = 16;
 static int table_entry_limit = 100;
+static int string_display_limit = 256;
 
 static gimli_hash_t derefed = NULL;
 
@@ -213,7 +214,17 @@ static int show_tvalue(gimli_proc_t proc, TValue *tvp, int limit)
     case luat_str:
     {
       char *str = gimli_read_string(proc, (gimli_addr_t)(((TString*)tv.value.gc) + 1));
-      printf("string %p \"%s\"", tv.value.gc, str);
+      if (str) {
+        size_t len = strlen(str);
+        if (string_display_limit > 0 && len > (size_t)string_display_limit) {
+          printf("string %p \"%.*s...\" (%zu bytes)", tv.value.gc,
+              string_display_limit, str, len);
+        } else {
+          printf("string %p \"%s\"", tv.value.gc, str);
+        }
+      } else {
+        printf("string %p <unable to read>", tv.value.gc);
+      }
       free(str);
       return 1;
     }
@@ -439,6 +450,13 @@ int gimli_module_init(int api_version)
     int val = atoi(dump);
     if (val > 0) {
       table_entry_limit = val;
+    }
+  }
+  dump = getenv("GIMLI_LUA_STRING_DISPLAY_LIMIT");
+  if (dump) {
+    int val = atoi(dump);
+    if (val >= 0) {
+      string_display_limit = val;
     }
   }
   derefed = gimli_hash_new(NULL);
