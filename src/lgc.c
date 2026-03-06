@@ -1626,8 +1626,11 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   GCheader *steal, *tmp;
   thr_State *pt;
 
+  lua_lock(th);
+
   if (th->heap == NULL) {
     // already done
+    lua_unlock(th);
     return;
   }
 
@@ -1682,6 +1685,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
   free(th->heap);
   th->heap = NULL;
+
+  lua_unlock(th);
 
   ck_pr_inc_32(&G(L)->need_global_trace);
 }
