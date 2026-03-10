@@ -1624,15 +1624,23 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 {
   int i;
   GCheader *steal, *tmp;
+  thr_State *pt;
+
+  lua_lock(th);
 
   if (th->heap == NULL) {
     // already done
+    lua_unlock(th);
     return;
   }
+
+  pt = luaC_get_per_thread(L);
 
   /* when a thread is reclaimed, the executing thread
    * needs to steal its contents */
   lock_all_threads();
+
+  block_collector(L, pt);
 
   if (TEST_INHERIT_THREAD_DELAY_MS > 0) {
     /* TR-1945: Both global trace and thread delref will grab
@@ -1671,10 +1679,14 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     make_grey(L, steal);
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
+  unblock_collector(L, pt);
+
   unlock_all_threads();
 
   free(th->heap);
   th->heap = NULL;
+
+  lua_unlock(th);
 
   ck_pr_inc_32(&G(L)->need_global_trace);
 }
