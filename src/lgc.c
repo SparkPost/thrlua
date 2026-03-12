@@ -1974,22 +1974,19 @@ static void validate_heap_objects(lua_State *L, const char *where)
     if (is_bad_gc_ptr((uintptr_t)o) ||
         o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
         (o->marked & FREEDBIT)) {
-      fprintf(stderr,
-        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
-        where, (void*)L, (void*)L->heap, count, (void*)o);
       if (!is_bad_gc_ptr((uintptr_t)o))
-        fprintf(stderr, "  tt=%d marked=0x%x\n", o->tt, o->marked);
-      thrlua_log(L, DCRITICAL,
-        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
-        where, (void*)L, (void*)L->heap, count, (void*)o);
+        thrlua_log(L, DCRITICAL,
+          "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
+          " tt=%d marked=0x%x\n",
+          where, (void*)L, (void*)L->heap, count, (void*)o,
+          o->tt, o->marked);
+      else
+        thrlua_log(L, DCRITICAL,
+          "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
+          where, (void*)L, (void*)L->heap, count, (void*)o);
       abort();
     }
     if (o->owner != L->heap) {
-      fprintf(stderr,
-        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
-        " owner=%p (expected %p) tt=%d\n",
-        where, (void*)L, (void*)L->heap, count, (void*)o,
-        (void*)o->owner, (void*)L->heap, o->tt);
       thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
         " owner=%p (expected %p) tt=%d\n",
@@ -2178,20 +2175,8 @@ static void trace_heap(GCheap *h)
   GCheader *o;
 
   ck_pr_store_32(&h->owner->xref_count, 0);
+  validate_heap_objects(h->owner, "trace_heap");
   TAILQ_FOREACH(o, &h->objects, allocd) {
-    if (is_bad_gc_ptr((uintptr_t)o) ||
-        o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
-        (o->marked & FREEDBIT)) {
-      fprintf(stderr,
-        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p\n",
-        (void*)h, (void*)h->owner, (void*)o);
-      if (!is_bad_gc_ptr((uintptr_t)o))
-        fprintf(stderr, "  tt=%d marked=0x%x\n", o->tt, o->marked);
-      thrlua_log(h->owner, DCRITICAL,
-        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p\n",
-        (void*)h, (void*)h->owner, (void*)o);
-      abort();
-    }
     global_trace_obj(h->owner, &h->owner->gch, o);
   }
 
