@@ -106,6 +106,7 @@ static uint32_t trace_heaps = 0;
 static int local_collection(lua_State *L, int type);
 static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
+static void validate_heap_objects(lua_State *L, const char *where);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
 {
