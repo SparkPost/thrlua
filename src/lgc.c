@@ -1969,9 +1969,9 @@ static void validate_heap_objects(lua_State *L, const char *where)
   TAILQ_FOREACH(o, &L->heap->objects, allocd) {
     if ((uintptr_t)o == poison ||
         ((uintptr_t)o & 0x7) != 0 ||
-        o->tt > 11 ||
+        o->tt > LUA_TGLOBAL ||
         (o->marked & FREEDBIT)) {
-      fprintf(stderr,
+      thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
         " (tt=%d marked=0x%x)\n",
         where, (void*)L, (void*)L->heap, count, (void*)o,
@@ -1980,7 +1980,7 @@ static void validate_heap_objects(lua_State *L, const char *where)
       abort();
     }
     if (o->owner != L->heap) {
-      fprintf(stderr,
+      thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
         " owner=%p (expected %p) tt=%d\n",
         where, (void*)L, (void*)L->heap, count, (void*)o,
@@ -1989,7 +1989,7 @@ static void validate_heap_objects(lua_State *L, const char *where)
     }
     count++;
     if (count > 10000000) {
-      fprintf(stderr,
+      thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p: list cycle detected\n",
         where, (void*)L, (void*)L->heap);
       abort();
@@ -2177,8 +2177,8 @@ static void trace_heap(GCheap *h)
   ck_pr_store_32(&h->owner->xref_count, 0);
   TAILQ_FOREACH(o, &h->objects, allocd) {
     if ((uintptr_t)o == poison || ((uintptr_t)o & 0x7) != 0 ||
-        o->tt > 11 || (o->marked & FREEDBIT)) {
-      fprintf(stderr,
+        o->tt > LUA_TGLOBAL || (o->marked & FREEDBIT)) {
+      thrlua_log(h->owner, DCRITICAL,
         "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p"
         " (tt=%d marked=0x%x)\n",
         (void*)h, (void*)h->owner, (void*)o,
