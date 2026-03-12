@@ -1960,26 +1960,36 @@ static void sanity_check_mark_status(lua_State *L)
   }
 }
 
+static int is_bad_gc_ptr(uintptr_t p)
+{
+  return p == 0x5a5a5a5a5a5a5a5aULL || p == 0 || (p & 0x7) != 0;
+}
+
 static void validate_heap_objects(lua_State *L, const char *where)
 {
   GCheader *o;
   int count = 0;
-  const uint64_t poison = 0x5a5a5a5a5a5a5a5aULL;
 
   TAILQ_FOREACH(o, &L->heap->objects, allocd) {
-    if ((uintptr_t)o == poison ||
-        ((uintptr_t)o & 0x7) != 0 ||
-        o->tt > LUA_TGLOBAL ||
+    if (is_bad_gc_ptr((uintptr_t)o) ||
+        o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
         (o->marked & FREEDBIT)) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
+        where, (void*)L, (void*)L->heap, count, (void*)o);
+      if (!is_bad_gc_ptr((uintptr_t)o))
+        fprintf(stderr, "  tt=%d marked=0x%x\n", o->tt, o->marked);
       thrlua_log(L, DCRITICAL,
-        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
-        " (tt=%d marked=0x%x)\n",
-        where, (void*)L, (void*)L->heap, count, (void*)o,
-        (uintptr_t)o != poison ? o->tt : -1,
-        (uintptr_t)o != poison ? o->marked : 0xff);
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
+        where, (void*)L, (void*)L->heap, count, (void*)o);
       abort();
     }
     if (o->owner != L->heap) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
+        " owner=%p (expected %p) tt=%d\n",
+        where, (void*)L, (void*)L->heap, count, (void*)o,
+        (void*)o->owner, (void*)L->heap, o->tt);
       thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
         " owner=%p (expected %p) tt=%d\n",
@@ -1988,12 +1998,6 @@ static void validate_heap_objects(lua_State *L, const char *where)
       abort();
     }
     count++;
-    if (count > 10000000) {
-      thrlua_log(L, DCRITICAL,
-        "thrlua HEAP CORRUPT [%s] L=%p heap=%p: list cycle detected\n",
-        where, (void*)L, (void*)L->heap);
-      abort();
-    }
   }
 }
 
@@ -2172,18 +2176,20 @@ static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
 static void trace_heap(GCheap *h)
 {
   GCheader *o;
-  const uint64_t poison = 0x5a5a5a5a5a5a5a5aULL;
 
   ck_pr_store_32(&h->owner->xref_count, 0);
   TAILQ_FOREACH(o, &h->objects, allocd) {
-    if ((uintptr_t)o == poison || ((uintptr_t)o & 0x7) != 0 ||
-        o->tt > LUA_TGLOBAL || (o->marked & FREEDBIT)) {
+    if (is_bad_gc_ptr((uintptr_t)o) ||
+        o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
+        (o->marked & FREEDBIT)) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p\n",
+        (void*)h, (void*)h->owner, (void*)o);
+      if (!is_bad_gc_ptr((uintptr_t)o))
+        fprintf(stderr, "  tt=%d marked=0x%x\n", o->tt, o->marked);
       thrlua_log(h->owner, DCRITICAL,
-        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p"
-        " (tt=%d marked=0x%x)\n",
-        (void*)h, (void*)h->owner, (void*)o,
-        (uintptr_t)o != poison ? o->tt : -1,
-        (uintptr_t)o != poison ? o->marked : 0xff);
+        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p\n",
+        (void*)h, (void*)h->owner, (void*)o);
       abort();
     }
     global_trace_obj(h->owner, &h->owner->gch, o);
