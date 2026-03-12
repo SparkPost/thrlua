@@ -1656,6 +1656,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   ck_sequence_write_end(&th->memlock);
   luaE_flush_stringtable(th);
 
+  validate_heap_objects(L, "inherit_thread:before_transfer");
+
   TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
     /* Update owner before removing from source heap. This ensures that
      * if any concurrent reader sees this object, it will either:
@@ -1670,6 +1672,9 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
     make_grey(L, steal);
   }
+
+  validate_heap_objects(L, "inherit_thread:after_transfer");
+
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
   unlock_all_threads();
 
@@ -1954,6 +1959,43 @@ static void sanity_check_mark_status(lua_State *L)
   }
 }
 
+static void validate_heap_objects(lua_State *L, const char *where)
+{
+  GCheader *o;
+  int count = 0;
+  const uint64_t poison = 0x5a5a5a5a5a5a5a5aULL;
+
+  TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+    if ((uintptr_t)o == poison ||
+        ((uintptr_t)o & 0x7) != 0 ||
+        o->tt > 11 ||
+        (o->marked & FREEDBIT)) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
+        " (tt=%d marked=0x%x)\n",
+        where, (void*)L, (void*)L->heap, count, (void*)o,
+        (uintptr_t)o != poison ? o->tt : -1,
+        (uintptr_t)o != poison ? o->marked : 0xff);
+      abort();
+    }
+    if (o->owner != L->heap) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
+        " owner=%p (expected %p) tt=%d\n",
+        where, (void*)L, (void*)L->heap, count, (void*)o,
+        (void*)o->owner, (void*)L->heap, o->tt);
+      abort();
+    }
+    count++;
+    if (count > 10000000) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [%s] L=%p heap=%p: list cycle detected\n",
+        where, (void*)L, (void*)L->heap);
+      abort();
+    }
+  }
+}
+
 static int local_collection(lua_State *L, int type)
 {
   int reclaimed;
@@ -1973,6 +2015,8 @@ static int local_collection(lua_State *L, int type)
    * multi-threaded environment.  Prevent the global collector from running
    * while we are in this function and manipulating our string tables or heap */
   block_collector(L, pt);
+
+  validate_heap_objects(L, "local_collection:entry");
 
   /* prune out excess string table entries.
    * We don't want to be too aggressive, as we'd like to see some benefit
@@ -2020,6 +2064,8 @@ static int local_collection(lua_State *L, int type)
     check_references(L);
   }
 
+  validate_heap_objects(L, "local_collection:after_mark");
+
   /* run any finalizers; may turn some objects grey again */
   run_finalize(L);
 
@@ -2035,10 +2081,14 @@ static int local_collection(lua_State *L, int type)
   /* remove collected weak values from weak tables */
   fixup_weak_refs(L);
 
+  validate_heap_objects(L, "local_collection:before_reclaim");
+
   /* and now we can free whatever is left in White.  Note that we're still 
    * blocked here so we are pulling white out of the heap and placing them
    * in another list that will free them when we unblock the collector. */
   reclaimed = reclaim_white(L, 0);
+
+  validate_heap_objects(L, "local_collection:after_reclaim");
 
   /* White is the new Black */
   L->black = !L->black;
@@ -2052,8 +2102,12 @@ static int local_collection(lua_State *L, int type)
   /* Finalize deferred objects */
   finalize_deferred(L);
 
+  validate_heap_objects(L, "local_collection:after_finalize");
+
   /* Free any objects that were white */
   free_deferred_white(L);
+
+  validate_heap_objects(L, "local_collection:after_free");
 
   /* Free any deferred stringtable nodes */
   while (tofree) {
@@ -2117,9 +2171,20 @@ static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
 static void trace_heap(GCheap *h)
 {
   GCheader *o;
+  const uint64_t poison = 0x5a5a5a5a5a5a5a5aULL;
 
   ck_pr_store_32(&h->owner->xref_count, 0);
   TAILQ_FOREACH(o, &h->objects, allocd) {
+    if ((uintptr_t)o == poison || ((uintptr_t)o & 0x7) != 0 ||
+        o->tt > 11 || (o->marked & FREEDBIT)) {
+      fprintf(stderr,
+        "thrlua HEAP CORRUPT [trace_heap] heap=%p owner=%p bad_node=%p"
+        " (tt=%d marked=0x%x)\n",
+        (void*)h, (void*)h->owner, (void*)o,
+        (uintptr_t)o != poison ? o->tt : -1,
+        (uintptr_t)o != poison ? o->marked : 0xff);
+      abort();
+    }
     global_trace_obj(h->owner, &h->owner->gch, o);
   }
 
