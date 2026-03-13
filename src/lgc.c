@@ -2097,14 +2097,14 @@ static int local_collection(lua_State *L, int type)
 
   sanity_check_mark_status(L);
 
-  /* Now we can un-block the global collector, as we are done with our string
-   * tables and our heap. */
-  unblock_collector(L, pt);
-
   /* Finalize deferred objects */
   finalize_deferred(L);
 
   validate_heap_objects(L, "local_collection:after_finalize");
+
+  /* Now we can un-block the global collector, as we are done with our string
+   * tables and our heap. */
+  unblock_collector(L, pt);
 
   /* Free any objects that were white */
   free_deferred_white(L);
