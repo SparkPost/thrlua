@@ -1990,12 +1990,15 @@ static void validate_heap_objects(lua_State *L, const char *where)
       abort();
     }
     if (o->owner != L->heap) {
+      void *owner_L = NULL;
+      if (!is_bad_gc_ptr((uintptr_t)o->owner))
+        owner_L = (void*)o->owner->owner;
       thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
         " prev=%p owner=%p owner->L=%p (expected heap %p) tt=%d"
         " marked=0x%x xref=%u ref=%u\n",
         where, (void*)L, (void*)L->heap, count, (void*)o,
-        (void*)prev, (void*)o->owner, (void*)o->owner->owner,
+        (void*)prev, (void*)o->owner, owner_L,
         (void*)L->heap, o->tt, o->marked,
         o->xref, o->ref);
       abort();
