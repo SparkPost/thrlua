@@ -1968,6 +1968,7 @@ static int is_bad_gc_ptr(uintptr_t p)
 static void validate_heap_objects(lua_State *L, const char *where)
 {
   GCheader *o;
+  GCheader *prev = NULL;
   int count = 0;
 
   TAILQ_FOREACH(o, &L->heap->objects, allocd) {
@@ -1977,23 +1978,29 @@ static void validate_heap_objects(lua_State *L, const char *where)
       if (!is_bad_gc_ptr((uintptr_t)o))
         thrlua_log(L, DCRITICAL,
           "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
-          " tt=%d marked=0x%x\n",
+          " prev=%p tt=%d marked=0x%x\n",
           where, (void*)L, (void*)L->heap, count, (void*)o,
-          o->tt, o->marked);
+          (void*)prev, o->tt, o->marked);
       else
         thrlua_log(L, DCRITICAL,
-          "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p\n",
-          where, (void*)L, (void*)L->heap, count, (void*)o);
+          "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d bad_node=%p"
+          " prev=%p\n",
+          where, (void*)L, (void*)L->heap, count, (void*)o,
+          (void*)prev);
       abort();
     }
     if (o->owner != L->heap) {
       thrlua_log(L, DCRITICAL,
         "thrlua HEAP CORRUPT [%s] L=%p heap=%p count=%d node=%p"
-        " owner=%p (expected %p) tt=%d\n",
+        " prev=%p owner=%p owner->L=%p (expected heap %p) tt=%d"
+        " marked=0x%x xref=%u ref=%u\n",
         where, (void*)L, (void*)L->heap, count, (void*)o,
-        (void*)o->owner, (void*)L->heap, o->tt);
+        (void*)prev, (void*)o->owner, (void*)o->owner->owner,
+        (void*)L->heap, o->tt, o->marked,
+        o->xref, o->ref);
       abort();
     }
+    prev = o;
     count++;
   }
 }
