@@ -107,6 +107,7 @@ static int local_collection(lua_State *L, int type);
 static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
 static void validate_heap_objects(lua_State *L, const char *where);
+static int is_bad_gc_ptr(uintptr_t p);
 static void tailq_abort(lua_State *L, const char *where, const char *what,
   GCheader *o, GCheader *prev, int count);
 
