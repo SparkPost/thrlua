@@ -108,8 +108,7 @@ static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
 static void validate_heap_objects(lua_State *L, const char *where);
 static void tailq_abort(lua_State *L, const char *where, const char *what,
-  GCheader *o, GCheader *prev, int count,
-  GCheader *tqe_next, GCheader **tqe_prev);
+  GCheader *o, GCheader *prev, int count);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
 {
@@ -1493,9 +1492,9 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
   block_collector(L, pt);
   TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
   if (o->allocd.tqe_next != NULL &&
+      !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next) &&
       o->allocd.tqe_next->allocd.tqe_prev != &o->allocd.tqe_next) {
-    tailq_abort(L, "new_obj", "insert_backlink_broken", o, NULL, -1,
-      o->allocd.tqe_next, o->allocd.tqe_prev);
+    tailq_abort(L, "new_obj", "insert_backlink_broken", o, NULL, -1);
   }
   make_grey(L, o);
   unblock_collector(L, pt);
@@ -1679,9 +1678,9 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     TAILQ_REMOVE(&th->heap->objects, steal, allocd);
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
     if (steal->allocd.tqe_next != NULL &&
+        !is_bad_gc_ptr((uintptr_t)steal->allocd.tqe_next) &&
         steal->allocd.tqe_next->allocd.tqe_prev != &steal->allocd.tqe_next) {
-      tailq_abort(L, "inherit_thread", "insert_backlink_broken", steal, NULL, -1,
-        steal->allocd.tqe_next, steal->allocd.tqe_prev);
+      tailq_abort(L, "inherit_thread", "insert_backlink_broken", steal, NULL, -1);
     }
 
     make_grey(L, steal);
@@ -1978,17 +1977,36 @@ static int is_bad_gc_ptr(uintptr_t p)
   return p == 0x5a5a5a5a5a5a5a5aULL || p == 0 || (p & 0x7) != 0;
 }
 
-static void tailq_abort(lua_State *L, const char *where, const char *what,
-  GCheader *o, GCheader *prev, int count,
-  GCheader *tqe_next, GCheader **tqe_prev)
+static void *safe_deref_owner_L(void *owner_ptr)
 {
-  void *owner_L = NULL;
-  void *prev_owner = NULL;
-  void *prev_owner_L = NULL;
-  if (o && !is_bad_gc_ptr((uintptr_t)o->owner))
-    owner_L = (void*)o->owner->owner;
-  if (prev && !is_bad_gc_ptr((uintptr_t)prev->owner))
-    prev_owner_L = (void*)prev->owner->owner;
+  if (!owner_ptr || is_bad_gc_ptr((uintptr_t)owner_ptr))
+    return NULL;
+  return (void*)((GCheap *)owner_ptr)->owner;
+}
+
+static void tailq_abort(lua_State *L, const char *where, const char *what,
+  GCheader *o, GCheader *prev, int count)
+{
+  void *o_next = NULL, *o_prev = NULL, *o_owner = NULL, *o_owner_L = NULL;
+  void *p_next = NULL, *p_owner = NULL, *p_owner_L = NULL;
+  int tt = -1;
+  unsigned marked = 0, xref = 0, ref = 0;
+
+  if (o) {
+    o_next = (void*)o->allocd.tqe_next;
+    o_prev = (void*)o->allocd.tqe_prev;
+    o_owner = (void*)o->owner;
+    o_owner_L = safe_deref_owner_L(o_owner);
+    tt = o->tt;
+    marked = o->marked;
+    xref = o->xref;
+    ref = o->ref;
+  }
+  if (prev) {
+    p_next = (void*)prev->allocd.tqe_next;
+    p_owner = (void*)prev->owner;
+    p_owner_L = safe_deref_owner_L(p_owner);
+  }
   thrlua_log(L, DCRITICAL,
     "thrlua HEAP CORRUPT [%s] %s L=%p heap=%p count=%d"
     " node=%p node.next=%p node.prev=%p"
@@ -1996,19 +2014,10 @@ static void tailq_abort(lua_State *L, const char *where, const char *what,
     " node.owner=%p node.owner->L=%p"
     " tt=%d marked=0x%x xref=%u ref=%u\n",
     where, what, (void*)L, (void*)L->heap, count,
-    (void*)o,
-    o ? (void*)o->allocd.tqe_next : NULL,
-    o ? (void*)o->allocd.tqe_prev : NULL,
-    (void*)prev,
-    prev ? (void*)prev->allocd.tqe_next : NULL,
-    prev ? (void*)prev->owner : NULL,
-    prev_owner_L,
-    o ? (void*)o->owner : NULL,
-    owner_L,
-    o ? o->tt : -1,
-    o ? o->marked : 0,
-    o ? o->xref : 0,
-    o ? o->ref : 0);
+    (void*)o, o_next, o_prev,
+    (void*)prev, p_next, p_owner, p_owner_L,
+    o_owner, o_owner_L,
+    tt, marked, xref, ref);
   abort();
 }
 
@@ -2023,21 +2032,19 @@ static void validate_heap_objects(lua_State *L, const char *where)
         o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
         (o->marked & FREEDBIT)) {
       tailq_abort(L, where, is_bad_gc_ptr((uintptr_t)o) ? "bad_ptr" : "bad_tt_or_freed",
-        is_bad_gc_ptr((uintptr_t)o) ? NULL : o, prev, count, NULL, NULL);
+        is_bad_gc_ptr((uintptr_t)o) ? NULL : o, prev, count);
     }
     if (o->owner != L->heap) {
-      tailq_abort(L, where, "wrong_owner", o, prev, count,
-        o->allocd.tqe_next, o->allocd.tqe_prev);
+      tailq_abort(L, where, "wrong_owner", o, prev, count);
     }
-    if (o->allocd.tqe_prev == NULL ||
+    if (is_bad_gc_ptr((uintptr_t)o->allocd.tqe_prev) ||
         *(o->allocd.tqe_prev) != o) {
-      tailq_abort(L, where, "tqe_prev_broken", o, prev, count,
-        o->allocd.tqe_next, o->allocd.tqe_prev);
+      tailq_abort(L, where, "tqe_prev_broken", o, prev, count);
     }
     if (o->allocd.tqe_next != NULL &&
+        !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next) &&
         o->allocd.tqe_next->allocd.tqe_prev != &o->allocd.tqe_next) {
-      tailq_abort(L, where, "tqe_next_backlink_broken", o, prev, count,
-        o->allocd.tqe_next, o->allocd.tqe_prev);
+      tailq_abort(L, where, "tqe_next_backlink_broken", o, prev, count);
     }
     prev = o;
     count++;
