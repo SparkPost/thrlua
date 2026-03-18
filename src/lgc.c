@@ -1990,7 +1990,8 @@ static void tailq_abort(lua_State *L, const char *where, const char *what,
 {
   void *o_next = NULL, *o_prev = NULL, *o_owner = NULL, *o_owner_L = NULL;
   void *p_next = NULL, *p_owner = NULL, *p_owner_L = NULL;
-  int tt = -1;
+  void *nn_next = NULL, *nn_prev = NULL, *nn_owner = NULL, *nn_owner_L = NULL;
+  int tt = -1, nn_tt = -1;
   unsigned marked = 0, xref = 0, ref = 0;
 
   if (o) {
@@ -2002,6 +2003,14 @@ static void tailq_abort(lua_State *L, const char *where, const char *what,
     marked = o->marked;
     xref = o->xref;
     ref = o->ref;
+    if (o->allocd.tqe_next && !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next)) {
+      GCheader *nn = o->allocd.tqe_next;
+      nn_next = (void*)nn->allocd.tqe_next;
+      nn_prev = (void*)nn->allocd.tqe_prev;
+      nn_owner = (void*)nn->owner;
+      nn_owner_L = safe_deref_owner_L(nn_owner);
+      nn_tt = nn->tt;
+    }
   }
   if (prev) {
     p_next = (void*)prev->allocd.tqe_next;
@@ -2013,12 +2022,14 @@ static void tailq_abort(lua_State *L, const char *where, const char *what,
     " node=%p node.next=%p node.prev=%p"
     " prev=%p prev.next=%p prev.owner=%p prev.owner->L=%p"
     " node.owner=%p node.owner->L=%p"
-    " tt=%d marked=0x%x xref=%u ref=%u\n",
+    " tt=%d marked=0x%x xref=%u ref=%u"
+    " nn=%p nn.next=%p nn.prev=%p nn.owner=%p nn.owner->L=%p nn.tt=%d\n",
     where, what, (void*)L, (void*)L->heap, count,
     (void*)o, o_next, o_prev,
     (void*)prev, p_next, p_owner, p_owner_L,
     o_owner, o_owner_L,
-    tt, marked, xref, ref);
+    tt, marked, xref, ref,
+    o_next, nn_next, nn_prev, nn_owner, nn_owner_L, nn_tt);
   abort();
 }
 
