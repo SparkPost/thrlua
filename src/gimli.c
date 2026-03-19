@@ -13,7 +13,7 @@
 #include "/opt/msys/gimli/include/libgimli_ana.h"
 
 static CallInfo *last_ci = NULL;
-static int dump_lua_state = 0;
+static int dump_lua_state = 1;
 static int table_dump_limit = 16;
 static int table_entry_limit = 100;
 static int string_display_limit = 256;
@@ -288,11 +288,11 @@ static int show_tvalue(gimli_proc_t proc, TValue *tvp, int limit)
 /* This function intercepts the usual glider printing of lua_State
  * variables in the stack trace.
  *
- * When it finds a lua_State, it pulls out the lua call stack.
+ * When it finds a lua_State, it pulls out the lua call stack
+ * including locals and upvalues.
  *
- * By default, we suppress dumping the lua_State internals as they
- * are not globally useful to see, but settings GIMLI_LUA_VERBOSE
- * in the environment will allow it to be printed.
+ * By default, the full lua_State struct is also dumped by glider.
+ * Set GIMLI_LUA_VERBOSE=0 to suppress the struct expansion.
  */
 
 static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
@@ -349,6 +349,7 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
       char file[1024];
       const char *sym;
       uint64_t line;
+      int uv;
 
       if (!gimli_determine_source_line_number(proc, (gimli_addr_t)cl.c.f,
             file, sizeof(file), &line)) {
@@ -366,6 +367,16 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         printf("\n    %s:%lu", file, line);
       }
       printf("\n");
+
+      for (uv = 0; uv < cl.c.nupvalues; uv++) {
+        gimli_addr_t uv_addr = (gimli_addr_t)stk.value.gc
+            + offsetof(CClosure, upvalue)
+            + uv * sizeof(TValue);
+        printf("    upvalue [%d] ", uv);
+        if (show_tvalue(proc, (TValue *)uv_addr, table_dump_limit)) {
+          printf("\n");
+        }
+      }
     } else {
       Proto p;
       int pc;
@@ -418,6 +429,42 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         /* stack offset for the local */
         sn++;
       }
+
+      /* print upvalues */
+      for (n = 0; n < p.nups; n++) {
+        UpVal *uvptr;
+        UpVal uv;
+        GCheader *nameptr;
+        char *uvname = NULL;
+        gimli_addr_t slot_addr;
+
+        slot_addr = (gimli_addr_t)stk.value.gc
+            + offsetof(LClosure, upvals)
+            + n * sizeof(UpVal *);
+        if (gimli_read_mem(proc, slot_addr, &uvptr, sizeof(uvptr)) != sizeof(uvptr)) {
+          break;
+        }
+        if (!uvptr) continue;
+
+        if (gimli_read_mem(proc, (gimli_addr_t)uvptr, &uv, sizeof(uv)) != sizeof(uv)) {
+          break;
+        }
+
+        /* read the upvalue name from p.upvalues[n] if available */
+        if (n < p.sizeupvalues &&
+            gimli_read_mem(proc, (gimli_addr_t)(p.upvalues + n),
+              &nameptr, sizeof(nameptr)) == sizeof(nameptr) && nameptr) {
+          uvname = gimli_read_string(proc,
+              (gimli_addr_t)(((TString *)nameptr) + 1));
+        }
+
+        printf("    upvalue %s [%d] ", uvname ? uvname : "?", n);
+        free(uvname);
+
+        if (show_tvalue(proc, uv.v, table_dump_limit)) {
+          printf("\n");
+        }
+      }
     }
   }
   if (lframeno == 1) printf("  <inactive Lua stack>");
@@ -435,8 +482,8 @@ static const char *lua_state_typenames[] = { "struct lua_State" };
 int gimli_module_init(int api_version)
 {
   const char *dump = getenv("GIMLI_LUA_VERBOSE");
-  if (dump && !strcmp(dump, "1")) {
-    dump_lua_state = 1;
+  if (dump) {
+    dump_lua_state = !strcmp(dump, "1");
   }
   dump = getenv("GIMLI_LUA_RECURSION_DEPTH");
   if (dump) {
