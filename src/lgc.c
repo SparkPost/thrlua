@@ -106,6 +106,10 @@ static uint32_t trace_heaps = 0;
 static int local_collection(lua_State *L, int type);
 static int global_trace(lua_State *L);
 static void unblock_mutators(lua_State *L);
+static void validate_heap_objects(lua_State *L, const char *where);
+static int is_bad_gc_ptr(uintptr_t p);
+static void tailq_abort(lua_State *L, const char *where, const char *what,
+  GCheader *o, GCheader *prev, int count);
 
 static INLINE int is_black(lua_State *L, GCheader *obj)
 {
@@ -1488,6 +1492,11 @@ static GCheader *new_obj(lua_State *L, enum lua_obj_type tt,
    * before it becomes visible to the GC via the grey stack. */
   block_collector(L, pt);
   TAILQ_INSERT_HEAD(&L->heap->objects, o, allocd);
+  if (o->allocd.tqe_next != NULL &&
+      !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next) &&
+      o->allocd.tqe_next->allocd.tqe_prev != &o->allocd.tqe_next) {
+    tailq_abort(L, "new_obj", "insert_backlink_broken", o, NULL, -1);
+  }
   make_grey(L, o);
   unblock_collector(L, pt);
 
@@ -1656,6 +1665,8 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
   ck_sequence_write_end(&th->memlock);
   luaE_flush_stringtable(th);
 
+  validate_heap_objects(L, "inherit_thread:before_transfer");
+
   TAILQ_FOREACH_SAFE(steal, &th->heap->objects, allocd, tmp) {
     /* Update owner before removing from source heap. This ensures that
      * if any concurrent reader sees this object, it will either:
@@ -1667,9 +1678,17 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
 
     TAILQ_REMOVE(&th->heap->objects, steal, allocd);
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
+    if (steal->allocd.tqe_next != NULL &&
+        !is_bad_gc_ptr((uintptr_t)steal->allocd.tqe_next) &&
+        steal->allocd.tqe_next->allocd.tqe_prev != &steal->allocd.tqe_next) {
+      tailq_abort(L, "inherit_thread", "insert_backlink_broken", steal, NULL, -1);
+    }
 
     make_grey(L, steal);
   }
+
+  validate_heap_objects(L, "inherit_thread:after_transfer");
+
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
   unlock_all_threads();
 
@@ -1954,6 +1973,96 @@ static void sanity_check_mark_status(lua_State *L)
   }
 }
 
+static int is_bad_gc_ptr(uintptr_t p)
+{
+  return p == 0x5a5a5a5a5a5a5a5aULL || p == 0 || (p & 0x7) != 0;
+}
+
+static void *safe_deref_owner_L(void *owner_ptr)
+{
+  if (!owner_ptr || is_bad_gc_ptr((uintptr_t)owner_ptr))
+    return NULL;
+  return (void*)((GCheap *)owner_ptr)->owner;
+}
+
+static void tailq_abort(lua_State *L, const char *where, const char *what,
+  GCheader *o, GCheader *prev, int count)
+{
+  void *o_next = NULL, *o_prev = NULL, *o_owner = NULL, *o_owner_L = NULL;
+  void *p_next = NULL, *p_owner = NULL, *p_owner_L = NULL;
+  void *nn_next = NULL, *nn_prev = NULL, *nn_owner = NULL, *nn_owner_L = NULL;
+  int tt = -1, nn_tt = -1;
+  unsigned marked = 0, xref = 0, ref = 0;
+
+  if (o) {
+    o_next = (void*)o->allocd.tqe_next;
+    o_prev = (void*)o->allocd.tqe_prev;
+    o_owner = (void*)o->owner;
+    o_owner_L = safe_deref_owner_L(o_owner);
+    tt = o->tt;
+    marked = o->marked;
+    xref = o->xref;
+    ref = o->ref;
+    if (o->allocd.tqe_next && !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next)) {
+      GCheader *nn = o->allocd.tqe_next;
+      nn_next = (void*)nn->allocd.tqe_next;
+      nn_prev = (void*)nn->allocd.tqe_prev;
+      nn_owner = (void*)nn->owner;
+      nn_owner_L = safe_deref_owner_L(nn_owner);
+      nn_tt = nn->tt;
+    }
+  }
+  if (prev) {
+    p_next = (void*)prev->allocd.tqe_next;
+    p_owner = (void*)prev->owner;
+    p_owner_L = safe_deref_owner_L(p_owner);
+  }
+  thrlua_log(L, DCRITICAL,
+    "thrlua HEAP CORRUPT [%s] %s L=%p heap=%p count=%d"
+    " node=%p node.next=%p node.prev=%p"
+    " prev=%p prev.next=%p prev.owner=%p prev.owner->L=%p"
+    " node.owner=%p node.owner->L=%p"
+    " tt=%d marked=0x%x xref=%u ref=%u"
+    " nn=%p nn.next=%p nn.prev=%p nn.owner=%p nn.owner->L=%p nn.tt=%d\n",
+    where, what, (void*)L, (void*)L->heap, count,
+    (void*)o, o_next, o_prev,
+    (void*)prev, p_next, p_owner, p_owner_L,
+    o_owner, o_owner_L,
+    tt, marked, xref, ref,
+    o_next, nn_next, nn_prev, nn_owner, nn_owner_L, nn_tt);
+  abort();
+}
+
+static void validate_heap_objects(lua_State *L, const char *where)
+{
+  GCheader *o;
+  GCheader *prev = NULL;
+  int count = 0;
+
+  TAILQ_FOREACH(o, &L->heap->objects, allocd) {
+    if (is_bad_gc_ptr((uintptr_t)o) ||
+        o->tt < LUA_TSTRING || o->tt > LUA_TGLOBAL ||
+        (o->marked & FREEDBIT)) {
+      tailq_abort(L, where, is_bad_gc_ptr((uintptr_t)o) ? "bad_ptr" : "bad_tt_or_freed",
+        is_bad_gc_ptr((uintptr_t)o) ? NULL : o, prev, count);
+    }
+    if (o->owner != L->heap) {
+      tailq_abort(L, where, "wrong_owner", o, prev, count);
+    }
+    if (is_bad_gc_ptr((uintptr_t)o->allocd.tqe_prev) ||
+        *(o->allocd.tqe_prev) != o) {
+      tailq_abort(L, where, "tqe_prev_broken", o, prev, count);
+    }
+    if (o->allocd.tqe_next != NULL &&
+        !is_bad_gc_ptr((uintptr_t)o->allocd.tqe_next) &&
+        o->allocd.tqe_next->allocd.tqe_prev != &o->allocd.tqe_next) {
+      tailq_abort(L, where, "tqe_next_backlink_broken", o, prev, count);
+    }
+    prev = o;
+    count++;
+  }
+}
+
 static int local_collection(lua_State *L, int type)
 {
   int reclaimed;
@@ -1973,6 +2082,8 @@ static int local_collection(lua_State *L, int type)
    * multi-threaded environment.  Prevent the global collector from running
    * while we are in this function and manipulating our string tables or heap */
   block_collector(L, pt);
+
+  validate_heap_objects(L, "local_collection:entry");
 
   /* prune out excess string table entries.
    * We don't want to be too aggressive, as we'd like to see some benefit
@@ -2020,6 +2131,8 @@ static int local_collection(lua_State *L, int type)
     check_references(L);
   }
 
+  validate_heap_objects(L, "local_collection:after_mark");
+
   /* run any finalizers; may turn some objects grey again */
   run_finalize(L);
 
@@ -2035,25 +2148,33 @@ static int local_collection(lua_State *L, int type)
   /* remove collected weak values from weak tables */
   fixup_weak_refs(L);
 
+  validate_heap_objects(L, "local_collection:before_reclaim");
+
   /* and now we can free whatever is left in White.  Note that we're still 
    * blocked here so we are pulling white out of the heap and placing them
    * in another list that will free them when we unblock the collector. */
   reclaimed = reclaim_white(L, 0);
+
+  validate_heap_objects(L, "local_collection:after_reclaim");
 
   /* White is the new Black */
   L->black = !L->black;
 
   sanity_check_mark_status(L);
 
+  /* Finalize deferred objects */
+  finalize_deferred(L);
+
+  validate_heap_objects(L, "local_collection:after_finalize");
+
   /* Now we can un-block the global collector, as we are done with our string
    * tables and our heap. */
   unblock_collector(L, pt);
 
-  /* Finalize deferred objects */
-  finalize_deferred(L);
-
   /* Free any objects that were white */
   free_deferred_white(L);
+
+  validate_heap_objects(L, "local_collection:after_free");
 
   /* Free any deferred stringtable nodes */
   while (tofree) {
@@ -2119,6 +2240,7 @@ static void trace_heap(GCheap *h)
   GCheader *o;
 
   ck_pr_store_32(&h->owner->xref_count, 0);
+  validate_heap_objects(h->owner, "trace_heap");
   TAILQ_FOREACH(o, &h->objects, allocd) {
     global_trace_obj(h->owner, &h->owner->gch, o);
   }
