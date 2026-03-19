@@ -9,6 +9,7 @@
  *
  */
 
+#include <stddef.h>
 #include "thrlua.h"
 #include "/opt/msys/gimli/include/libgimli_ana.h"
 
