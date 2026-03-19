@@ -455,7 +455,7 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
           }
 
           /* read the upvalue name from p.upvalues[n] if available */
-          if (n < p.sizeupvalues &&
+          if (p.upvalues && n < p.sizeupvalues &&
               gimli_read_mem(proc, (gimli_addr_t)(p.upvalues + n),
                 &nameptr, sizeof(nameptr)) == sizeof(nameptr) && nameptr) {
             uvname = gimli_read_string(proc,
