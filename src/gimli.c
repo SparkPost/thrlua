@@ -374,9 +374,10 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
             + offsetof(CClosure, upvalue)
             + uv * sizeof(TValue);
         printf("    upvalue [%d] ", uv);
-        if (show_tvalue(proc, (TValue *)uv_addr, table_dump_limit)) {
-          printf("\n");
+        if (!show_tvalue(proc, (TValue *)uv_addr, table_dump_limit)) {
+          printf("<unable to read>");
         }
+        printf("\n");
       }
     } else {
       Proto p;
@@ -432,37 +433,41 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
       }
 
       /* print upvalues */
-      for (n = 0; n < p.nups; n++) {
-        UpVal *uvptr;
-        UpVal uv;
-        GCheader *nameptr;
-        char *uvname = NULL;
-        gimli_addr_t slot_addr;
+      {
+        int nups = p.nups < cl.l.nupvalues ? p.nups : cl.l.nupvalues;
+        for (n = 0; n < nups; n++) {
+          UpVal *uvptr;
+          UpVal uv;
+          GCheader *nameptr;
+          char *uvname = NULL;
+          gimli_addr_t slot_addr;
 
-        slot_addr = (gimli_addr_t)stk.value.gc
-            + offsetof(LClosure, upvals)
-            + n * sizeof(UpVal *);
-        if (gimli_read_mem(proc, slot_addr, &uvptr, sizeof(uvptr)) != sizeof(uvptr)) {
-          break;
-        }
-        if (!uvptr) continue;
+          slot_addr = (gimli_addr_t)stk.value.gc
+              + offsetof(LClosure, upvals)
+              + n * sizeof(UpVal *);
+          if (gimli_read_mem(proc, slot_addr, &uvptr, sizeof(uvptr)) != sizeof(uvptr)) {
+            break;
+          }
+          if (!uvptr) continue;
 
-        if (gimli_read_mem(proc, (gimli_addr_t)uvptr, &uv, sizeof(uv)) != sizeof(uv)) {
-          break;
-        }
+          if (gimli_read_mem(proc, (gimli_addr_t)uvptr, &uv, sizeof(uv)) != sizeof(uv)) {
+            break;
+          }
 
-        /* read the upvalue name from p.upvalues[n] if available */
-        if (n < p.sizeupvalues &&
-            gimli_read_mem(proc, (gimli_addr_t)(p.upvalues + n),
-              &nameptr, sizeof(nameptr)) == sizeof(nameptr) && nameptr) {
-          uvname = gimli_read_string(proc,
-              (gimli_addr_t)(((TString *)nameptr) + 1));
-        }
+          /* read the upvalue name from p.upvalues[n] if available */
+          if (n < p.sizeupvalues &&
+              gimli_read_mem(proc, (gimli_addr_t)(p.upvalues + n),
+                &nameptr, sizeof(nameptr)) == sizeof(nameptr) && nameptr) {
+            uvname = gimli_read_string(proc,
+                (gimli_addr_t)(((TString *)nameptr) + 1));
+          }
 
-        printf("    upvalue %s [%d] ", uvname ? uvname : "?", n);
-        free(uvname);
+          printf("    upvalue %s [%d] ", uvname ? uvname : "?", n);
+          free(uvname);
 
-        if (show_tvalue(proc, uv.v, table_dump_limit)) {
+          if (!show_tvalue(proc, uv.v, table_dump_limit)) {
+            printf("<unable to read>");
+          }
           printf("\n");
         }
       }
