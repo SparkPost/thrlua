@@ -397,7 +397,8 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         int line = 0;
 
         if (p.lineinfo && pc >= 0 && pc < p.sizelineinfo) {
-          gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + pc), &line, sizeof(line));
+          if (gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + pc), &line, sizeof(line)) != sizeof(line))
+            line = 0;
         }
         if (line > 0) {
           printf("%s:%d @ pc=%d\n", src + 1, line, pc);
@@ -409,7 +410,7 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         printf("[VM]\n");
       }
 
-      /* print out locals */
+      /* print out locals -- locvars is sorted by startpc */
       for (sn = 0, n = 0; n < p.sizelocvars; n++) {
         char *varname;
         int startline = 0, endline = 0;
@@ -419,17 +420,21 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
           break;
         }
         if (lv.startpc > pc) {
-          continue;
+          break;
         }
 
         varname = gimli_read_string(proc, (gimli_addr_t)(((TString*)lv.varname) + 1));
         if (p.lineinfo) {
-          if (lv.startpc >= 0 && lv.startpc < p.sizelineinfo)
-            gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.startpc), &startline, sizeof(startline));
-          if (lv.endpc >= 0 && lv.endpc < p.sizelineinfo)
-            gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.endpc), &endline, sizeof(endline));
+          if (lv.startpc >= 0 && lv.startpc < p.sizelineinfo &&
+              gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.startpc), &startline, sizeof(startline)) != sizeof(startline))
+            startline = 0;
+          /* endpc is exclusive (first pc where the local is dead),
+           * so the last valid line is at endpc-1 */
+          if (lv.endpc > 0 && lv.endpc - 1 < p.sizelineinfo &&
+              gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.endpc - 1), &endline, sizeof(endline)) != sizeof(endline))
+            endline = 0;
         }
-        if (startline > 0 || endline > 0) {
+        if (startline > 0 && endline > 0) {
           printf("    local %s [lines: %d - %d] ", varname, startline, endline);
         } else {
           printf("    local %s ", varname);
