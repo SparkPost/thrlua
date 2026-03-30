@@ -394,6 +394,7 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
 
       if (p.source) {
         char *src = gimli_read_string(proc, (gimli_addr_t)(p.source + 1));
+        const char *srcname = src ? src + 1 : "?";
         int line = 0;
 
         if (p.lineinfo && pc >= 0 && pc < p.sizelineinfo) {
@@ -401,9 +402,9 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
             line = 0;
         }
         if (line > 0) {
-          printf("%s:%d @ pc=%d\n", src + 1, line, pc);
+          printf("%s:%d @ pc=%d\n", srcname, line, pc);
         } else {
-          printf("%s @ pc=%d\n", src + 1, pc);
+          printf("%s @ pc=%d\n", srcname, pc);
         }
         free(src);
       } else {
@@ -435,9 +436,9 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
             endline = 0;
         }
         if (startline > 0 && endline > 0) {
-          printf("    local %s [lines: %d - %d] ", varname, startline, endline);
+          printf("    local %s [lines: %d - %d] ", varname ? varname : "?", startline, endline);
         } else {
-          printf("    local %s ", varname);
+          printf("    local %s ", varname ? varname : "?");
         }
         free(varname);
 
