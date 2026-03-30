@@ -411,7 +411,10 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         printf("[VM]\n");
       }
 
-      /* print out locals -- locvars is sorted by startpc */
+      /* print out locals -- locvars is sorted by startpc;
+       * a local is active when startpc <= pc < endpc
+       * (see luaF_getlocalname). Only active locals occupy
+       * stack slots, so sn must only advance for those. */
       for (sn = 0, n = 0; n < p.sizelocvars; n++) {
         char *varname;
         int startline = 0, endline = 0;
@@ -422,6 +425,9 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
         }
         if (lv.startpc > pc) {
           break;
+        }
+        if (pc >= lv.endpc) {
+          continue;
         }
 
         varname = gimli_read_string(proc, (gimli_addr_t)(((TString*)lv.varname) + 1));
