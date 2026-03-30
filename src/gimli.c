@@ -394,10 +394,16 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
 
       if (p.source) {
         char *src = gimli_read_string(proc, (gimli_addr_t)(p.source + 1));
-        int line;
+        int line = 0;
 
-        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + pc), &line, sizeof(line));
-        printf("%s:%d @ pc=%d\n", src + 1, line, pc);
+        if (p.lineinfo && pc >= 0 && pc < p.sizelineinfo) {
+          gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + pc), &line, sizeof(line));
+        }
+        if (line > 0) {
+          printf("%s:%d @ pc=%d\n", src + 1, line, pc);
+        } else {
+          printf("%s @ pc=%d\n", src + 1, pc);
+        }
         free(src);
       } else {
         printf("[VM]\n");
@@ -406,21 +412,28 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
       /* print out locals */
       for (sn = 0, n = 0; n < p.sizelocvars; n++) {
         char *varname;
-        int startline, endline;
+        int startline = 0, endline = 0;
         TValue val;
 
         if (gimli_read_mem(proc, (gimli_addr_t)(p.locvars + n), &lv, sizeof(lv)) != sizeof(lv)) {
           break;
         }
         if (lv.startpc > pc) {
-          /* this local is not yet valid in this frame */
           continue;
         }
 
         varname = gimli_read_string(proc, (gimli_addr_t)(((TString*)lv.varname) + 1));
-        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.startpc), &startline, sizeof(startline));
-        gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.endpc), &endline, sizeof(endline));
-        printf("    local %s [lines: %d - %d] ", varname, startline, endline);
+        if (p.lineinfo) {
+          if (lv.startpc >= 0 && lv.startpc < p.sizelineinfo)
+            gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.startpc), &startline, sizeof(startline));
+          if (lv.endpc >= 0 && lv.endpc < p.sizelineinfo)
+            gimli_read_mem(proc, (gimli_addr_t)(p.lineinfo + lv.endpc), &endline, sizeof(endline));
+        }
+        if (startline > 0 || endline > 0) {
+          printf("    local %s [lines: %d - %d] ", varname, startline, endline);
+        } else {
+          printf("    local %s ", varname);
+        }
         free(varname);
 
         /* we can read it from the stack at offset sn from the ci.base */
