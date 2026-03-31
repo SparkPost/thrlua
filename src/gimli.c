@@ -21,6 +21,38 @@ static int string_display_limit = 256;
 
 static gimli_hash_t derefed = NULL;
 
+static const char *skip_table_keys[] = {
+  "posix",
+  "math",
+  "string",
+  "table",
+  "io",
+  "os",
+  "debug",
+  "coroutine",
+  "package",
+  "bit",
+  "lpeg",
+  "json",
+  "xml",
+  "curl",
+  "openssl",
+  "msys",
+  "_G",
+  "_LOADED",
+  "_M",
+  NULL
+};
+
+static int is_skip_table_key(const char *key)
+{
+  const char **p;
+  for (p = skip_table_keys; *p; p++) {
+    if (!strcmp(key, *p)) return 1;
+  }
+  return 0;
+}
+
 static unsigned int compute_string_hash(const char *str, size_t l)
 {
   unsigned int h = (unsigned int)l; /* seed */
@@ -162,6 +194,24 @@ static int show_table(gimli_proc_t proc, Table *tp, int limit)
       printf("%.*s... (truncated after %d entries)\n",
           indent, indent_str, entries);
       goto done;
+    }
+
+    if (node.i_key.nk.tt == LUA_TSTRING && gval(&node)->tt == luat_table) {
+      char *kstr = gimli_read_string(proc,
+          (gimli_addr_t)(((TString*)node.i_key.nk.value.gc) + 1));
+      if (kstr && is_skip_table_key(kstr)) {
+        if (!printed) {
+          printed = 1;
+          printf("\n");
+        }
+        printf("%.*s[string %p \"%s\"] = table %p <skipped: library module>\n",
+            indent, indent_str, node.i_key.nk.value.gc, kstr,
+            gval(&node)->value.gc);
+        free(kstr);
+        entries++;
+        continue;
+      }
+      free(kstr);
     }
 
     if (!printed) {
