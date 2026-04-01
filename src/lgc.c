@@ -211,6 +211,16 @@ static INLINE int is_unknown_xref_val(lua_State *L, uint32_t val)
   return (val & 2) == 0;
 }
 
+static INLINE int was_prev_epoch_xref(lua_State *L, uint32_t val)
+{
+  uint32_t cur_isxref = ck_pr_load_32(&G(L)->isxref);
+
+  if ((cur_isxref & 3) == 1) {
+    return val == 3;
+  }
+  return val == 1;
+}
+
 static INLINE int is_unknown_xref(lua_State *L, GCheader *o) {
   uint32_t val = ck_pr_load_32(&o->xref);
 
@@ -230,14 +240,14 @@ static INLINE void set_xref(lua_State *L, GCheader *lval, GCheader *rval,
   } else if (force) {
     uint32_t old_val = ck_pr_load_32(&rval->xref);
 
-    if (is_unknown_xref_val(L, old_val)) {
+    if (is_unknown_xref_val(L, old_val) && !was_prev_epoch_xref(L, old_val)) {
       /* Here's the issue: There may be another thread marking this as an xref,
        * and if we mark it as _not_ an xref at the same time, we're gonna have
        * a bad time.  So, we:
        *
        * 1. Load the value and save it locally.
        * 2. Check if it's unknown.
-       * 3. If it's unknown, we run atomic CAS to compare it against the old
+       * 3. If it's unknown and not xref previously, we run atomic CAS to compare it against the old
        *    value and make it 'not' xref.  If somebody else changed it (either to
        *    not an xref, or an xref), that's cool.
        */
