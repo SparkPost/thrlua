@@ -693,8 +693,6 @@ static inline void lua_number2str(char *buf, LUA_NUMBER n)
 ** and with longjmp/setjmp otherwise.
 */
 
-void __asan_handle_no_return(void);
-
 #if defined(__cplusplus)
 /* C++ exceptions */
 #define LUAI_THROW(L,c)	throw(c)
@@ -704,13 +702,13 @@ void __asan_handle_no_return(void);
 
 #elif defined(LUA_USE_ULONGJMP)
 /* in Unix, try _longjmp/_setjmp (more efficient) */
-#define LUAI_THROW(L,c)	do { __asan_handle_no_return(); lua_do_longjmp((c)->b, 1); } while(0)
+#define LUAI_THROW(L,c)	lua_do_longjmp((c)->b, 1)
 #define LUAI_TRY(L,c,a)	if (lua_do_setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf	jmp_buf
 
 #else
 /* default handling with long jumps */
-#define LUAI_THROW(L,c)	do { __asan_handle_no_return(); lua_do_longjmp((c)->b, 1); } while(0)
+#define LUAI_THROW(L,c)	lua_do_longjmp((c)->b, 1)
 #define LUAI_TRY(L,c,a)	if (lua_do_setjmp((c)->b) == 0) { a }
 #define luai_jmpbuf	jmp_buf
 
