@@ -223,7 +223,7 @@ struct lua_longjmp {
 ** intercept them and properly unpoison skipped stack frames.
 ** The custom asm versions bypass ASAN and cause false positives.
 */
-#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+#if defined(__SANITIZE_ADDRESS__)
 # define lua_do_setjmp  setjmp
 # define lua_do_longjmp longjmp
 #elif LUA_ARCH_X86_64
