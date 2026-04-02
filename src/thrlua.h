@@ -218,7 +218,15 @@ struct lua_longjmp {
 # define LUA_ASMNAME(x) _##x
 #endif
 
-#if LUA_ARCH_X86_64
+/*
+** Under AddressSanitizer, use system setjmp/longjmp so ASAN can
+** intercept them and properly unpoison skipped stack frames.
+** The custom asm versions bypass ASAN and cause false positives.
+*/
+#if defined(__SANITIZE_ADDRESS__) || (defined(__has_feature) && __has_feature(address_sanitizer))
+# define lua_do_setjmp  setjmp
+# define lua_do_longjmp longjmp
+#elif LUA_ARCH_X86_64
 # define lua_do_setjmp  LUA_ASMNAME(lua_setjmp_amd64)
 # define lua_do_longjmp LUA_ASMNAME(lua_longjmp_amd64)
 #elif LUA_ARCH_I386
