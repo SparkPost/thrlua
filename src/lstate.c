@@ -209,7 +209,7 @@ static void close_state (lua_State *L) {
   luaF_close(L, L->stack);  /* close all upvalues for this thread */
   freestack(L);
   luaZ_freebuffer(L, &L->buff);
-  luaM_freemem(L, LUA_MEM_THREAD, L, sizeof(*L) + g->extraspace);
+  luaM_freemem(L, LUA_MEM_THREAD, L, sizeof(*L));
 }
 
 lua_State *luaE_newthread (lua_State *L) {
