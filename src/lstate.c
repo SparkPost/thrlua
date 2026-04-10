@@ -260,7 +260,7 @@ void luaE_freethread (lua_State *L, lua_State *L1) {
   pthread_mutex_destroy(&L1->lock);
   luaZ_freebuffer(L1, &L1->buff);
   if (L1 != G(L1)->mainthread) {
-    luaM_freemem(L, LUA_MEM_THREAD, L1, sizeof(lua_State));
+    luaM_freemem(L, LUA_MEM_THREAD, L1, sizeof(lua_State) + G(L1)->extraspace);
   }
 }
 
