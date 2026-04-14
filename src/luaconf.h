@@ -692,7 +692,6 @@ static inline void lua_number2str(char *buf, LUA_NUMBER n)
 ** compiling as C++ code, with _longjmp/_setjmp when asked to use them,
 ** and with longjmp/setjmp otherwise.
 */
-
 #if defined(__cplusplus)
 /* C++ exceptions */
 #define LUAI_THROW(L,c)	throw(c)
