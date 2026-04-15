@@ -558,7 +558,59 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
   return ret;
 }
 
+static const char *lua_typename_for_tt(int tt)
+{
+  switch (tt) {
+    case LUA_TNIL: return "nil";
+    case LUA_TBOOLEAN: return "bool";
+    case LUA_TLIGHTUSERDATA: return "lightuserdata";
+    case LUA_TNUMBER: return "number";
+    case LUA_TSTRING: return "string";
+    case LUA_TTABLE: return "table";
+    case LUA_TFUNCTION: return "function";
+    case LUA_TUSERDATA: return "userdata";
+    case LUA_TTHREAD: return "thread";
+    case LUA_TPROTO: return "proto";
+    case LUA_TUPVAL: return "upval";
+    case LUA_TDEADKEY: return "deadkey";
+    case LUA_TGLOBAL: return "global";
+    default: return "INVALID";
+  }
+}
+
+static gimli_iter_status_t print_GCheader(gimli_proc_t proc,
+    gimli_stack_frame_t frame,
+    const char *varname, gimli_type_t t, gimli_addr_t varaddr,
+    int depth, void *arg)
+{
+  GCheader h;
+  const char *datatype = gimli_type_declname(t);
+
+  if (!varname) varname = "";
+
+  if (varaddr == 0) {
+    printf("    %s %s = nil\n", datatype, varname);
+    return GIMLI_ANA_SUPPRESS;
+  }
+
+  if (gimli_read_mem(proc, varaddr, &h, sizeof(h)) != sizeof(h)) {
+    printf("    %s %s = %p <unable to read>\n", datatype, varname,
+        (void*)varaddr);
+    return GIMLI_ANA_SUPPRESS;
+  }
+
+  printf("    %s %s = %p {tt=%s(%d), xref=%u, marked=%u, ref=%u, owner=%p}\n",
+      datatype, varname,
+      (void*)varaddr,
+      lua_typename_for_tt(h.tt), h.tt,
+      h.xref, (unsigned)h.marked, h.ref,
+      (void*)h.owner);
+
+  return GIMLI_ANA_SUPPRESS;
+}
+
 static const char *lua_state_typenames[] = { "struct lua_State" };
+static const char *gcheader_typenames[] = { "struct GCheader" };
 
 int gimli_module_init(int api_version)
 {
@@ -591,6 +643,8 @@ int gimli_module_init(int api_version)
 
   gimli_module_register_var_printer_for_types(lua_state_typenames, 1,
       print_lua_State, NULL);
+  gimli_module_register_var_printer_for_types(gcheader_typenames, 1,
+      print_GCheader, NULL);
 
   return 1;
 }
