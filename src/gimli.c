@@ -561,18 +561,19 @@ static gimli_iter_status_t print_lua_State(gimli_proc_t proc,
 static const char *lua_typename_for_tt(int tt)
 {
   switch (tt) {
-    case 0: return "nil";
-    case 1: return "bool";
-    case 2: return "lightuserdata";
-    case 3: return "number";
-    case 4: return "string";
-    case 5: return "table";
-    case 6: return "function";
-    case 7: return "userdata";
-    case 8: return "thread";
-    case 9: return "proto";
-    case 10: return "upval";
-    case 11: return "global";
+    case LUA_TNIL: return "nil";
+    case LUA_TBOOLEAN: return "bool";
+    case LUA_TLIGHTUSERDATA: return "lightuserdata";
+    case LUA_TNUMBER: return "number";
+    case LUA_TSTRING: return "string";
+    case LUA_TTABLE: return "table";
+    case LUA_TFUNCTION: return "function";
+    case LUA_TUSERDATA: return "userdata";
+    case LUA_TTHREAD: return "thread";
+    case LUA_TPROTO: return "proto";
+    case LUA_TUPVAL: return "upval";
+    case LUA_TDEADKEY: return "deadkey";
+    case LUA_TGLOBAL: return "global";
     default: return "INVALID";
   }
 }
