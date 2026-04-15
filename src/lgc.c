@@ -15,6 +15,12 @@
 # define INLINE inline
 #endif
 
+#ifdef __GNUC__
+#define KEEP_FOR_DEBUG(var) __asm__ __volatile__("" :: "r"(var))
+#else
+#define KEEP_FOR_DEBUG(var) ((void)(var))
+#endif
+
 /* Perform global traces in parallel, as opposed to having just one thread
  * do it. Set to 0 to disable. */
 static int USE_TRACE_THREADS = 1;
@@ -672,6 +678,7 @@ static INLINE int is_world_stopped(lua_State *L)
 static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
 {
   int i;
+  KEEP_FOR_DEBUG(o);
 
   switch (o->tt) {
     case LUA_TSTRING:
@@ -913,6 +920,8 @@ static void traverse_object(lua_State *L, GCheader *o, objfunc_t objfunc)
 
 static void grey_object(lua_State *L, GCheader *lval, GCheader *rval)
 {
+  KEEP_FOR_DEBUG(lval);
+  KEEP_FOR_DEBUG(rval);
   mark_object(L, rval);
 }
 
@@ -2105,7 +2114,10 @@ lua_name_thread(char *thread_name)
 
 static void global_trace_obj(lua_State *L, GCheader *lval, GCheader *rval)
 {
-  int recurse = is_unknown_xref(L, rval);
+  int recurse;
+  KEEP_FOR_DEBUG(lval);
+  KEEP_FOR_DEBUG(rval);
+  recurse = is_unknown_xref(L, rval);
 
   set_xref(L, lval, rval, 1);
 
