@@ -584,14 +584,23 @@ static gimli_iter_status_t print_GCheader(gimli_proc_t proc,
     int depth, void *arg)
 {
   GCheader h;
+  const char *datatype = gimli_type_declname(t);
+
+  if (!varname) varname = "";
+
+  if (varaddr == 0) {
+    printf("    %s %s = nil\n", datatype, varname);
+    return GIMLI_ANA_SUPPRESS;
+  }
 
   if (gimli_read_mem(proc, varaddr, &h, sizeof(h)) != sizeof(h)) {
-    return GIMLI_ITER_CONT;
+    printf("    %s %s = %p <unable to read>\n", datatype, varname,
+        (void*)varaddr);
+    return GIMLI_ANA_SUPPRESS;
   }
 
   printf("    %s %s = %p {tt=%s(%d), xref=%u, marked=%u, ref=%u, owner=%p}\n",
-      gimli_type_declname(t),
-      varname ? varname : "",
+      datatype, varname,
       (void*)varaddr,
       lua_typename_for_tt(h.tt), h.tt,
       h.xref, (unsigned)h.marked, h.ref,
