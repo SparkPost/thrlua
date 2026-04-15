@@ -850,10 +850,10 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         runtime_check(L, ttistable(ra));
         h = hvalue(ra);
         last = ((c-1)*LFIELDS_PER_FLUSH) + n;
+        if (last > h->sizearray)  /* needs more space? */
+          luaH_resizearray(L, h, last);  /* pre-alloc it at once */
         luaH_wrlock(L, h);
         LUAI_TRY_BLOCK(L) {
-          if (last > h->sizearray)  /* needs more space? */
-            luaH_resizearray(L, h, last);  /* pre-alloc it at once */
           for (; n > 0; n--) {
             TValue *val = ra+n;
             TValue *src = luaH_setnum(L, h, last--);

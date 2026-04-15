@@ -298,18 +298,10 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
   int oldhsize = t->lsizenode;
   Node *nold = t->node;  /* save old hash ... */
 
+  luaH_wrlock(L, t);
   luaC_blockcollector(L);
   if (nasize > oldasize)  /* array part must grow? */
     setarrayvector(L, t, nasize);
-  /* create new hash part with appropriate size */
-  /* XXX There is a race in here.  t->node is repalced with a new empty array
-   * which happens safely.  However, the old array is no longer referenced
-   * in the Table structure.  In practical terms this means that entries
-   * that are cross-referenced may have that status cleared, and then a race
-   * may exist between the owning thread's garbage collector and that of
-   * the referencing thread.  This problem has existed forever, however, so
-   * it may not happen in real life.  But, it's something to keep an eye on
-   * XXX */
   setnodevector(L, t, nhsize);  
   if (nasize < oldasize) {  /* array part must shrink? */
     t->sizearray = nasize;
@@ -332,6 +324,7 @@ static void resize (lua_State *L, Table *t, int nasize, int nhsize) {
     luaM_freearray(L, LUA_MEM_TABLE_NODES, nold, twoto(oldhsize), Node);
   }
   luaC_unblockcollector(L);
+  luaH_wrunlock(L, t);
 }
 
 
