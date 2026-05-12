@@ -246,6 +246,9 @@ LUA_API void lua_pushobjref(lua_State *L, void *ref);
  * without deadlock. */
 LUA_API void      (lua_delrefthread)(lua_State *L, lua_State *inheritor);
 
+/* Diagnostic: snapshot of the thread's reference count */
+LUA_API unsigned int (lua_threadrefcount)(lua_State *L);
+
 LUA_API lua_CFunction (lua_atpanic) (lua_State *L, lua_CFunction panicf);
 
 
