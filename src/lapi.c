@@ -176,6 +176,11 @@ LUA_API void lua_addrefthread(lua_State *L)
   ck_pr_inc_32(&L->gch.ref);
 }
 
+LUA_API unsigned int lua_threadrefcount(lua_State *L)
+{
+  return ck_pr_load_32(&L->gch.ref);
+}
+
 LUA_API lua_State *lua_newthreadref (lua_State *L)
 {
   lua_State *L1 = NULL;
