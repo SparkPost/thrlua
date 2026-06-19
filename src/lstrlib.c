@@ -138,8 +138,16 @@ static int str_dump (lua_State *L) {
   luaL_checktype(L, 1, LUA_TFUNCTION);
   lua_settop(L, 1);
   luaL_buffinit(L,&b);
-  if (lua_dump(L, writer, &b) != 0)
-    luaL_error(L, "unable to dump given function");
+  if (lua_dump(L, writer, &b) != 0) {
+    lua_Debug ar;
+    lua_pushvalue(L, 1);
+    lua_getinfo(L, ">nS", &ar);
+    luaL_error(L, "unable to dump given function (%s '%s' defined at %s:%d)",
+      ar.what ? ar.what : "?",
+      ar.name ? ar.name : "(anonymous)",
+      ar.short_src ? ar.short_src : "?",
+      ar.linedefined);
+  }
   luaL_pushresult(&b);
   return 1;
 }
