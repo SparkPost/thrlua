@@ -1677,6 +1677,13 @@ void luaC_inherit_thread(lua_State *L, lua_State *th)
     TAILQ_REMOVE(&th->heap->objects, steal, allocd);
     TAILQ_INSERT_HEAD(&L->heap->objects, steal, allocd);
 
+    /* Normalize color to the inheritor's cycle before make_grey: a stale
+     * GREYBIT from the dead thread makes make_grey a no-op, leaving the
+     * object grey but on no grey stack — invisible to propagate and
+     * check_references, so reclaim frees it while still referenced.
+     * Keep FINALBIT etc.; only the color bits are per-cycle. */
+    steal->marked = (steal->marked & ~(GREYBIT|BLACKBIT)) | !L->black;
+
     make_grey(L, steal);
   }
   TAILQ_REMOVE(&G(L)->all_heaps, th->heap, heaps);
