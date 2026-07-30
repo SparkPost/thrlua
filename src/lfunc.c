@@ -132,8 +132,12 @@ static void unlinkupval (UpVal *uv) {
 
 void luaF_freeupval(lua_State *L, UpVal *uv)
 {
-  if (uv->v != &uv->u.value)  /* is it open? */
+  if (uv->v != &uv->u.value) {  /* is it open? */
+    /* Block collector to prevent race with global trace traversing openupval */
+    luaC_blockcollector(L);
     unlinkupval(uv);  /* remove from open list */
+    luaC_unblockcollector(L);
+  }
   luaM_free(L, LUA_MEM_UPVAL, uv);  /* free upvalue */
 }
 
@@ -144,6 +148,8 @@ void luaF_close (lua_State *L, StkId level) {
 #if DEBUG_UPVAL
   printf("close upval >= level %p\n", level);
 #endif
+  /* Block collector to prevent race with global trace traversing openupval */
+  luaC_blockcollector(L);
   while (L->openupval.u.l.next != &L->openupval &&
       (uv = L->openupval.u.l.next)->v >= level) {
     lua_assert(uv->v != &uv->u.value);
@@ -156,6 +162,7 @@ void luaF_close (lua_State *L, StkId level) {
 //      setobj(L, &uv->u.value, uv->v);
 //      luaC_linkupval(L, uv);  /* link upvalue into `gcroot' list */
   }
+  luaC_unblockcollector(L);
 #if DEBUG_UPVAL
   dumpopenupvals(L);
 #endif
