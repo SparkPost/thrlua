@@ -440,6 +440,7 @@ int lua_suspend(lua_State *L, lua_ResumeFunc func, void *ptr)
       luaG_runerror(L, "attempt to suspend across metamethod/C-call boundary");
     L->base = L->top;  /* protect stack slots below */
     L->status = LUA_SUSPEND;
+    ck_pr_inc_32(&L->gch.ref);
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
@@ -525,8 +526,10 @@ static void lua_run_on_resume(lua_State *L, int *nargs, int *status) {
 LUA_API int lua_resume (lua_State *L, int nargs) {
   int status = 0;
   const char *reserr = NULL;
+  int was_suspended;
 
   lua_lock(L);
+  was_suspended = (L->status == LUA_SUSPEND);
   LUAI_TRY_BLOCK(L) {
     if (L->status != LUA_YIELD && L->status != LUA_SUSPEND
         && (L->status != 0 || L->ci != L->base_ci)) {
@@ -567,6 +570,9 @@ LUA_API int lua_resume (lua_State *L, int nargs) {
   } LUAI_TRY_FINALLY(L) {
     lua_unlock(L);
   } LUAI_TRY_END(L);
+  if (was_suspended) {
+    ck_pr_dec_32(&L->gch.ref);
+  }
   return status;
 }
 
