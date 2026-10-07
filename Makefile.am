@@ -8,7 +8,7 @@ MAKEFLAGS = -s
 
 lib_LTLIBRARIES = libthrlua.la gimli_libthrlua.la
 bin_PROGRAMS = rclua rcluac
-cmod_LTLIBRARIES = pcre.la mathx.la javabridge.la lpeg.la yaml.la \
+cmod_LTLIBRARIES = pcre.la mathx.la lpeg.la yaml.la \
 	posix.la xml.la curl.la socket.la
 
 gimli_libthrlua_la_CPPFLAGS = $(commonCFLAGS)
@@ -17,6 +17,10 @@ gimli_libthrlua_la_LDFLAGS = -module
 
 if BUILD_JSON
 cmod_LTLIBRARIES += json.la
+endif
+
+if BUILD_JAVABRIDGE
+cmod_LTLIBRARIES += javabridge.la
 endif
 
 hdr_HEADERS = src/lua.h src/luaconf.h src/lauxlib.h src/lualib.h \
@@ -89,9 +93,11 @@ curl_la_LDFLAGS = -module @CURL_LIBS@
 curl_la_CPPFLAGS = $(commonCFLAGS) @CURL_CFLAGS@
 
 # javabridge
+if BUILD_JAVABRIDGE
 javabridge_la_SOURCES = modules/java.c
 javabridge_la_LDFLAGS = -module @JAVA_LIBS@
 javabridge_la_CPPFLAGS = $(commonCFLAGS) @JAVA_CFLAGS@
+endif
 
 # lpeg
 lpeg_la_SOURCES = modules/lpeg.c
