@@ -3,6 +3,21 @@ if os.getenv("USE_VALGRIND") then
 	os.exit(1);
 end
 require 'Test.More';
+
+-- javabridge is only built with ./configure --enable-javabridge
+local built = false;
+for p in string.gmatch(package.cpath, "[^;]+") do
+	local f = io.open((string.gsub(p, "%?", "javabridge")));
+	if f then
+		f:close();
+		built = true;
+		break;
+	end
+end
+if not built then
+	skip_all("javabridge not built");
+end
+
 plan(14);
 
 require 'javabridge';

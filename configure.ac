@@ -148,54 +148,76 @@ if test "$use_readline" != "1" ; then
 	done
 fi
 
-if test -x /usr/bin/optisa ; then
-	JARCH=`/usr/bin/optisa amd64 sparcv9 i386 sparcv8`
-else
-	JARCH=`uname -i 2>/dev/null`
-	if test -z "$JARCH" ; then
-		JARCH=`uname -p`
-	fi
-fi
-if test "$JARCH" == "x86_64" ; then
-	JARCH="amd64"
-fi
-
 case $host in
 	*-*-linux*)
-		JAVA_LIBS=""
-		dnl find libjvm.so and the latest jdk include dir
-		DEFAULT_JVM_PATH=""
-		for jdk in /usr/lib/jvm/java-*; do
-			dnl JDK 8 and earlier: jre/lib/$JARCH/server/libjvm.so
-			if test -f "$jdk/jre/lib/$JARCH/server/libjvm.so"; then
-				DEFAULT_JVM_PATH="$jdk/jre/lib/$JARCH/server/libjvm.so"
-			fi
-			dnl JDK 9+: lib/server/libjvm.so
-			if test -f "$jdk/lib/server/libjvm.so"; then
-				DEFAULT_JVM_PATH="$jdk/lib/server/libjvm.so"
-			fi
-			if test -d "$jdk/include"; then
-				JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
-			fi
-		done
-		if test -z "$DEFAULT_JVM_PATH"; then
-			DEFAULT_JVM_PATH="/usr/lib/jvm/java-openjdk/jre/lib/$JARCH/server/libjvm.so"
-		fi
-		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "$DEFAULT_JVM_PATH", [jvm])
 		AC_DEFINE(LUA_OS_LINUX, 1, [Running on Linux])
 		;;
 	*-*-solaris*)
-		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/java/jre/lib/$JARCH/server/libjvm.so", [jvm])
-		JAVA_CFLAGS="-I/usr/java/include -I/usr/java/include/solaris"
 		AC_DEFINE(LUA_OS_SOLARIS, 1, [Running on Solaris])
 		;;
 	*-*-darwin*)
-		AC_DEFINE_UNQUOTED(DEFAULT_JVM, "libjvm is system framework on OS/X Darwin")
-		JAVA_CFLAGS="-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers"
-		JAVA_LIBS="-framework JavaVM"
 		AC_DEFINE(LUA_OS_DARWIN, 1, [Running on Darwin OS/X])
 		;;
 esac
+
+AC_ARG_ENABLE(javabridge,
+  [  --enable-javabridge   build the javabridge module (needs a JDK)],
+  [], [enable_javabridge=no])
+AM_CONDITIONAL(BUILD_JAVABRIDGE, test "$enable_javabridge" = "yes")
+
+if test "$enable_javabridge" = "yes" ; then
+	if test -x /usr/bin/optisa ; then
+		JARCH=`/usr/bin/optisa amd64 sparcv9 i386 sparcv8`
+	else
+		JARCH=`uname -i 2>/dev/null`
+		if test -z "$JARCH" ; then
+			JARCH=`uname -p`
+		fi
+	fi
+	if test "$JARCH" == "x86_64" ; then
+		JARCH="amd64"
+	fi
+
+	case $host in
+		*-*-linux*)
+			JAVA_LIBS=""
+			dnl find libjvm.so and the latest jdk include dir
+			DEFAULT_JVM_PATH=""
+			for jdk in /usr/lib/jvm/java-*; do
+				dnl JDK 8 and earlier: jre/lib/$JARCH/server/libjvm.so
+				if test -f "$jdk/jre/lib/$JARCH/server/libjvm.so"; then
+					DEFAULT_JVM_PATH="$jdk/jre/lib/$JARCH/server/libjvm.so"
+				fi
+				dnl JDK 9+: lib/server/libjvm.so
+				if test -f "$jdk/lib/server/libjvm.so"; then
+					DEFAULT_JVM_PATH="$jdk/lib/server/libjvm.so"
+				fi
+				if test -d "$jdk/include"; then
+					JAVA_CFLAGS="-I$jdk/include -I$jdk/include/linux"
+				fi
+			done
+			if test -z "$DEFAULT_JVM_PATH"; then
+				DEFAULT_JVM_PATH="/usr/lib/jvm/java-openjdk/jre/lib/$JARCH/server/libjvm.so"
+			fi
+			AC_DEFINE_UNQUOTED(DEFAULT_JVM, "$DEFAULT_JVM_PATH", [jvm])
+			;;
+		*-*-solaris*)
+			AC_DEFINE_UNQUOTED(DEFAULT_JVM, "/usr/java/jre/lib/$JARCH/server/libjvm.so", [jvm])
+			JAVA_CFLAGS="-I/usr/java/include -I/usr/java/include/solaris"
+			;;
+		*-*-darwin*)
+			AC_DEFINE_UNQUOTED(DEFAULT_JVM, "libjvm is system framework on OS/X Darwin")
+			JAVA_CFLAGS="-I/System/Library/Frameworks/JavaVM.framework/Versions/A/Headers"
+			JAVA_LIBS="-framework JavaVM"
+			;;
+	esac
+
+	CPPFLAGS_SAVE="$CPPFLAGS"
+	CPPFLAGS="$CPPFLAGS $JAVA_CFLAGS"
+	AC_CHECK_HEADER(jni.h, [],
+		[AC_MSG_ERROR([--enable-javabridge needs a JDK's jni.h])])
+	CPPFLAGS="$CPPFLAGS_SAVE"
+fi
 AC_SUBST(JAVA_CFLAGS)
 AC_SUBST(JAVA_LIBS)
 
