@@ -98,6 +98,9 @@ typedef void (*luaL_UserPtrPushFunc)(lua_State *L, void *ptr);
  * event handlers and runtime methods.
  * If pushfunc is provided, it is stored as an opaque lightuserdata
  * in the metatable.
+ * If a metatable with this name is already registered it is left as is,
+ * so calling this again (e.g. when a module is re-required) is safe while
+ * other threads are using objects of this type.
  * Does not modify the stack.
  */
 LUALIB_API void luaL_registerptrtype(lua_State *L,

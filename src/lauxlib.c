@@ -237,7 +237,17 @@ void luaL_registerptrtype(lua_State *L,
     const char *metatable, const luaL_Reg *funcs,
     luaL_UserPtrPushFunc pushfunc)
 {
-  luaL_newmetatable(L, metatable);
+  if (!luaL_newmetatable(L, metatable)) {
+    /* Already registered, e.g. the module's luaopen_* ran again because
+     * package.loaded was cleared (Momentum's scriptlet config reload).
+     * Other threads may be using this metatable right now, and rewriting it
+     * in place is not atomic: __index is set to the metatable and then to the
+     * C function, so a concurrent luaV_gettable can read a torn TValue and
+     * use a closure as a Table (#35). The funcs are the same C functions, so
+     * leave the existing metatable untouched. */
+    lua_pop(L, 1);
+    return;
+  }
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, funcs);
