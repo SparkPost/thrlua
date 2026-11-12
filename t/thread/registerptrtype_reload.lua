@@ -1,9 +1,5 @@
 -- vim:ts=2:sw=2:et:ft=lua:
--- #35: re-running luaopen_json (package.loaded.json = nil; require "json")
--- while other threads index json objects must not rewrite the shared
--- metatable. Before the fix, luaL_registerptrtype set __index to the
--- metatable and then to a new C closure, and a concurrent reader could see
--- a nil field, an "attempt to call" error, or segfault on a torn __index.
+-- https://github.com/SparkPost/thrlua/issues/35
 require('Test.More');
 plan(7);
 
@@ -19,8 +15,7 @@ ok(rawequal(getmetatable(o), mt), "re-require keeps the metatable");
 ok(rawequal(rawget(mt, "__index"), idx), "re-require does not rewrite __index");
 is(o.quotas.daily, 10, "existing object still indexes after re-require");
 
--- Concurrent: workers index a long-lived object while the main thread keeps
--- re-requiring json, the way a Momentum config reload does.
+-- workers index json objects while the main thread re-requires json
 local DURATION = 2;
 local WORKERS = 4;
 local stop = false;
