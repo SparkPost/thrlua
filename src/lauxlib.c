@@ -237,7 +237,11 @@ void luaL_registerptrtype(lua_State *L,
     const char *metatable, const luaL_Reg *funcs,
     luaL_UserPtrPushFunc pushfunc)
 {
-  luaL_newmetatable(L, metatable);
+  if (!luaL_newmetatable(L, metatable)) {
+    /* already registered; rewriting it in place races with its readers */
+    lua_pop(L, 1);
+    return;
+  }
   lua_pushvalue(L, -1);
   lua_setfield(L, -2, "__index");
   luaL_register(L, NULL, funcs);
