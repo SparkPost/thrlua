@@ -8,6 +8,7 @@
 #define LUA_CORE
 
 #include "thrlua.h"
+#include <sys/mman.h>
 
 #if USING_DRD
 # define INLINE /* not inline */
@@ -2146,13 +2147,42 @@ static void trace_heap(GCheap *h)
   ck_pr_dec_32(&trace_heaps);
 }
 
-/* room for a host's fault handler, not general use */
-#define TRACE_ALTSTACK_SIZE (64 * 1024)
+/* For a host's fault handler.  Reserved up front, but only the pages the
+ * handler touches are backed by memory. */
+#define TRACE_ALTSTACK_SIZE (1024 * 1024)
+
+#ifndef MAP_ANONYMOUS
+# define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef MAP_NORESERVE
+# define MAP_NORESERVE 0
+#endif
+
+/* Gives the calling thread an alternate signal stack, with an inaccessible
+ * page below it so that overrunning it faults instead of corrupting memory.
+ * Trace threads never exit, so it is never freed. */
+static void trace_thread_altstack(void)
+{
+  size_t page = (size_t)sysconf(_SC_PAGESIZE);
+  stack_t ss;
+  char *base;
+
+  base = mmap(NULL, TRACE_ALTSTACK_SIZE + page, PROT_READ|PROT_WRITE,
+      MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
+  if (base == MAP_FAILED) {
+    return;
+  }
+  memset(&ss, 0, sizeof(ss));
+  ss.ss_sp = base + page;
+  ss.ss_size = TRACE_ALTSTACK_SIZE;
+  if (mprotect(base, page, PROT_NONE) != 0 || sigaltstack(&ss, NULL) != 0) {
+    munmap(base, TRACE_ALTSTACK_SIZE + page);
+  }
+}
 
 static void *trace_thread(void *unused)
 {
   sigset_t set;
-  stack_t ss;
 
   /* Keep fault signals unblocked: a fault on a blocked signal kills the
    * process without running the host's handler (e.g. a crash tracer). */
@@ -2167,14 +2197,8 @@ static void *trace_thread(void *unused)
 
   /* The trace recurses through the object graph, so a deep structure can
    * overflow this thread's stack.  An alternate stack lets a handler
-   * installed with SA_ONSTACK still run then.  Trace threads never exit,
-   * so it is never freed. */
-  memset(&ss, 0, sizeof(ss));
-  ss.ss_size = TRACE_ALTSTACK_SIZE;
-  ss.ss_sp = malloc(ss.ss_size);
-  if (ss.ss_sp && sigaltstack(&ss, NULL) != 0) {
-    free(ss.ss_sp);
-  }
+   * installed with SA_ONSTACK still run then. */
+  trace_thread_altstack();
   lua_name_thread("lua-gtrace");
 
   while (1) {
