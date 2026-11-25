@@ -2146,9 +2146,13 @@ static void trace_heap(GCheap *h)
   ck_pr_dec_32(&trace_heaps);
 }
 
+/* room for a host's fault handler, not general use */
+#define TRACE_ALTSTACK_SIZE (64 * 1024)
+
 static void *trace_thread(void *unused)
 {
   sigset_t set;
+  stack_t ss;
 
   /* Keep fault signals unblocked: a fault on a blocked signal kills the
    * process without running the host's handler (e.g. a crash tracer). */
@@ -2160,6 +2164,17 @@ static void *trace_thread(void *unused)
   sigdelset(&set, SIGBUS);
 #endif
   pthread_sigmask(SIG_SETMASK, &set, NULL);
+
+  /* The trace recurses through the object graph, so a deep structure can
+   * overflow this thread's stack.  An alternate stack lets a handler
+   * installed with SA_ONSTACK still run then.  Trace threads never exit,
+   * so it is never freed. */
+  memset(&ss, 0, sizeof(ss));
+  ss.ss_size = TRACE_ALTSTACK_SIZE;
+  ss.ss_sp = malloc(ss.ss_size);
+  if (ss.ss_sp && sigaltstack(&ss, NULL) != 0) {
+    free(ss.ss_sp);
+  }
   lua_name_thread("lua-gtrace");
 
   while (1) {
