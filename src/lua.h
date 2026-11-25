@@ -598,6 +598,13 @@ LUA_API void lua_lock(lua_State *L);
 /** release one level of lock from this lua_State */
 LUA_API void lua_unlock(lua_State *L);
 
+/** nonzero when the calling thread is taking part in a global trace: a GC
+ * trace thread, or the thread running the trace.  Other Lua threads are then
+ * stopped, and stay stopped until this thread finishes the trace.
+ * Safe to call from a signal handler, so that a host's fault handler can
+ * skip shutdown work that would run Lua and wait forever. */
+LUA_API int lua_thread_in_global_trace(void);
+
 /******************************************************************************
 * Copyright (C) 1994-2008 Lua.org, PUC-Rio.  All rights reserved.
 * Copyright (C) 2008-2011 Message Systems, Inc.

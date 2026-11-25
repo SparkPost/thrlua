@@ -2147,6 +2147,15 @@ static void trace_heap(GCheap *h)
   ck_pr_dec_32(&trace_heaps);
 }
 
+/* Nonzero while this thread takes part in a global trace.  initial-exec
+ * keeps the read a plain TLS access, safe from a signal handler. */
+static __thread int in_global_trace __attribute__((tls_model("initial-exec")));
+
+LUA_API int lua_thread_in_global_trace(void)
+{
+  return in_global_trace;
+}
+
 /* For a host's fault handler.  Reserved up front, but only the pages the
  * handler touches are backed by memory. */
 #define TRACE_ALTSTACK_SIZE (1024 * 1024)
@@ -2183,6 +2192,9 @@ static void trace_thread_altstack(void)
 static void *trace_thread(void *unused)
 {
   sigset_t set;
+
+  /* every trace this thread does is part of a global trace */
+  in_global_trace = 1;
 
   /* Keep fault signals unblocked: a fault on a blocked signal kills the
    * process without running the host's handler (e.g. a crash tracer). */
@@ -2227,6 +2239,7 @@ static int global_trace(lua_State *L)
 {
   lua_State *l;
   GCheap *h;
+  int was_in_global_trace;
 
 //  VALGRIND_PRINTF_BACKTRACE("stopping world\n");
   if (!try_lock_all_threads(L, GLOBAL_TRACE_ALL_THREADS_WAIT_MS)) {
@@ -2235,6 +2248,9 @@ static int global_trace(lua_State *L)
                (GLOBAL_TRACE_ALL_THREADS_WAIT_MS > 0) ? "after waiting" : "immediately");
     return 0;
   }
+  /* from here until the lock is released, other Lua threads wait on us */
+  was_in_global_trace = in_global_trace;
+  in_global_trace = 1;
 
   if (NON_SIGNAL_COLLECTOR) {
     block_mutators(L);
@@ -2315,6 +2331,7 @@ static int global_trace(lua_State *L)
   }
 
   unlock_all_threads();
+  in_global_trace = was_in_global_trace;
 //  VALGRIND_PRINTF_BACKTRACE("started world\n");
   return 1;
 }
