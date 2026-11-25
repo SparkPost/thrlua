@@ -2150,7 +2150,15 @@ static void *trace_thread(void *unused)
 {
   sigset_t set;
 
+  /* Keep fault signals unblocked: a fault on a blocked signal kills the
+   * process without running the host's handler (e.g. a crash tracer). */
   sigfillset(&set);
+  sigdelset(&set, SIGSEGV);
+  sigdelset(&set, SIGILL);
+  sigdelset(&set, SIGFPE);
+#ifdef SIGBUS
+  sigdelset(&set, SIGBUS);
+#endif
   pthread_sigmask(SIG_SETMASK, &set, NULL);
   lua_name_thread("lua-gtrace");
 
