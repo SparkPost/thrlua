@@ -598,6 +598,15 @@ LUA_API void lua_lock(lua_State *L);
 /** release one level of lock from this lua_State */
 LUA_API void lua_unlock(lua_State *L);
 
+/** nonzero while other Lua threads may be waiting on the calling thread: it
+ * holds the lock that creating a Lua thread or heap, reclaiming a Lua
+ * thread and the global trace take, or it is a GC trace thread tracing a
+ * heap.  Running Lua elsewhere can then wait until this thread goes on.
+ * Safe to call from a signal handler, so that a host's fault handler can
+ * skip shutdown work that runs Lua: after a fault this thread never goes
+ * on, so that work would wait forever. */
+LUA_API int lua_thread_blocks_others(void);
+
 /******************************************************************************
 * Copyright (C) 1994-2008 Lua.org, PUC-Rio.  All rights reserved.
 * Copyright (C) 2008-2011 Message Systems, Inc.

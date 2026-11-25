@@ -8,6 +8,7 @@
 #define LUA_CORE
 
 #include "thrlua.h"
+#include <sys/mman.h>
 
 #if USING_DRD
 # define INLINE /* not inline */
@@ -954,6 +955,18 @@ static void propagate(lua_State *L)
   }
 }
 
+/* Nonzero while other Lua threads may be waiting on this thread: it holds
+ * all_threads_lock, which thread setup, heap setup, thread reclaim and the
+ * global trace all take, or it is tracing heaps for a global trace.
+ * initial-exec keeps the read a plain TLS access, safe from a signal
+ * handler. */
+static __thread int blocking_others __attribute__((tls_model("initial-exec")));
+
+LUA_API int lua_thread_blocks_others(void)
+{
+  return blocking_others != 0;
+}
+
 static INLINE void lock_all_threads(void)
 {
   int r = pthread_mutex_lock(&all_threads_lock);
@@ -961,6 +974,7 @@ static INLINE void lock_all_threads(void)
     fprintf(stderr, "LOCK(all_threads): %d %s\n", r, strerror(r));
     abort();
   }
+  blocking_others++;
 }
 
 /* Try to grab the "all threads" lock.
@@ -989,6 +1003,7 @@ static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
   }
   switch (r) {
     case 0:
+      blocking_others++;
       return 1;
     case ETIMEDOUT: /* pthread_mutex_timedlock timed out */
     case EBUSY: /* pthread_mutex_trylock failed to grab it */
@@ -1005,7 +1020,10 @@ static INLINE int try_lock_all_threads (lua_State *L, int wait_in_ms)
 
 static INLINE void unlock_all_threads(void)
 {
-  int r = pthread_mutex_unlock(&all_threads_lock);
+  int r;
+
+  blocking_others--;
+  r = pthread_mutex_unlock(&all_threads_lock);
   if (r) {
     fprintf(stderr, "UNLOCK(all_threads): %d %s\n", r, strerror(r));
     abort();
@@ -2146,12 +2164,58 @@ static void trace_heap(GCheap *h)
   ck_pr_dec_32(&trace_heaps);
 }
 
+/* For a host's fault handler.  Reserved up front, but only the pages the
+ * handler touches are backed by memory. */
+#define TRACE_ALTSTACK_SIZE (1024 * 1024)
+
+#ifndef MAP_ANONYMOUS
+# define MAP_ANONYMOUS MAP_ANON
+#endif
+#ifndef MAP_NORESERVE
+# define MAP_NORESERVE 0
+#endif
+
+/* Gives the calling thread an alternate signal stack, with an inaccessible
+ * page below it so that overrunning it faults instead of corrupting memory.
+ * Trace threads never exit, so it is never freed. */
+static void trace_thread_altstack(void)
+{
+  size_t page = (size_t)sysconf(_SC_PAGESIZE);
+  stack_t ss;
+  char *base;
+
+  base = mmap(NULL, TRACE_ALTSTACK_SIZE + page, PROT_READ|PROT_WRITE,
+      MAP_PRIVATE|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0);
+  if (base == MAP_FAILED) {
+    return;
+  }
+  memset(&ss, 0, sizeof(ss));
+  ss.ss_sp = base + page;
+  ss.ss_size = TRACE_ALTSTACK_SIZE;
+  if (mprotect(base, page, PROT_NONE) != 0 || sigaltstack(&ss, NULL) != 0) {
+    munmap(base, TRACE_ALTSTACK_SIZE + page);
+  }
+}
+
 static void *trace_thread(void *unused)
 {
   sigset_t set;
 
+  /* Keep fault signals unblocked: a fault on a blocked signal kills the
+   * process without running the host's handler (e.g. a crash tracer). */
   sigfillset(&set);
+  sigdelset(&set, SIGSEGV);
+  sigdelset(&set, SIGILL);
+  sigdelset(&set, SIGFPE);
+#ifdef SIGBUS
+  sigdelset(&set, SIGBUS);
+#endif
   pthread_sigmask(SIG_SETMASK, &set, NULL);
+
+  /* The trace recurses through the object graph, so a deep structure can
+   * overflow this thread's stack.  An alternate stack lets a handler
+   * installed with SA_ONSTACK still run then. */
+  trace_thread_altstack();
   lua_name_thread("lua-gtrace");
 
   while (1) {
@@ -2167,7 +2231,10 @@ static void *trace_thread(void *unused)
       if (!ent) {
         break;
       }
+      /* the thread running the global trace waits for this heap */
+      blocking_others++;
       trace_heap(GCheap_from_stack(ent));
+      blocking_others--;
     }
   }
 }
@@ -2188,7 +2255,6 @@ static int global_trace(lua_State *L)
                (GLOBAL_TRACE_ALL_THREADS_WAIT_MS > 0) ? "after waiting" : "immediately");
     return 0;
   }
-
   if (NON_SIGNAL_COLLECTOR) {
     block_mutators(L);
   }
