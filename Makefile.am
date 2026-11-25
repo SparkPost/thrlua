@@ -118,6 +118,12 @@ posix_la_SOURCES = modules/lposix.c
 posix_la_LDFLAGS = -module
 posix_la_CPPFLAGS = $(commonCFLAGS)
 
+# test-only module for t/thread/gc_fault_handler.lua; not installed
+noinst_LTLIBRARIES = gctest.la
+gctest_la_SOURCES = t/gctest.c
+gctest_la_LDFLAGS = -module -avoid-version -rpath /nowhere -lpthread
+gctest_la_CPPFLAGS = $(commonCFLAGS)
+
 # socket
 socket_la_SOURCES = modules/socket.c
 socket_la_LDFLAGS = -module
